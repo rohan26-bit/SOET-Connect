@@ -43,15 +43,34 @@ def register_user(user: RegisterRequest):
     # Hash password before storing it.
     hashed_password = password_hash.hash(user.password)
 
-    # Create MongoDB user document.
+    # Create complete user document.
     user_document = create_user_document(
         name=user.name,
         email=user.email,
         password_hash=hashed_password,
-        role=user.role
+        role=user.role,
+
+        student_id=user.student_id,
+        department=user.department,
+        course=user.course,
+        academic_year=user.academic_year,
+        graduation_year=user.graduation_year,
+        phone=user.phone,
+
+        alumni_id=user.alumni_id,
+        degree=user.degree,
+        company=user.company,
+        designation=user.designation,
+        industry=user.industry,
+        location=user.location,
+        skills=user.skills,
+        linkedin=user.linkedin,
+        github=user.github,
+        website=user.website,
+        bio=user.bio
     )
 
-    # Save user in MongoDB.
+    # Save user in database.
     result = users_collection.insert_one(user_document)
 
     return {
@@ -69,7 +88,6 @@ def register_user(user: RegisterRequest):
 @router.post("/login")
 def login_user(user: LoginRequest):
 
-    # Find user by email.
     existing_user = users_collection.find_one(
         {"email": user.email.lower().strip()}
     )
@@ -80,7 +98,6 @@ def login_user(user: LoginRequest):
             detail="Invalid email or password."
         )
 
-    # Verify password.
     password_is_correct = password_hash.verify(
         user.password,
         existing_user["password_hash"]
@@ -92,14 +109,12 @@ def login_user(user: LoginRequest):
             detail="Invalid email or password."
         )
 
-    # Check whether account is active.
     if not existing_user.get("is_active", True):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This account has been deactivated."
         )
 
-    # Create JWT token.
     access_token = create_access_token(
         user_id=str(existing_user["_id"]),
         role=existing_user["role"]
