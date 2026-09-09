@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import test_database_connection
 from routes.auth import router as auth_router
 from routes.profile import router as profile_router
+from routes.alumni import router as alumni_router
+from routes.jobs import router as jobs_router
 
 
 app = FastAPI(
@@ -27,6 +29,8 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(profile_router)
+app.include_router(alumni_router)
+app.include_router(jobs_router)
 
 @app.get("/")
 def root():

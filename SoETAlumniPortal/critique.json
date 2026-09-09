@@ -1,0 +1,26 @@
+{
+  "kind": "critique-panel",
+  "score": 4,
+  "axes": {
+    "clarity": {
+      "score": 4,
+      "notes": "Role-based IA is clear; demo logins and breadcrumbs orient evaluators quickly."
+    },
+    "hierarchy": {
+      "score": 4,
+      "notes": "Landing hero + dashboard stat grids establish primary vs secondary content; one primary CTA per key view."
+    },
+    "typography": {
+      "score": 4,
+      "notes": "Segoe/Inter stack, tight display tracking, uppercase labels with letter-spacing; mono for metrics."
+    },
+    "motion": {
+      "score": 3,
+      "notes": "Card hover, toast enter, skeleton shimmer; full Framer page transitions deferred to keep single-file stable."
+    },
+    "brand": {
+      "score": 5,
+      "notes": "Primary #2563EB, secondary slate, green only for verified/success; dark mode supported; no indigo/purple gradient slop."
+    }
+  }
+}
