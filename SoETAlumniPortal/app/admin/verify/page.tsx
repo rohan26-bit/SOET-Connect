@@ -2,18 +2,18 @@
 
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
-import { alumniService, AlumniDirectoryItem } from '@/lib/services/alumniService';
+import { adminService, PendingAlumni } from '@/lib/services/adminService';
 import { ShieldCheck, CheckCircle2, XCircle, Ban, AlertCircle, Building, GraduationCap, Clock } from 'lucide-react';
 
 export default function AdminVerifyPage() {
-  const [pendingAlumni, setPendingAlumni] = useState<AlumniDirectoryItem[]>([]);
+  const [pendingAlumni, setPendingAlumni] = useState<PendingAlumni[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const loadPending = async () => {
     setLoading(true);
     try {
-      const data = await alumniService.getPendingAlumni();
+      const data = await adminService.getPendingAlumni();
       setPendingAlumni(data);
     } catch (err) {
       console.error(err);
@@ -29,7 +29,7 @@ export default function AdminVerifyPage() {
   const handleAction = async (userId: string, status: 'approved' | 'rejected' | 'suspended') => {
     setActionLoading(userId);
     try {
-      await alumniService.updateVerificationStatus(userId, status);
+      await adminService.updateAlumniVerification(userId, status);
       await loadPending();
     } catch (err: any) {
       alert(err.message || 'Action failed');
