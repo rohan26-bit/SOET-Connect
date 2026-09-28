@@ -1,0 +1,1989 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alumni Portal for SOET</title>
+  <link rel="preconnect" href="https://unpkg.com" />
+  <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+  <script src="https://unpkg.com/framer-motion@11.11.13/dist/framer-motion.js"></script>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --fg: #0f172a;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --secondary: #0f172a;
+      --success: #22c55e;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --sidebar: #0f172a;
+      --sidebar-fg: #e2e8f0;
+      --sidebar-muted: #94a3b8;
+      --shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04);
+      --shadow-md: 0 4px 16px rgba(15,23,42,.08);
+      --radius: 12px;
+      --radius-sm: 8px;
+      --font: "Segoe UI", Inter, system-ui, -apple-system, sans-serif;
+      --font-mono: "Cascadia Code", "SF Mono", ui-monospace, monospace;
+      --nav-h: 64px;
+      --side-w: 260px;
+    }
+    [data-theme="dark"] {
+      --bg: #0b1220;
+      --surface: #111827;
+      --fg: #f1f5f9;
+      --muted: #94a3b8;
+      --border: rgba(255,255,255,.08);
+      --primary: #3b82f6;
+      --primary-hover: #60a5fa;
+      --secondary: #e2e8f0;
+      --sidebar: #020617;
+      --sidebar-fg: #e2e8f0;
+      --sidebar-muted: #64748b;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 12px rgba(0,0,0,.25);
+      --shadow-md: 0 8px 24px rgba(0,0,0,.35);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root { min-height: 100%; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.5;
+      font-size: 15px;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    a { color: inherit; text-decoration: none; }
+    button { cursor: pointer; border: none; background: none; }
+    img { max-width: 100%; display: block; }
+    ::selection { background: color-mix(in srgb, var(--primary) 25%, transparent); }
+
+    .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+    .public-nav {
+      height: var(--nav-h); display: flex; align-items: center; justify-content: space-between;
+      padding: 0 1.25rem; background: color-mix(in srgb, var(--surface) 92%, transparent);
+      backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 40;
+    }
+    .brand { display: flex; align-items: center; gap: .7rem; font-weight: 600; letter-spacing: -.01em; }
+    .brand-mark {
+      width: 36px; height: 36px; border-radius: 10px; background: var(--primary); color: #fff;
+      display: grid; place-items: center; font-weight: 700; font-size: 13px; letter-spacing: .04em;
+      box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 35%, transparent);
+    }
+    .nav-links { display: flex; align-items: center; gap: .25rem; }
+    .nav-links a, .nav-links button.nav-link {
+      padding: .5rem .85rem; border-radius: 8px; color: var(--muted); font-weight: 510; font-size: 14px; letter-spacing: .02em;
+    }
+    .nav-links a:hover, .nav-links button.nav-link:hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 5%, transparent); }
+    .nav-cta {
+      margin-left: .5rem; background: var(--primary); color: #fff !important; padding: .55rem 1rem !important;
+      border-radius: 10px; font-weight: 600; box-shadow: 0 2px 8px color-mix(in srgb, var(--primary) 30%, transparent);
+    }
+    .nav-cta:hover { background: var(--primary-hover); }
+    .icon-btn {
+      width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
+      color: var(--muted); border: 1px solid transparent;
+    }
+    .icon-btn:hover { background: color-mix(in srgb, var(--fg) 6%, transparent); color: var(--fg); }
+    .mobile-only { display: none; }
+    @media (max-width: 900px) {
+      .desktop-only { display: none !important; }
+      .mobile-only { display: inline-flex; }
+      .nav-links.public-links { display: none; }
+      .public-nav.open .nav-links.public-links {
+        display: flex; flex-direction: column; position: absolute; top: var(--nav-h); left: 0; right: 0;
+        background: var(--surface); border-bottom: 1px solid var(--border); padding: .75rem; gap: .25rem;
+      }
+    }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: .45rem;
+      padding: .65rem 1.1rem; border-radius: 10px; font-weight: 600; font-size: 14px; letter-spacing: .02em;
+      transition: transform .12s ease, background .15s ease, box-shadow .15s ease; min-height: 44px;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary { background: var(--primary); color: #fff; box-shadow: 0 2px 8px color-mix(in srgb, var(--primary) 28%, transparent); }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-secondary { background: var(--surface); color: var(--fg); border: 1px solid var(--border); }
+    .btn-secondary:hover { background: color-mix(in srgb, var(--fg) 4%, var(--surface)); }
+    .btn-ghost { color: var(--muted); }
+    .btn-ghost:hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 5%, transparent); }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-sm { padding: .4rem .75rem; min-height: 36px; font-size: 13px; border-radius: 8px; }
+    .btn-block { width: 100%; }
+
+    .card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: var(--shadow); padding: 1.15rem;
+    }
+    .card-hover { transition: transform .15s ease, box-shadow .15s ease; }
+    .card-hover:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+
+    .field { display: flex; flex-direction: column; gap: .35rem; margin-bottom: .9rem; }
+    .field label { font-size: 13px; font-weight: 550; color: var(--fg); letter-spacing: .02em; }
+    .field input, .field select, .field textarea {
+      width: 100%; padding: .7rem .85rem; border-radius: 10px; border: 1px solid var(--border);
+      background: var(--bg); color: var(--fg); min-height: 44px; outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .field textarea { min-height: 100px; resize: vertical; }
+    .field input:focus, .field select:focus, .field textarea:focus {
+      border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+    }
+    .field .hint { font-size: 12px; color: var(--muted); }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: .3rem; padding: .2rem .55rem; border-radius: 999px;
+      font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+    }
+    .badge-primary { background: color-mix(in srgb, var(--primary) 12%, transparent); color: var(--primary); }
+    .badge-success { background: color-mix(in srgb, var(--success) 15%, transparent); color: #15803d; }
+    [data-theme="dark"] .badge-success { color: #4ade80; }
+    .badge-warn { background: color-mix(in srgb, var(--warn) 15%, transparent); color: #b45309; }
+    .badge-muted { background: color-mix(in srgb, var(--muted) 15%, transparent); color: var(--muted); }
+
+    .avatar {
+      width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+      font-weight: 600; font-size: 14px; color: #fff; flex-shrink: 0;
+      background: linear-gradient(135deg, var(--primary), #1e40af);
+    }
+    .avatar.lg { width: 72px; height: 72px; font-size: 24px; }
+    .avatar.sm { width: 32px; height: 32px; font-size: 12px; }
+
+    .layout-app { display: flex; min-height: 100vh; }
+    .sidebar {
+      width: var(--side-w); background: var(--sidebar); color: var(--sidebar-fg); display: flex; flex-direction: column;
+      position: fixed; inset: 0 auto 0 0; z-index: 50; transition: transform .2s ease;
+    }
+    .sidebar-head { padding: 1.1rem 1.15rem; border-bottom: 1px solid rgba(255,255,255,.08); display: flex; align-items: center; gap: .7rem; }
+    .sidebar-nav { flex: 1; overflow-y: auto; padding: .85rem .65rem; display: flex; flex-direction: column; gap: .15rem; }
+    .side-link {
+      display: flex; align-items: center; gap: .7rem; padding: .65rem .75rem; border-radius: 10px;
+      color: var(--sidebar-muted); font-weight: 510; font-size: 14px; letter-spacing: .01em; text-align: left; width: 100%;
+    }
+    .side-link:hover { background: rgba(255,255,255,.06); color: var(--sidebar-fg); }
+    .side-link.active { background: color-mix(in srgb, var(--primary) 85%, #000); color: #fff; }
+    .side-section { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--sidebar-muted); padding: .85rem .75rem .35rem; font-weight: 600; }
+    .sidebar-foot { padding: .85rem; border-top: 1px solid rgba(255,255,255,.08); }
+    .main-wrap { flex: 1; margin-left: var(--side-w); min-width: 0; display: flex; flex-direction: column; }
+    .topbar {
+      height: var(--nav-h); display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+      padding: 0 1.25rem; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 30;
+    }
+    .page { padding: 1.25rem; flex: 1; }
+    .page-title { font-size: clamp(1.35rem, 2vw, 1.65rem); font-weight: 600; letter-spacing: -.02em; line-height: 1.15; }
+    .page-sub { color: var(--muted); font-size: 14px; margin-top: .25rem; }
+    .breadcrumbs { display: flex; align-items: center; gap: .4rem; font-size: 13px; color: var(--muted); margin-bottom: .85rem; flex-wrap: wrap; }
+    .breadcrumbs span.sep { opacity: .5; }
+    .breadcrumbs strong { color: var(--fg); font-weight: 550; }
+
+    @media (max-width: 960px) {
+      .sidebar { transform: translateX(-100%); }
+      .sidebar.open { transform: translateX(0); }
+      .main-wrap { margin-left: 0; }
+      .sidebar-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 45; }
+    }
+
+    .grid { display: grid; gap: 1rem; }
+    .grid-2 { grid-template-columns: repeat(2, 1fr); }
+    .grid-3 { grid-template-columns: repeat(3, 1fr); }
+    .grid-4 { grid-template-columns: repeat(4, 1fr); }
+    @media (max-width: 1100px) { .grid-4 { grid-template-columns: repeat(2, 1fr); } .grid-3 { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 700px) { .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; } }
+
+    .stat-card .label { font-size: 12px; color: var(--muted); font-weight: 550; letter-spacing: .04em; text-transform: uppercase; }
+    .stat-card .value { font-size: 1.75rem; font-weight: 600; letter-spacing: -.02em; margin: .25rem 0; font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
+    .stat-card .delta { font-size: 12px; color: var(--muted); }
+
+    .search-box {
+      display: flex; align-items: center; gap: .5rem; padding: 0 .85rem; height: 42px; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--bg); min-width: 200px; flex: 1; max-width: 420px;
+    }
+    .search-box input { border: none; background: transparent; outline: none; width: 100%; color: var(--fg); }
+    .search-box svg { color: var(--muted); flex-shrink: 0; }
+
+    .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { text-align: left; padding: .75rem 1rem; font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); font-weight: 600; background: color-mix(in srgb, var(--bg) 80%, var(--surface)); }
+    td { padding: .85rem 1rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: color-mix(in srgb, var(--primary) 3%, transparent); }
+
+    .hero {
+      position: relative; overflow: hidden; padding: clamp(3rem, 8vw, 5.5rem) 1.25rem;
+      background: var(--secondary); color: #f8fafc;
+    }
+    .hero-inner { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 1.15fr .85fr; gap: 2.5rem; align-items: center; }
+    @media (max-width: 900px) { .hero-inner { grid-template-columns: 1fr; } }
+    .hero h1 { font-size: clamp(2rem, 4.5vw, 3.25rem); font-weight: 600; letter-spacing: -.03em; line-height: 1.08; max-width: 16ch; }
+    .hero p.lead { color: #cbd5e1; font-size: clamp(1rem, 1.5vw, 1.125rem); margin: 1.1rem 0 1.6rem; max-width: 48ch; line-height: 1.55; }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+    .hero-panel {
+      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); border-radius: 16px; padding: 1.25rem;
+      backdrop-filter: blur(8px);
+    }
+    .section { padding: clamp(2.5rem, 5vw, 4rem) 1.25rem; }
+    .section-inner { max-width: 1120px; margin: 0 auto; }
+    .section-head { margin-bottom: 1.75rem; }
+    .section-head h2 { font-size: clamp(1.5rem, 2.5vw, 1.9rem); font-weight: 600; letter-spacing: -.02em; line-height: 1.15; }
+    .section-head p { color: var(--muted); margin-top: .4rem; max-width: 55ch; }
+    .eyebrow { font-size: 12px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; color: var(--primary); margin-bottom: .5rem; }
+
+    .footer {
+      border-top: 1px solid var(--border); background: var(--surface); padding: 2.5rem 1.25rem 1.5rem; margin-top: auto;
+    }
+    .footer-inner { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 1.5rem; }
+    @media (max-width: 800px) { .footer-inner { grid-template-columns: 1fr 1fr; } }
+    .footer h4 { font-size: 13px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: .75rem; }
+    .footer a { display: block; color: var(--muted); font-size: 14px; padding: .25rem 0; }
+    .footer a:hover { color: var(--primary); }
+    .footer-bottom { max-width: 1120px; margin: 1.5rem auto 0; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: .5rem; }
+
+    .auth-page {
+      min-height: calc(100vh - var(--nav-h)); display: grid; place-items: center; padding: 2rem 1.25rem;
+      background:
+        radial-gradient(ellipse 80% 50% at 10% 0%, color-mix(in srgb, var(--primary) 12%, transparent), transparent),
+        var(--bg);
+    }
+    .auth-card { width: 100%; max-width: 440px; }
+    .tabs { display: flex; gap: .35rem; background: var(--bg); padding: .3rem; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 1.1rem; }
+    .tab {
+      flex: 1; padding: .55rem; border-radius: 9px; font-weight: 550; font-size: 13px; letter-spacing: .02em; color: var(--muted);
+    }
+    .tab.active { background: var(--surface); color: var(--fg); box-shadow: var(--shadow); }
+
+    .chat-layout { display: grid; grid-template-columns: 300px 1fr; height: calc(100vh - var(--nav-h) - 2.5rem); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+    @media (max-width: 800px) { .chat-layout { grid-template-columns: 1fr; height: auto; min-height: 70vh; } .chat-sidebar { max-height: 220px; } }
+    .chat-sidebar { border-right: 1px solid var(--border); overflow-y: auto; }
+    .chat-item { display: flex; gap: .7rem; padding: .85rem 1rem; border-bottom: 1px solid var(--border); cursor: pointer; text-align: left; width: 100%; }
+    .chat-item:hover, .chat-item.active { background: color-mix(in srgb, var(--primary) 6%, transparent); }
+    .chat-main { display: flex; flex-direction: column; min-height: 0; }
+    .chat-head { padding: .85rem 1rem; border-bottom: 1px solid var(--border); font-weight: 600; }
+    .chat-msgs { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: .65rem; background: var(--bg); min-height: 280px; }
+    .bubble { max-width: 75%; padding: .65rem .9rem; border-radius: 14px; font-size: 14px; line-height: 1.45; }
+    .bubble.me { align-self: flex-end; background: var(--primary); color: #fff; border-bottom-right-radius: 4px; }
+    .bubble.them { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+    .chat-compose { display: flex; gap: .5rem; padding: .75rem; border-top: 1px solid var(--border); background: var(--surface); }
+    .chat-compose input { flex: 1; border: 1px solid var(--border); border-radius: 10px; padding: .65rem .85rem; background: var(--bg); outline: none; min-height: 44px; }
+    .chat-compose input:focus { border-color: var(--primary); }
+
+    .skeleton { background: linear-gradient(90deg, color-mix(in srgb, var(--muted) 12%, transparent) 25%, color-mix(in srgb, var(--muted) 18%, transparent) 50%, color-mix(in srgb, var(--muted) 12%, transparent) 75%); background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: 8px; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    .sk-line { height: 12px; margin-bottom: 8px; }
+    .sk-title { height: 18px; width: 40%; margin-bottom: 12px; }
+    .sk-block { height: 80px; }
+
+    .empty {
+      text-align: center; padding: 2.5rem 1.25rem; color: var(--muted); border: 1px dashed var(--border); border-radius: var(--radius); background: var(--surface);
+    }
+    .empty h3 { color: var(--fg); font-weight: 600; margin: .5rem 0 .35rem; }
+    .empty p { font-size: 14px; max-width: 36ch; margin: 0 auto .9rem; }
+
+    .toast-wrap { position: fixed; bottom: 1.25rem; right: 1.25rem; z-index: 100; display: flex; flex-direction: column; gap: .5rem; max-width: 360px; }
+    .toast {
+      background: var(--secondary); color: #f8fafc; padding: .85rem 1rem; border-radius: 12px; box-shadow: var(--shadow-md);
+      display: flex; align-items: flex-start; gap: .65rem; font-size: 14px; animation: toastIn .25s ease;
+    }
+    [data-theme="dark"] .toast { background: #1e293b; border: 1px solid var(--border); }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    .toast.success { border-left: 3px solid var(--success); }
+
+    .filters { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+    .chip {
+      padding: .4rem .8rem; border-radius: 999px; border: 1px solid var(--border); font-size: 13px; font-weight: 510;
+      color: var(--muted); background: var(--surface); letter-spacing: .01em;
+    }
+    .chip.active { background: color-mix(in srgb, var(--primary) 12%, transparent); color: var(--primary); border-color: color-mix(in srgb, var(--primary) 35%, transparent); }
+    .pagination { display: flex; align-items: center; justify-content: center; gap: .35rem; margin-top: 1.25rem; }
+    .page-btn {
+      min-width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface);
+      font-weight: 550; font-size: 13px; color: var(--muted);
+    }
+    .page-btn.active, .page-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+    .chart-bars { display: flex; align-items: flex-end; gap: 8px; height: 140px; padding-top: .5rem; }
+    .chart-bars .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; }
+    .chart-bars .bar { width: 100%; max-width: 36px; border-radius: 6px 6px 2px 2px; background: var(--primary); min-height: 4px; }
+    .chart-bars .bar-label { font-size: 10px; color: var(--muted); letter-spacing: .02em; }
+
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.5); z-index: 80; display: grid; place-items: center; padding: 1rem; }
+    .modal { background: var(--surface); border-radius: 16px; border: 1px solid var(--border); width: 100%; max-width: 480px; padding: 1.35rem; box-shadow: var(--shadow-md); max-height: 90vh; overflow-y: auto; }
+    .modal h3 { font-size: 1.15rem; font-weight: 600; letter-spacing: -.01em; margin-bottom: .35rem; }
+    .modal p.sub { color: var(--muted); font-size: 14px; margin-bottom: 1rem; }
+
+    .person-row { display: flex; align-items: center; gap: .75rem; }
+    .person-meta { min-width: 0; }
+    .person-meta .name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .person-meta .sub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .list-stack { display: flex; flex-direction: column; gap: .65rem; }
+    .row-card { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+    .divider { height: 1px; background: var(--border); margin: 1rem 0; }
+    .stack-sm { display: flex; flex-direction: column; gap: .5rem; }
+    .row { display: flex; align-items: center; gap: .5rem; }
+    .row-between { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+    .muted { color: var(--muted); }
+    .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .text-sm { font-size: 13px; }
+    .text-xs { font-size: 12px; }
+    .fw-600 { font-weight: 600; }
+    .mt-1 { margin-top: .5rem; }
+    .mt-2 { margin-top: 1rem; }
+    .mb-1 { margin-bottom: .5rem; }
+    .mb-2 { margin-bottom: 1rem; }
+    .gap-1 { gap: .5rem; }
+    .flex { display: flex; }
+    .flex-1 { flex: 1; min-width: 0; }
+    .items-center { align-items: center; }
+    .wrap { flex-wrap: wrap; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+
+    .feature-icon {
+      width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center;
+      background: color-mix(in srgb, var(--primary) 10%, transparent); color: var(--primary); margin-bottom: .85rem;
+    }
+    .ph-img {
+      width: 100%; aspect-ratio: 16/10; border-radius: 12px;
+      background:
+        linear-gradient(135deg, color-mix(in srgb, var(--primary) 18%, transparent), color-mix(in srgb, var(--secondary) 12%, transparent)),
+        var(--bg);
+      border: 1px solid var(--border); display: grid; place-items: center; color: var(--muted); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; font-weight: 600;
+    }
+    .story-card blockquote { font-size: 15px; line-height: 1.55; margin-bottom: 1rem; }
+    .notif-item { display: flex; gap: .75rem; padding: .85rem 0; border-bottom: 1px solid var(--border); }
+    .notif-item:last-child { border-bottom: none; }
+    .notif-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); margin-top: 6px; flex-shrink: 0; }
+    .notif-dot.read { background: var(--border); }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useCallback, createContext, useContext } = React;
+    const { motion, AnimatePresence } = window.Motion || { motion: { div: 'div', button: 'button' }, AnimatePresence: ({ children }) => children };
+
+    /* ========== Icons (monoline SVG) ========== */
+    const I = {
+      menu: (p) => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...p}><path d="M4 7h16M4 12h16M4 17h16"/></svg>,
+      close: (p) => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...p}><path d="M6 6l12 12M18 6L6 18"/></svg>,
+      sun: (p) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...p}><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>,
+      moon: (p) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...p}><path d="M21 14.5A8.5 8.5 0 1 1 9.5 3a7 7 0 0 0 11.5 11.5z"/></svg>,
+      search: (p) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...p}><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>,
+      bell: (p) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...p}><path d="M6 9a6 6 0 1 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>,
+      home: (p) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...p}><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>,
+      users: (p) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...p}><circle cx="9" cy="8" r="3.5"/><path d="M2.5 19c.8-3.2 3.2-5 6.5-5s5.7 1.8 6.5 5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.2c2.2.4 3.9 1.7 4.5 3.8"/></svg>,
+      brief: (p) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...p}><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>,
+      intern: (p) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...p}><path d="M12 3l8 4v5c0 4.5-3.2 7.5-8 9-4.8-1.5-8-4.5-8-9V7l8-4z"/><path d="M9 12l2 2 4-4"/></svg>,
+      cal: (p) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...p}><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>,
+      chat: (p) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...p}><path d="M5 18l-2 3V7a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H5z"/></svg>,
+      user: (p) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...p}><circle cx="12" cy="8" r="4"/><path d="M4 20c1.2-3.5 4-5.5 8-5.5s6.8 2 8 5.5"/></svg>,
+      settings: (p) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...p}><circle cx="12" cy="12" r="3"/><path d="M12 2v2.5M12 19.5V22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M2 12h2.5M19.5 12H22M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>,
+      shield: (p) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...p}><path d="M12 3l8 4v5c0 4.5-3.2 7.5-8 9-4.8-1.5-8-4.5-8-9V7l8-4z"/></svg>,
+      chart: (p) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...p}><path d="M4 19V5M4 19h16"/><path d="M8 16v-5M12 16V8M16 16v-3"/></svg>,
+      logout: (p) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...p}><path d="M10 7V5a2 2 0 0 1 2-2h7v18h-7a2 2 0 0 1-2-2v-2"/><path d="M15 12H3m0 0 3-3m-3 3 3 3"/></svg>,
+      send: (p) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...p}><path d="M4 12 20 4l-6 16-2-7-8-1z"/></svg>,
+      check: (p) => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...p}><path d="M5 12l5 5L20 7"/></svg>,
+      plus: (p) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...p}><path d="M12 5v14M5 12h14"/></svg>,
+      map: (p) => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...p}><path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>,
+      building: (p) => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...p}><path d="M4 21V4h10v17M14 8h6v13M8 8h2M8 12h2M8 16h2"/></svg>,
+      mail: (p) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...p}><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 7 9-7"/></svg>,
+      arrow: (p) => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...p}><path d="M5 12h14M13 6l6 6-6 6"/></svg>,
+    };
+
+    /* ========== Dummy data (demo — replace via API) ========== */
+    const DEMO_USERS = {
+      student: { id: 'u-s1', name: 'Aarav Mehta', email: 'aarav.mehta@soet.edu', role: 'student', batch: '2026', branch: 'CSE', avatar: 'AM', title: 'B.Tech CSE · Final Year', company: 'SOET' },
+      alumni: { id: 'u-a1', name: 'Priya Sharma', email: 'priya.sharma@email.com', role: 'alumni', batch: '2019', branch: 'ECE', avatar: 'PS', title: 'Senior Software Engineer', company: 'Microsoft' },
+      admin: { id: 'u-ad1', name: 'Dr. R. Kapoor', email: 'admin@soet.edu', role: 'admin', batch: '—', branch: 'Admin', avatar: 'RK', title: 'Portal Administrator', company: 'SOET' },
+    };
+
+    const ALUMNI = [
+      { id: 'a1', name: 'Priya Sharma', batch: '2019', branch: 'ECE', company: 'Microsoft', title: 'Senior Software Engineer', location: 'Hyderabad', skills: ['Cloud', 'C#', '.NET'], verified: true, mentoring: true },
+      { id: 'a2', name: 'Rohan Desai', batch: '2018', branch: 'CSE', company: 'Amazon', title: 'SDE II', location: 'Bengaluru', skills: ['Java', 'Distributed Systems'], verified: true, mentoring: true },
+      { id: 'a3', name: 'Ananya Iyer', batch: '2020', branch: 'IT', company: 'Google', title: 'Product Manager', location: 'Gurugram', skills: ['Product', 'Analytics'], verified: true, mentoring: false },
+      { id: 'a4', name: 'Vikram Nair', batch: '2017', branch: 'ME', company: 'Tata Motors', title: 'Design Engineer', location: 'Pune', skills: ['CAD', 'EV'], verified: true, mentoring: true },
+      { id: 'a5', name: 'Sneha Patel', batch: '2021', branch: 'CSE', company: 'Razorpay', title: 'Frontend Engineer', location: 'Bengaluru', skills: ['React', 'TypeScript'], verified: false, mentoring: true },
+      { id: 'a6', name: 'Kabir Singh', batch: '2016', branch: 'EE', company: 'Siemens', title: 'Project Lead', location: 'Mumbai', skills: ['Automation', 'PLC'], verified: true, mentoring: false },
+      { id: 'a7', name: 'Meera Joshi', batch: '2019', branch: 'CSE', company: 'Atlassian', title: 'Backend Engineer', location: 'Remote', skills: ['Go', 'Kubernetes'], verified: true, mentoring: true },
+      { id: 'a8', name: 'Arjun Reddy', batch: '2022', branch: 'IT', company: 'Flipkart', title: 'Data Analyst', location: 'Bengaluru', skills: ['SQL', 'Python'], verified: true, mentoring: false },
+    ];
+
+    const JOBS = [
+      { id: 'j1', title: 'Graduate Software Engineer', company: 'Microsoft', location: 'Hyderabad', type: 'Full-time', posted: '2 days ago', salary: '₹12–18 LPA', tags: ['C#', 'Azure'], applicants: 48 },
+      { id: 'j2', title: 'SDE Intern → Full-time', company: 'Amazon', location: 'Bengaluru', type: 'Full-time', posted: '5 days ago', salary: '₹15–22 LPA', tags: ['Java', 'DSA'], applicants: 112 },
+      { id: 'j3', title: 'Frontend Developer', company: 'Razorpay', location: 'Remote', type: 'Full-time', posted: '1 week ago', salary: '₹10–16 LPA', tags: ['React', 'TypeScript'], applicants: 67 },
+      { id: 'j4', title: 'Product Analyst', company: 'Flipkart', location: 'Bengaluru', type: 'Full-time', posted: '3 days ago', salary: '₹8–12 LPA', tags: ['SQL', 'Excel'], applicants: 34 },
+      { id: 'j5', title: 'Cloud Support Associate', company: 'AWS', location: 'Hyderabad', type: 'Full-time', posted: '4 days ago', salary: '₹7–10 LPA', tags: ['Linux', 'Networking'], applicants: 89 },
+      { id: 'j6', title: 'Mechanical Design Engineer', company: 'Tata Motors', location: 'Pune', type: 'Full-time', posted: '6 days ago', salary: '₹6–9 LPA', tags: ['SolidWorks', 'CAD'], applicants: 22 },
+    ];
+
+    const INTERNSHIPS = [
+      { id: 'i1', title: 'Software Engineering Intern', company: 'Google', location: 'Hyderabad', duration: '10–12 weeks', stipend: '₹80k/mo', posted: '1 day ago', mode: 'On-site' },
+      { id: 'i2', title: 'React Intern', company: 'Razorpay', location: 'Bengaluru', duration: '3 months', stipend: '₹40k/mo', posted: '3 days ago', mode: 'Hybrid' },
+      { id: 'i3', title: 'Data Science Intern', company: 'Jio', location: 'Mumbai', duration: '6 months', stipend: '₹25k/mo', posted: '1 week ago', mode: 'On-site' },
+      { id: 'i4', title: 'UI/UX Design Intern', company: 'Freshworks', location: 'Chennai', duration: '3 months', stipend: '₹20k/mo', posted: '4 days ago', mode: 'Remote' },
+      { id: 'i5', title: 'Embedded Systems Intern', company: 'Bosch', location: 'Bengaluru', duration: '6 months', stipend: '₹18k/mo', posted: '5 days ago', mode: 'On-site' },
+    ];
+
+    const EVENTS = [
+      { id: 'e1', title: 'SOET Alumni Meetup 2026', date: '2026-08-12', time: '10:00 AM', location: 'SOET Main Auditorium', type: 'Meetup', seats: 120, registered: 86 },
+      { id: 'e2', title: 'Resume & Interview Workshop', date: '2026-07-28', time: '4:00 PM', location: 'Online · Teams', type: 'Workshop', seats: 200, registered: 154 },
+      { id: 'e3', title: 'Women in Tech Panel', date: '2026-08-05', time: '5:30 PM', location: 'Seminar Hall B', type: 'Panel', seats: 80, registered: 61 },
+      { id: 'e4', title: 'Startup Founders AMA', date: '2026-08-20', time: '6:00 PM', location: 'Online · Zoom', type: 'AMA', seats: 300, registered: 210 },
+    ];
+
+    const NOTIFICATIONS = [
+      { id: 'n1', title: 'Mentor request accepted', body: 'Priya Sharma accepted your mentorship request.', time: '12 min ago', read: false, type: 'mentor' },
+      { id: 'n2', title: 'New job match', body: 'Graduate Software Engineer at Microsoft matches your profile.', time: '1 hr ago', read: false, type: 'job' },
+      { id: 'n3', title: 'Event reminder', body: 'Resume & Interview Workshop starts in 2 days.', time: '3 hrs ago', read: true, type: 'event' },
+      { id: 'n4', title: 'Message from Rohan Desai', body: 'Happy to review your resume this weekend.', time: 'Yesterday', read: true, type: 'chat' },
+      { id: 'n5', title: 'Profile tip', body: 'Add your internship experience to improve job matches.', time: '2 days ago', read: true, type: 'system' },
+    ];
+
+    const CHATS = [
+      { id: 'c1', name: 'Priya Sharma', role: 'Alumni · Microsoft', last: 'Happy to hop on a call Thursday.', unread: 1, messages: [
+        { id: 1, from: 'them', text: 'Hi Aarav — saw your mentorship request.', time: '10:02' },
+        { id: 2, from: 'me', text: 'Thanks Priya! I am preparing for SDE interviews.', time: '10:05' },
+        { id: 3, from: 'them', text: 'Happy to hop on a call Thursday.', time: '10:08' },
+      ]},
+      { id: 'c2', name: 'Rohan Desai', role: 'Alumni · Amazon', last: 'Send over your resume PDF.', unread: 0, messages: [
+        { id: 1, from: 'them', text: 'Send over your resume PDF.', time: 'Yesterday' },
+        { id: 2, from: 'me', text: 'Shared via portal — thank you!', time: 'Yesterday' },
+      ]},
+      { id: 'c3', name: 'Placement Cell', role: 'SOET Admin', last: 'Drive schedule uploaded.', unread: 0, messages: [
+        { id: 1, from: 'them', text: 'Drive schedule uploaded for August.', time: 'Mon' },
+      ]},
+    ];
+
+    const STUDENTS = [
+      { id: 's1', name: 'Aarav Mehta', batch: '2026', branch: 'CSE', status: 'Active' },
+      { id: 's2', name: 'Diya Kapoor', batch: '2027', branch: 'IT', status: 'Active' },
+      { id: 's3', name: 'Ishaan Gupta', batch: '2026', branch: 'ECE', status: 'Active' },
+      { id: 's4', name: 'Nisha Verma', batch: '2025', branch: 'CSE', status: 'Graduating' },
+    ];
+
+    const PENDING_ALUMNI = [
+      { id: 'p1', name: 'Sneha Patel', batch: '2021', company: 'Razorpay', email: 'sneha.p@email.com' },
+      { id: 'p2', name: 'Harsh Malhotra', batch: '2018', company: 'Infosys', email: 'harsh.m@email.com' },
+    ];
+
+    const MENTOR_REQS = [
+      { id: 'm1', student: 'Aarav Mehta', topic: 'SDE interview prep', status: 'Pending' },
+      { id: 'm2', student: 'Diya Kapoor', topic: 'Product management path', status: 'Pending' },
+      { id: 'm3', student: 'Ishaan Gupta', topic: 'Resume review', status: 'Accepted' },
+    ];
+
+    /* ========== Context ========== */
+    const AppCtx = createContext(null);
+    const useApp = () => useContext(AppCtx);
+
+    function useHashRoute() {
+      const [route, setRoute] = useState(() => location.hash.slice(1) || '/');
+      useEffect(() => {
+        const onHash = () => setRoute(location.hash.slice(1) || '/');
+        window.addEventListener('hashchange', onHash);
+        return () => window.removeEventListener('hashchange', onHash);
+      }, []);
+      const navigate = useCallback((path) => {
+        if (!path.startsWith('/')) path = '/' + path;
+        location.hash = path;
+      }, []);
+      return [route, navigate];
+    }
+
+    /* ========== Shared UI ========== */
+    function ToastHost({ toasts, dismiss }) {
+      return (
+        <div className="toast-wrap" data-od-id="toast-host" aria-live="polite">
+          {toasts.map(t => (
+            <div key={t.id} className={`toast ${t.type || ''}`} onClick={() => dismiss(t.id)}>
+              {t.type === 'success' && <I.check />}
+              <span>{t.message}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    function Modal({ open, onClose, title, sub, children }) {
+      if (!open) return null;
+      return (
+        <div className="modal-backdrop" onClick={onClose} data-od-id="modal-backdrop">
+          <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="row-between mb-1">
+              <div>
+                <h3>{title}</h3>
+                {sub && <p className="sub">{sub}</p>}
+              </div>
+              <button className="icon-btn" onClick={onClose} aria-label="Close"><I.close /></button>
+            </div>
+            {children}
+          </div>
+        </div>
+      );
+    }
+
+    function EmptyState({ title, body, action }) {
+      return (
+        <div className="empty" data-od-id="empty-state">
+          <div className="feature-icon" style={{ margin: '0 auto .5rem' }}><I.search /></div>
+          <h3>{title}</h3>
+          <p>{body}</p>
+          {action}
+        </div>
+      );
+    }
+
+    function SkeletonCards({ n = 3 }) {
+      return (
+        <div className="grid grid-3">
+          {Array.from({ length: n }).map((_, i) => (
+            <div key={i} className="card"><div className="skeleton sk-title"/><div className="skeleton sk-line"/><div className="skeleton sk-line" style={{width:'70%'}}/><div className="skeleton sk-block mt-1"/></div>
+          ))}
+        </div>
+      );
+    }
+
+    function Breadcrumbs({ items }) {
+      return (
+        <nav className="breadcrumbs" aria-label="Breadcrumb" data-od-id="breadcrumbs">
+          {items.map((it, i) => (
+            <React.Fragment key={i}>
+              {i > 0 && <span className="sep">/</span>}
+              {it.href ? <a href={`#${it.href}`}>{it.label}</a> : <strong>{it.label}</strong>}
+            </React.Fragment>
+          ))}
+        </nav>
+      );
+    }
+
+    function StatCard({ label, value, delta, odId }) {
+      return (
+        <div className="card stat-card" data-od-id={odId || 'stat-card'}>
+          <div className="label">{label}</div>
+          <div className="value">{value}</div>
+          {delta && <div className="delta">{delta}</div>}
+        </div>
+      );
+    }
+
+    function MiniChart({ data }) {
+      const max = Math.max(...data.map(d => d.v), 1);
+      return (
+        <div className="chart-bars" data-od-id="analytics-chart" role="img" aria-label="Monthly activity chart">
+          {data.map(d => (
+            <div key={d.l} className="bar-col">
+              <div className="bar" style={{ height: `${(d.v / max) * 100}%`, background: d.v === max ? 'var(--primary)' : 'color-mix(in srgb, var(--primary) 45%, var(--border))' }} />
+              <span className="bar-label">{d.l}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    function Pagination({ page, total, onChange }) {
+      if (total <= 1) return null;
+      return (
+        <div className="pagination" data-od-id="pagination">
+          <button className="page-btn" disabled={page === 1} onClick={() => onChange(page - 1)} aria-label="Previous">‹</button>
+          {Array.from({ length: total }, (_, i) => i + 1).map(p => (
+            <button key={p} className={`page-btn ${p === page ? 'active' : ''}`} onClick={() => onChange(p)}>{p}</button>
+          ))}
+          <button className="page-btn" disabled={page === total} onClick={() => onChange(page + 1)} aria-label="Next">›</button>
+        </div>
+      );
+    }
+
+    /* ========== Layouts ========== */
+    function PublicNav() {
+      const { navigate, theme, toggleTheme, user } = useApp();
+      const [open, setOpen] = useState(false);
+      return (
+        <header className={`public-nav ${open ? 'open' : ''}`} data-od-id="public-navbar">
+          <a className="brand" href="#/" onClick={() => setOpen(false)}>
+            <span className="brand-mark">SP</span>
+            <span>SOET Alumni Portal</span>
+          </a>
+          <nav className="nav-links public-links">
+            <a href="#/about" onClick={() => setOpen(false)}>About</a>
+            <a href="#/contact" onClick={() => setOpen(false)}>Contact</a>
+            <a href="#/jobs" onClick={() => setOpen(false)}>Jobs</a>
+            <a href="#/events" onClick={() => setOpen(false)}>Events</a>
+            <button className="icon-btn" onClick={toggleTheme} aria-label="Toggle theme">{theme === 'dark' ? <I.sun /> : <I.moon />}</button>
+            {user ? (
+              <a className="nav-cta" href={`#/${user.role === 'admin' ? 'admin' : user.role === 'alumni' ? 'alumni' : 'student'}`} onClick={() => setOpen(false)}>Dashboard</a>
+            ) : (
+              <>
+                <a href="#/login" onClick={() => setOpen(false)}>Log in</a>
+                <a className="nav-cta" href="#/register" onClick={() => setOpen(false)}>Join portal</a>
+              </>
+            )}
+          </nav>
+          <div className="row gap-1 mobile-only">
+            <button className="icon-btn" onClick={toggleTheme} aria-label="Toggle theme">{theme === 'dark' ? <I.sun /> : <I.moon />}</button>
+            <button className="icon-btn" onClick={() => setOpen(o => !o)} aria-label="Menu">{open ? <I.close /> : <I.menu />}</button>
+          </div>
+        </header>
+      );
+    }
+
+    function Footer() {
+      return (
+        <footer className="footer" data-od-id="site-footer">
+          <div className="footer-inner">
+            <div>
+              <div className="brand mb-1"><span className="brand-mark">SP</span><span>SOET Alumni Portal</span></div>
+              <p className="muted text-sm" style={{ maxWidth: '32ch' }}>Connecting SOET students, alumni, and administrators for mentorship, careers, and community.</p>
+            </div>
+            <div>
+              <h4>Explore</h4>
+              <a href="#/about">About</a>
+              <a href="#/jobs">Jobs</a>
+              <a href="#/internships">Internships</a>
+              <a href="#/events">Events</a>
+            </div>
+            <div>
+              <h4>Account</h4>
+              <a href="#/login">Log in</a>
+              <a href="#/register">Register</a>
+              <a href="#/settings">Settings</a>
+            </div>
+            <div>
+              <h4>Contact</h4>
+              <a href="#/contact">Contact form</a>
+              <a href="mailto:alumni@soet.edu">alumni@soet.edu</a>
+            </div>
+          </div>
+          <div className="footer-bottom">
+            <span>© 2026 School of Engineering & Technology · Demo frontend</span>
+            <span>Final Year Project · Frontend only</span>
+          </div>
+        </footer>
+      );
+    }
+
+    function AppSidebar({ open, onClose }) {
+      const { user, navigate, route, logout } = useApp();
+      const role = user?.role || 'student';
+      const items = role === 'admin' ? [
+        { href: '/admin', label: 'Admin home', icon: I.shield },
+        { href: '/admin/verify', label: 'Verify alumni', icon: I.check },
+        { href: '/admin/students', label: 'Manage students', icon: I.users },
+        { href: '/admin/alumni', label: 'Manage alumni', icon: I.users },
+        { href: '/jobs', label: 'Jobs', icon: I.brief },
+        { href: '/events', label: 'Events', icon: I.cal },
+        { href: '/admin/reports', label: 'Reports', icon: I.chart },
+      ] : role === 'alumni' ? [
+        { href: '/alumni', label: 'Dashboard', icon: I.home },
+        { href: '/profile', label: 'Profile', icon: I.user },
+        { href: '/alumni/post-job', label: 'Post job', icon: I.brief },
+        { href: '/alumni/post-internship', label: 'Post internship', icon: I.intern },
+        { href: '/alumni/mentors', label: 'Mentor requests', icon: I.users },
+        { href: '/chat', label: 'Messages', icon: I.chat },
+        { href: '/events', label: 'Events', icon: I.cal },
+        { href: '/directory', label: 'Directory', icon: I.users },
+      ] : [
+        { href: '/student', label: 'Dashboard', icon: I.home },
+        { href: '/directory', label: 'Alumni directory', icon: I.users },
+        { href: '/jobs', label: 'Jobs', icon: I.brief },
+        { href: '/internships', label: 'Internships', icon: I.intern },
+        { href: '/events', label: 'Events', icon: I.cal },
+        { href: '/chat', label: 'Chat', icon: I.chat },
+        { href: '/notifications', label: 'Notifications', icon: I.bell },
+        { href: '/profile', label: 'Profile', icon: I.user },
+      ];
+      const secondary = [
+        { href: '/settings', label: 'Settings', icon: I.settings },
+        { href: '/about', label: 'About', icon: I.shield },
+        { href: '/contact', label: 'Contact', icon: I.mail },
+      ];
+      const go = (href) => { navigate(href); onClose(); };
+      return (
+        <>
+          {open && <div className="sidebar-backdrop mobile-only" style={{ display: 'block' }} onClick={onClose} />}
+          <aside className={`sidebar ${open ? 'open' : ''}`} data-od-id="app-sidebar">
+            <div className="sidebar-head">
+              <span className="brand-mark">SP</span>
+              <div>
+                <div className="fw-600 text-sm">SOET Portal</div>
+                <div className="text-xs" style={{ color: 'var(--sidebar-muted)' }}>{role.charAt(0).toUpperCase() + role.slice(1)}</div>
+              </div>
+            </div>
+            <nav className="sidebar-nav">
+              <div className="side-section">Main</div>
+              {items.map(it => {
+                const Icon = it.icon;
+                const active = route === it.href || (it.href !== '/' && route.startsWith(it.href) && it.href.split('/').length > 2 ? route === it.href : route.startsWith(it.href) && (it.href === '/student' || it.href === '/alumni' || it.href === '/admin' ? route === it.href : true));
+                const isActive = route === it.href || (['/jobs','/events','/directory','/chat','/profile','/settings','/internships','/notifications'].includes(it.href) && route === it.href);
+                return (
+                  <button key={it.href} className={`side-link ${route === it.href ? 'active' : ''}`} onClick={() => go(it.href)}>
+                    <Icon /> {it.label}
+                  </button>
+                );
+              })}
+              <div className="side-section">More</div>
+              {secondary.map(it => {
+                const Icon = it.icon;
+                return (
+                  <button key={it.href} className={`side-link ${route === it.href ? 'active' : ''}`} onClick={() => go(it.href)}>
+                    <Icon /> {it.label}
+                  </button>
+                );
+              })}
+            </nav>
+            <div className="sidebar-foot">
+              <div className="person-row mb-1">
+                <div className="avatar sm">{user?.avatar}</div>
+                <div className="person-meta">
+                  <div className="name" style={{ color: '#fff' }}>{user?.name}</div>
+                  <div className="sub">{user?.email}</div>
+                </div>
+              </div>
+              <button className="side-link" onClick={() => { logout(); onClose(); }}><I.logout /> Sign out</button>
+            </div>
+          </aside>
+        </>
+      );
+    }
+
+    function AppLayout({ children }) {
+      const { user, theme, toggleTheme, navigate, route } = useApp();
+      const [sideOpen, setSideOpen] = useState(false);
+      const unread = NOTIFICATIONS.filter(n => !n.read).length;
+      useEffect(() => {
+        if (!user) navigate('/login');
+      }, [user, navigate]);
+      if (!user) return null;
+      return (
+        <div className="layout-app">
+          <AppSidebar open={sideOpen} onClose={() => setSideOpen(false)} />
+          <div className="main-wrap">
+            <header className="topbar" data-od-id="app-topbar">
+              <div className="row gap-1">
+                <button className="icon-btn mobile-only" onClick={() => setSideOpen(true)} aria-label="Open menu"><I.menu /></button>
+                <div className="search-box desktop-only">
+                  <I.search /><input placeholder="Search alumni, jobs, events…" aria-label="Search" />
+                </div>
+              </div>
+              <div className="row gap-1">
+                <button className="icon-btn" onClick={toggleTheme} aria-label="Toggle theme">{theme === 'dark' ? <I.sun /> : <I.moon />}</button>
+                <button className="icon-btn" onClick={() => navigate('/notifications')} aria-label="Notifications" style={{ position: 'relative' }}>
+                  <I.bell />
+                  {unread > 0 && <span style={{ position: 'absolute', top: 8, right: 8, width: 8, height: 8, borderRadius: '50%', background: 'var(--success)' }} />}
+                </button>
+                <button className="person-row" onClick={() => navigate('/profile')} style={{ marginLeft: 4 }}>
+                  <div className="avatar sm">{user.avatar}</div>
+                  <span className="text-sm fw-600 desktop-only">{user.name.split(' ')[0]}</span>
+                </button>
+              </div>
+            </header>
+            <main className="page" data-od-id="page-content">{children}</main>
+          </div>
+        </div>
+      );
+    }
+
+    function PublicLayout({ children, bare }) {
+      return (
+        <div className="app-shell">
+          {!bare && <PublicNav />}
+          <div style={{ flex: 1 }}>{children}</div>
+          {!bare && <Footer />}
+        </div>
+      );
+    }
+
+    /* ========== Pages ========== */
+    function LandingPage() {
+      const { navigate, user } = useApp();
+      const stats = [
+        { label: 'Verified alumni', value: '1,240', note: 'Demo dataset' },
+        { label: 'Active students', value: '3,680', note: 'Demo dataset' },
+        { label: 'Open roles', value: '86', note: 'Demo dataset' },
+        { label: 'Events / year', value: '42', note: 'Demo dataset' },
+      ];
+      const features = [
+        { icon: I.users, title: 'Alumni network', body: 'Search verified graduates by batch, company, and skills. Request mentorship in one click.' },
+        { icon: I.brief, title: 'Jobs & internships', body: 'Browse roles posted by alumni and partners. Apply with your SOET profile.' },
+        { icon: I.cal, title: 'Campus events', body: 'Meetups, workshops, and AMAs — register and get reminders in your feed.' },
+        { icon: I.chat, title: 'Secure messaging', body: 'Chat with mentors and peers inside the portal — no personal number required.' },
+      ];
+      const stories = [
+        { quote: 'A SOET alum referred me to my first SDE role. Mentorship here is practical, not generic advice.', name: 'Nisha Verma', meta: 'CSE · Batch 2025' },
+        { quote: 'Posting internships takes minutes. I have mentored four juniors this semester through the portal.', name: 'Rohan Desai', meta: 'Alumni · Amazon' },
+      ];
+      return (
+        <PublicLayout>
+          <section className="hero" data-od-id="landing-hero">
+            <div className="hero-inner">
+              <div>
+                <div className="eyebrow" style={{ color: '#93c5fd' }}>School of Engineering & Technology</div>
+                <h1 data-od-id="hero-title">Your career network, built for SOET.</h1>
+                <p className="lead">Connect with alumni, apply for roles, find mentors, and join events — one portal for students, graduates, and administrators.</p>
+                <div className="hero-actions">
+                  <button className="btn btn-primary" data-od-id="hero-cta-join" onClick={() => navigate(user ? `/${user.role === 'admin' ? 'admin' : user.role}` : '/register')}>
+                    {user ? 'Go to dashboard' : 'Create free account'} <I.arrow />
+                  </button>
+                  <button className="btn btn-secondary" style={{ background: 'rgba(255,255,255,.08)', color: '#fff', borderColor: 'rgba(255,255,255,.15)' }} onClick={() => navigate('/about')}>
+                    How it works
+                  </button>
+                </div>
+              </div>
+              <div className="hero-panel" data-od-id="hero-panel">
+                <div className="text-xs" style={{ letterSpacing: '.08em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: 12 }}>Live preview · demo data</div>
+                <div className="stack-sm">
+                  {ALUMNI.slice(0, 3).map(a => (
+                    <div key={a.id} className="row-between" style={{ padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,.08)' }}>
+                      <div className="person-row">
+                        <div className="avatar sm">{a.name.split(' ').map(w=>w[0]).join('')}</div>
+                        <div className="person-meta">
+                          <div className="name" style={{ color: '#fff' }}>{a.name}</div>
+                          <div className="sub">{a.title} · {a.company}</div>
+                        </div>
+                      </div>
+                      {a.verified && <span className="badge badge-success">Verified</span>}
+                    </div>
+                  ))}
+                </div>
+                <button className="btn btn-primary btn-block mt-2" onClick={() => navigate('/directory')}>Browse alumni directory</button>
+              </div>
+            </div>
+          </section>
+
+          <section className="section" data-od-id="landing-about">
+            <div className="section-inner">
+              <div className="section-head">
+                <div className="eyebrow">About the portal</div>
+                <h2>One hub for the SOET community</h2>
+                <p>Students discover mentors and opportunities. Alumni give back by posting roles and guiding juniors. Admins keep the network verified and safe.</p>
+              </div>
+              <div className="grid grid-3">
+                {['Students', 'Alumni', 'Administrators'].map((role, i) => (
+                  <div key={role} className="card card-hover" data-od-id={`about-role-${role.toLowerCase()}`}>
+                    <h3 className="fw-600 mb-1" style={{ fontSize: '1.05rem' }}>{role}</h3>
+                    <p className="muted text-sm">{[
+                      'Search alumni, apply to jobs and internships, join events, and message mentors from your dashboard.',
+                      'Publish openings, accept mentorship requests, host events, and stay connected with campus.',
+                      'Verify alumni, manage users, moderate listings, and review analytics — no backend mock logic beyond UI.',
+                    ][i]}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section className="section" style={{ paddingTop: 0 }} data-od-id="landing-features">
+            <div className="section-inner">
+              <div className="section-head">
+                <div className="eyebrow">Features</div>
+                <h2>Everything you need after campus</h2>
+              </div>
+              <div className="grid grid-2">
+                {features.map(f => {
+                  const Icon = f.icon;
+                  return (
+                    <div key={f.title} className="card card-hover" data-od-id={`feature-${f.title.toLowerCase().replace(/\s+/g,'-')}`}>
+                      <div className="feature-icon"><Icon /></div>
+                      <h3 className="fw-600 mb-1" style={{ fontSize: '1.05rem' }}>{f.title}</h3>
+                      <p className="muted text-sm">{f.body}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
+          <section className="section" style={{ background: 'var(--surface)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }} data-od-id="landing-stats">
+            <div className="section-inner">
+              <div className="grid grid-4">
+                {stats.map(s => (
+                  <div key={s.label} className="stat-card" data-od-id={`stat-${s.label.toLowerCase().replace(/\s+/g,'-')}`}>
+                    <div className="label">{s.label}</div>
+                    <div className="value">{s.value}</div>
+                    <div className="delta">{s.note}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section className="section" data-od-id="landing-stories">
+            <div className="section-inner">
+              <div className="section-head">
+                <div className="eyebrow">Success stories</div>
+                <h2>From classroom to career</h2>
+              </div>
+              <div className="grid grid-2">
+                {stories.map(s => (
+                  <div key={s.name} className="card story-card" data-od-id="success-story">
+                    <blockquote>“{s.quote}”</blockquote>
+                    <div className="person-row">
+                      <div className="avatar sm">{s.name.split(' ').map(w=>w[0]).join('')}</div>
+                      <div className="person-meta">
+                        <div className="name">{s.name}</div>
+                        <div className="sub">{s.meta}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section className="section" style={{ paddingTop: 0 }} data-od-id="landing-cta">
+            <div className="section-inner">
+              <div className="card" style={{ padding: '2rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '1.25rem', background: 'var(--secondary)', color: '#f8fafc', border: 'none' }}>
+                <div>
+                  <h2 style={{ fontSize: '1.5rem', letterSpacing: '-.02em', marginBottom: '.35rem' }}>Ready to join the network?</h2>
+                  <p style={{ color: '#94a3b8', maxWidth: '42ch' }}>Register as a student or alumnus. Demo logins available on the login page for evaluators.</p>
+                </div>
+                <div className="row gap-1 wrap">
+                  <button className="btn btn-primary" onClick={() => navigate('/register')}>Register now</button>
+                  <button className="btn btn-secondary" style={{ background: 'transparent', color: '#fff', borderColor: 'rgba(255,255,255,.2)' }} onClick={() => navigate('/login')}>Demo login</button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </PublicLayout>
+      );
+    }
+
+    function LoginPage() {
+      const { login, toast, navigate, user } = useApp();
+      const [email, setEmail] = useState('aarav.mehta@soet.edu');
+      const [password, setPassword] = useState('demo1234');
+      const [loading, setLoading] = useState(false);
+
+      useEffect(() => {
+        if (user) navigate(user.role === 'admin' ? '/admin' : `/${user.role}`);
+      }, [user]);
+
+      const submit = (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setTimeout(() => {
+          const key = email.includes('admin') ? 'admin' : email.includes('priya') || email.includes('alumni') ? 'alumni' : 'student';
+          login(DEMO_USERS[key]);
+          toast(`Signed in as ${DEMO_USERS[key].name}`, 'success');
+          setLoading(false);
+          navigate(key === 'admin' ? '/admin' : `/${key}`);
+        }, 600);
+      };
+
+      return (
+        <PublicLayout>
+          <div className="auth-page">
+            <div className="card auth-card" data-od-id="login-card">
+              <div className="brand mb-2"><span className="brand-mark">SP</span><span>Sign in</span></div>
+              <p className="muted text-sm mb-2">Use a demo account below — no backend required.</p>
+              <form onSubmit={submit}>
+                <div className="field">
+                  <label htmlFor="email">Email</label>
+                  <input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required autoComplete="username" />
+                </div>
+                <div className="field">
+                  <label htmlFor="password">Password</label>
+                  <input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required autoComplete="current-password" />
+                  <span className="hint">Any password works in this demo frontend.</span>
+                </div>
+                <button className="btn btn-primary btn-block" type="submit" disabled={loading} data-od-id="login-submit">
+                  {loading ? 'Signing in…' : 'Sign in'}
+                </button>
+              </form>
+              <div className="divider" />
+              <p className="text-sm fw-600 mb-1">Quick demo logins</p>
+              <div className="stack-sm">
+                {[
+                  { role: 'student', label: 'Student · Aarav Mehta', email: 'aarav.mehta@soet.edu' },
+                  { role: 'alumni', label: 'Alumni · Priya Sharma', email: 'priya.sharma@email.com' },
+                  { role: 'admin', label: 'Admin · Dr. R. Kapoor', email: 'admin@soet.edu' },
+                ].map(d => (
+                  <button key={d.role} type="button" className="btn btn-secondary btn-sm btn-block" onClick={() => { setEmail(d.email); setPassword('demo1234'); }}>
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-sm muted mt-2" style={{ textAlign: 'center' }}>
+                New here? <a href="#/register" style={{ color: 'var(--primary)', fontWeight: 600 }}>Create an account</a>
+              </p>
+            </div>
+          </div>
+        </PublicLayout>
+      );
+    }
+
+    function RegisterPage() {
+      const { toast, navigate, login } = useApp();
+      const [tab, setTab] = useState('student');
+      const [form, setForm] = useState({ name: '', email: '', password: '', branch: 'CSE', batch: '2026', company: '' });
+      const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+      const submit = (e) => {
+        e.preventDefault();
+        const user = {
+          id: 'u-new',
+          name: form.name || (tab === 'student' ? 'New Student' : 'New Alumni'),
+          email: form.email,
+          role: tab,
+          batch: form.batch,
+          branch: form.branch,
+          avatar: (form.name || 'N').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'NW',
+          title: tab === 'student' ? `B.Tech ${form.branch}` : form.company || 'Alumni',
+          company: tab === 'alumni' ? form.company : 'SOET',
+        };
+        login(user);
+        toast(`${tab === 'student' ? 'Student' : 'Alumni'} account created (demo)`, 'success');
+        navigate(tab === 'student' ? '/student' : '/alumni');
+      };
+
+      return (
+        <PublicLayout>
+          <div className="auth-page">
+            <div className="card auth-card" data-od-id="register-card" style={{ maxWidth: 480 }}>
+              <div className="brand mb-2"><span className="brand-mark">SP</span><span>Create account</span></div>
+              <div className="tabs" role="tablist">
+                <button type="button" className={`tab ${tab === 'student' ? 'active' : ''}`} onClick={() => setTab('student')}>Student</button>
+                <button type="button" className={`tab ${tab === 'alumni' ? 'active' : ''}`} onClick={() => setTab('alumni')}>Alumni</button>
+              </div>
+              <form onSubmit={submit}>
+                <div className="field"><label>Full name</label><input value={form.name} onChange={e => set('name', e.target.value)} required placeholder="Your name" /></div>
+                <div className="field"><label>Email</label><input type="email" value={form.email} onChange={e => set('email', e.target.value)} required placeholder={tab === 'student' ? 'you@soet.edu' : 'you@email.com'} /></div>
+                <div className="field"><label>Password</label><input type="password" value={form.password} onChange={e => set('password', e.target.value)} required minLength={6} /></div>
+                <div className="grid grid-2">
+                  <div className="field"><label>Branch</label>
+                    <select value={form.branch} onChange={e => set('branch', e.target.value)}>
+                      {['CSE','IT','ECE','EE','ME','CE'].map(b => <option key={b}>{b}</option>)}
+                    </select>
+                  </div>
+                  <div className="field"><label>Batch year</label>
+                    <input value={form.batch} onChange={e => set('batch', e.target.value)} required />
+                  </div>
+                </div>
+                {tab === 'alumni' && (
+                  <div className="field"><label>Current company</label><input value={form.company} onChange={e => set('company', e.target.value)} placeholder="Where you work" /></div>
+                )}
+                <button className="btn btn-primary btn-block" type="submit" data-od-id="register-submit">
+                  Register as {tab}
+                </button>
+              </form>
+              <p className="text-sm muted mt-2" style={{ textAlign: 'center' }}>
+                Already registered? <a href="#/login" style={{ color: 'var(--primary)', fontWeight: 600 }}>Sign in</a>
+              </p>
+            </div>
+          </div>
+        </PublicLayout>
+      );
+    }
+
+    function StudentDashboard() {
+      const { user, navigate, toast } = useApp();
+      const [loading, setLoading] = useState(true);
+      useEffect(() => { const t = setTimeout(() => setLoading(false), 700); return () => clearTimeout(t); }, []);
+
+      return (
+        <AppLayout>
+          <Breadcrumbs items={[{ label: 'Home', href: '/student' }, { label: 'Student dashboard' }]} />
+          <div className="row-between mb-2">
+            <div>
+              <h1 className="page-title" data-od-id="student-welcome">Welcome back, {user.name.split(' ')[0]}</h1>
+              <p className="page-sub">{user.title} · Batch {user.batch}</p>
+            </div>
+            <button className="btn btn-primary btn-sm" onClick={() => navigate('/directory')}>Find mentors</button>
+          </div>
+
+          <div className="grid grid-4 mb-2">
+            <StatCard label="Alumni matches" value="24" delta="Based on branch & skills · demo" odId="stat-matches" />
+            <StatCard label="Open jobs" value={String(JOBS.length)} delta="Updated this week · demo" odId="stat-jobs" />
+            <StatCard label="Internships" value={String(INTERNSHIPS.length)} delta="Active listings · demo" odId="stat-interns" />
+            <StatCard label="Unread" value={String(NOTIFICATIONS.filter(n=>!n.read).length)} delta="Notifications" odId="stat-unread" />
+          </div>
+
+          {loading ? <SkeletonCards n={3} /> : (
+            <div className="grid grid-3">
+              <div className="card" data-od-id="dash-jobs" style={{ gridColumn: 'span 2' }}>
+                <div className="row-between mb-1">
+                  <h2 className="fw-600" style={{ fontSize: '1.05rem' }}>Job opportunities</h2>
+                  <button className="btn btn-ghost btn-sm" onClick={() => navigate('/jobs')}>View all</button>
+                </div>
+                <div className="list-stack">
+                  {JOBS.slice(0, 3).map(j => (
+                    <div key={j.id} className="row-card">
+                      <div>
+                        <div className="fw-600">{j.title}</div>
+                        <div className="text-sm muted row gap-1"><I.building /> {j.company} · <I.map /> {j.location}</div>
+                      </div>
+                      <button className="btn btn-secondary btn-sm" onClick={() => { toast(`Applied to ${j.title} (demo)`, 'success'); }}>Apply</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="card" data-od-id="dash-events">
+                <div className="row-between mb-1">
+                  <h2 className="fw-600" style={{ fontSize: '1.05rem' }}>Upcoming events</h2>
+                  <button className="btn btn-ghost btn-sm" onClick={() => navigate('/events')}>All</button>
+                </div>
+                <div className="list-stack">
+                  {EVENTS.slice(0, 3).map(e => (
+                    <div key={e.id}>
+                      <div className="fw-600 text-sm">{e.title}</div>
+                      <div className="text-xs muted">{e.date} · {e.location}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="card" data-od-id="dash-interns">
+                <div className="row-between mb-1">
+                  <h2 className="fw-600" style={{ fontSize: '1.05rem' }}>Internships</h2>
+                  <button className="btn btn-ghost btn-sm" onClick={() => navigate('/internships')}>Browse</button>
+                </div>
+                <div className="list-stack">
+                  {INTERNSHIPS.slice(0, 3).map(i => (
+                    <div key={i.id} className="row-between">
+                      <div>
+                        <div className="fw-600 text-sm">{i.title}</div>
+                        <div className="text-xs muted">{i.company} · {i.stipend}</div>
+                      </div>
+                      <span className="badge badge-muted">{i.mode}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="card" data-od-id="dash-chat-preview">
+                <div className="row-between mb-1">
+                  <h2 className="fw-600" style={{ fontSize: '1.05rem' }}>Chat preview</h2>
+                  <button className="btn btn-ghost btn-sm" onClick={() => navigate('/chat')}>Open</button>
+                </div>
+                {CHATS.slice(0, 2).map(c => (
+                  <div key={c.id} className="person-row mb-1" style={{ cursor: 'pointer' }} onClick={() => navigate('/chat')}>
+                    <div className="avatar sm">{c.name.split(' ').map(w=>w[0]).join('')}</div>
+                    <div className="person-meta">
+                      <div className="name">{c.name}</div>
+                      <div className="sub">{c.last}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="card" data-od-id="dash-notifs">
+                <div className="row-between mb-1">
+                  <h2 className="fw-600" style={{ fontSize: '1.05rem' }}>Notifications</h2>
+                  <button className="btn btn-ghost btn-sm" onClick={() => navigate('/notifications')}>All</button>
+                </div>
+                {NOTIFICATIONS.slice(0, 3).map(n => (
+                  <div key={n.id} className="mb-1">
+                    <div className="fw-600 text-sm">{n.title}</div>
+                    <div className="text-xs muted">{n.time}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </AppLayout>
+      );
+    }
+
+    function AlumniDashboard() {
+      const { user, navigate, toast } = useApp();
+      return (
+        <AppLayout>
+          <Breadcrumbs items={[{ label: 'Alumni', href: '/alumni' }, { label: 'Dashboard' }]} />
+          <div className="row-between mb-2">
+            <div>
+              <h1 className="page-title" data-od-id="alumni-welcome">{user.name}</h1>
+              <p className="page-sub">{user.title} · {user.company} · Batch {user.batch}</p>
+            </div>
+            <div className="row gap-1 wrap">
+              <button className="btn btn-secondary btn-sm" onClick={() => navigate('/alumni/post-job')}><I.plus /> Post job</button>
+              <button className="btn btn-primary btn-sm" onClick={() => navigate('/alumni/post-internship')}><I.plus /> Post internship</button>
+            </div>
+          </div>
+          <div className="grid grid-4 mb-2">
+            <StatCard label="Profile views" value="128" delta="Last 30 days · demo" />
+            <StatCard label="Mentor requests" value={String(MENTOR_REQS.filter(m=>m.status==='Pending').length)} delta="Awaiting response" />
+            <StatCard label="Jobs posted" value="3" delta="Active · demo" />
+            <StatCard label="Messages" value="5" delta="Unread · demo" />
+          </div>
+          <div className="grid grid-2">
+            <div className="card" data-od-id="mentor-requests">
+              <h2 className="fw-600 mb-1" style={{ fontSize: '1.05rem' }}>Mentor requests</h2>
+              {MENTOR_REQS.map(m => (
+                <div key={m.id} className="row-between mb-1">
+                  <div>
+                    <div className="fw-600 text-sm">{m.student}</div>
+                    <div className="text-xs muted">{m.topic}</div>
+                  </div>
+                  {m.status === 'Pending' ? (
+                    <div className="row gap-1">
+                      <button className="btn btn-success btn-sm" onClick={() => toast('Request accepted (demo)', 'success')}>Accept</button>
+                      <button className="btn btn-secondary btn-sm" onClick={() => toast('Request declined (demo)')}>Decline</button>
+                    </div>
+                  ) : <span className="badge badge-success">{m.status}</span>}
+                </div>
+              ))}
+            </div>
+            <div className="card" data-od-id="alumni-events">
+              <div className="row-between mb-1">
+                <h2 className="fw-600" style={{ fontSize: '1.05rem' }}>Your events</h2>
+                <button className="btn btn-ghost btn-sm" onClick={() => navigate('/events')}>Manage</button>
+              </div>
+              {EVENTS.slice(0, 3).map(e => (
+                <div key={e.id} className="mb-1">
+                  <div className="fw-600 text-sm">{e.title}</div>
+                  <div className="text-xs muted">{e.registered}/{e.seats} registered · {e.date}</div>
+                </div>
+              ))}
+            </div>
+            <div className="card" data-od-id="student-messages">
+              <div className="row-between mb-1">
+                <h2 className="fw-600" style={{ fontSize: '1.05rem' }}>Student messages</h2>
+                <button className="btn btn-ghost btn-sm" onClick={() => navigate('/chat')}>Open chat</button>
+              </div>
+              {CHATS.map(c => (
+                <div key={c.id} className="person-row mb-1">
+                  <div className="avatar sm">{c.name.split(' ').map(w=>w[0]).join('')}</div>
+                  <div className="person-meta">
+                    <div className="name">{c.name}</div>
+                    <div className="sub">{c.last}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="card">
+              <h2 className="fw-600 mb-1" style={{ fontSize: '1.05rem' }}>Engagement · demo</h2>
+              <MiniChart data={[{l:'Jan',v:12},{l:'Feb',v:18},{l:'Mar',v:15},{l:'Apr',v:22},{l:'May',v:28},{l:'Jun',v:24}]} />
+            </div>
+          </div>
+        </AppLayout>
+      );
+    }
+
+    function PostJobPage() {
+      const { toast, navigate } = useApp();
+      const [form, setForm] = useState({ title: '', company: '', location: '', type: 'Full-time', salary: '', desc: '' });
+      const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+      return (
+        <AppLayout>
+          <Breadcrumbs items={[{ label: 'Alumni', href: '/alumni' }, { label: 'Post job' }]} />
+          <h1 className="page-title mb-2" data-od-id="post-job-title">Post a job</h1>
+          <div className="card" style={{ maxWidth: 560 }}>
+            <form onSubmit={e => { e.preventDefault(); toast('Job posted (demo — wire to POST /api/jobs)', 'success'); navigate('/jobs'); }}>
+              <div className="field"><label>Job title</label><input required value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. Graduate Software Engineer" /></div>
+              <div className="field"><label>Company</label><input required value={form.company} onChange={e => set('company', e.target.value)} /></div>
+              <div className="grid grid-2">
+                <div className="field"><label>Location</label><input required value={form.location} onChange={e => set('location', e.target.value)} /></div>
+                <div className="field"><label>Type</label>
+                  <select value={form.type} onChange={e => set('type', e.target.value)}>
+                    <option>Full-time</option><option>Contract</option><option>Part-time</option>
+                  </select>
+                </div>
+              </div>
+              <div className="field"><label>Salary range</label><input value={form.salary} onChange={e => set('salary', e.target.value)} placeholder="e.g. ₹10–16 LPA" /></div>
+              <div className="field"><label>Description</label><textarea value={form.desc} onChange={e => set('desc', e.target.value)} placeholder="Role overview, requirements…" /></div>
+              <button className="btn btn-primary" type="submit">Publish job</button>
+            </form>
+          </div>
+        </AppLayout>
+      );
+    }
+
+    function PostInternshipPage() {
+      const { toast, navigate } = useApp();
+      return (
+        <AppLayout>
+          <Breadcrumbs items={[{ label: 'Alumni', href: '/alumni' }, { label: 'Post internship' }]} />
+          <h1 className="page-title mb-2">Post an internship</h1>
+          <div className="card" style={{ maxWidth: 560 }}>
+            <form onSubmit={e => { e.preventDefault(); toast('Internship posted (demo — wire to POST /api/internships)', 'success'); navigate('/internships'); }}>
+              <div className="field"><label>Title</label><input required placeholder="e.g. Software Engineering Intern" /></div>
+              <div className="field"><label>Company</label><input required /></div>
+              <div className="grid grid-2">
+                <div className="field"><label>Duration</label><input placeholder="10–12 weeks" /></div>
+                <div className="field"><label>Stipend</label><input placeholder="₹40k/mo" /></div>
+              </div>
+              <div className="field"><label>Mode</label>
+                <select defaultValue="Hybrid"><option>On-site</option><option>Hybrid</option><option>Remote</option></select>
+              </div>
+              <div className="field"><label>Description</label><textarea /></div>
+              <button className="btn btn-primary" type="submit">Publish internship</button>
+            </form>
+          </div>
+        </AppLayout>
+      );
+    }
+
+    function MentorRequestsPage() {
+      const { toast } = useApp();
+      return (
+        <AppLayout>
+          <Breadcrumbs items={[{ label: 'Alumni', href: '/alumni' }, { label: 'Mentor requests' }]} />
+          <h1 className="page-title mb-2">Mentor requests</h1>
+          <div className="card">
+            {MENTOR_REQS.map(m => (
+              <div key={m.id} className="row-between" style={{ padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
+                <div>
+                  <div className="fw-600">{m.student}</div>
+                  <div className="text-sm muted">{m.topic}</div>
+                </div>
+                {m.status === 'Pending' ? (
+                  <div className="row gap-1">
+                    <button className="btn btn-success btn-sm" onClick={() => toast('Accepted (demo)', 'success')}>Accept</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => toast('Declined (demo)')}>Decline</button>
+                  </div>
+                ) : <span className="badge badge-success">{m.status}</span>}
+              </div>
+            ))}
+          </div>
+        </AppLayout>
+      );
+    }
+
+    function AdminDashboard() {
+      const { navigate, toast } = useApp();
+      const chart = [{l:'Jan',v:40},{l:'Feb',v:55},{l:'Mar',v:48},{l:'Apr',v:70},{l:'May',v:82},{l:'Jun',v:76}];
+      return (
+        <AppLayout>
+          <Breadcrumbs items={[{ label: 'Admin' }]} />
+          <h1 className="page-title mb-1" data-od-id="admin-title">Admin dashboard</h1>
+          <p className="page-sub mb-2">Verification, user management, and portal analytics — UI only, no mock admin backend logic.</p>
+          <div className="grid grid-4 mb-2">
+            <StatCard label="Pending verify" value={String(PENDING_ALUMNI.length)} delta="Alumni awaiting review" />
+            <StatCard label="Students" value={String(STUDENTS.length)} delta="In demo dataset" />
+            <StatCard label="Alumni" value={String(ALUMNI.length)} delta="In demo dataset" />
+            <StatCard label="Open jobs" value={String(JOBS.length)} delta="Listings" />
+          </div>
+          <div className="grid grid-2">
+            <div className="card" data-od-id="verify-alumni">
+              <div className="row-between mb-1">
+                <h2 className="fw-600" style={{ fontSize: '1.05rem' }}>Verify alumni</h2>
+                <button className="btn btn-ghost btn-sm" onClick={() => navigate('/admin/verify')}>Open queue</button>
+              </div>
+              {PENDING_ALUMNI.map(p => (
+                <div key={p.id} className="row-between mb-1">
+                  <div>
+                    <div className="fw-600 text-sm">{p.name}</div>
+                    <div className="text-xs muted">{p.company} · Batch {p.batch}</div>
+                  </div>
+                  <div className="row gap-1">
+                    <button className="btn btn-success btn-sm" onClick={() => toast(`${p.name} verified (demo UI)`, 'success')}>Verify</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => toast('Rejected (demo UI)')}>Reject</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="card" data-od-id="admin-analytics">
+              <h2 className="fw-600 mb-1" style={{ fontSize: '1.05rem' }}>Registrations · demo</h2>
+              <MiniChart data={chart} />
+            </div>
+            <div className="card">
+              <h2 className="fw-600 mb-1" style={{ fontSize: '1.05rem' }}>Quick links</h2>
+              <div className="stack-sm">
+                <button className="btn btn-secondary btn-block" onClick={() => navigate('/admin/students')}>Manage students</button>
+                <button className="btn btn-secondary btn-block" onClick={() => navigate('/admin/alumni')}>Manage alumni</button>
+                <button className="btn btn-secondary btn-block" onClick={() => navigate('/jobs')}>Jobs</button>
+                <button className="btn btn-secondary btn-block" onClick={() => navigate('/events')}>Events</button>
+                <button className="btn btn-secondary btn-block" onClick={() => navigate('/admin/reports')}>Reports & analytics</button>
+              </div>
+            </div>
+            <div className="card">
+              <h2 className="fw-600 mb-1" style={{ fontSize: '1.05rem' }}>Recent activity · demo</h2>
+              <div className="list-stack text-sm">
+                <div>Alumni verification requested — Sneha Patel</div>
+                <div>New job listing — Microsoft SDE</div>
+                <div>Event capacity 70% — Resume Workshop</div>
+              </div>
+            </div>
+          </div>
+        </AppLayout>
+      );
+    }
+
+    function AdminVerifyPage() {
+      const { toast } = useApp();
+      return (
+        <AppLayout>
+          <Breadcrumbs items={[{ label: 'Admin', href: '/admin' }, { label: 'Verify alumni' }]} />
+          <h1 className="page-title mb-2">Verify alumni</h1>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Name</th><th>Batch</th><th>Company</th><th>Email</th><th>Actions</th></tr></thead>
+              <tbody>
+                {PENDING_ALUMNI.map(p => (
+                  <tr key={p.id}>
+                    <td className="fw-600">{p.name}</td>
+                    <td>{p.batch}</td>
+                    <td>{p.company}</td>
+                    <td className="muted text-sm">{p.email}</td>
+                    <td>
+                      <button className="btn btn-success btn-sm" onClick={() => toast('Verified (demo)', 'success')}>Verify</button>{' '}
+                      <button className="btn btn-secondary btn-sm" onClick={() => toast('Rejected (demo)')}>Reject</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </AppLayout>
+      );
+    }
+
+    function AdminStudentsPage() {
+      return (
+        <AppLayout>
+          <Breadcrumbs items={[{ label: 'Admin', href: '/admin' }, { label: 'Students' }]} />
+          <h1 className="page-title mb-2">Manage students</h1>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Name</th><th>Batch</th><th>Branch</th><th>Status</th></tr></thead>
+              <tbody>
+                {STUDENTS.map(s => (
+                  <tr key={s.id}><td className="fw-600">{s.name}</td><td>{s.batch}</td><td>{s.branch}</td><td><span className="badge badge-primary">{s.status}</span></td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </AppLayout>
+      );
+    }
+
+    function AdminAlumniPage() {
+      return (
+        <AppLayout>
+          <Breadcrumbs items={[{ label: 'Admin', href: '/admin' }, { label: 'Alumni' }]} />
+          <h1 className="page-title mb-2">Manage alumni</h1>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Name</th><th>Batch</th><th>Company</th><th>Verified</th></tr></thead>
+              <tbody>
+                {ALUMNI.map(a => (
+                  <tr key={a.id}>
+                    <td className="fw-600">{a.name}</td>
+                    <td>{a.batch}</td>
+                    <td>{a.company}</td>
+                    <td>{a.verified ? <span className="badge badge-success">Yes</span> : <span className="badge badge-warn">No</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </AppLayout>
+      );
+    }
+
+    function AdminReportsPage() {
+      return (
+        <AppLayout>
+          <Breadcrumbs items={[{ label: 'Admin', href: '/admin' }, { label: 'Reports' }]} />
+          <h1 className="page-title mb-2">Reports & analytics</h1>
+          <div className="grid grid-2">
+            <div className="card">
+              <h2 className="fw-600 mb-1" style={{ fontSize: '1.05rem' }}>Monthly signups · demo</h2>
+              <MiniChart data={[{l:'Jan',v:40},{l:'Feb',v:55},{l:'Mar',v:48},{l:'Apr',v:70},{l:'May',v:82},{l:'Jun',v:76}]} />
+            </div>
+            <div className="card">
+              <h2 className="fw-600 mb-1" style={{ fontSize: '1.05rem' }}>Job applications · demo</h2>
+              <MiniChart data={[{l:'Jan',v:20},{l:'Feb',v:32},{l:'Mar',v:28},{l:'Apr',v:45},{l:'May',v:50},{l:'Jun',v:41}]} />
+            </div>
+            <div className="card" style={{ gridColumn: '1 / -1' }}>
+              <h2 className="fw-600 mb-1" style={{ fontSize: '1.05rem' }}>Export</h2>
+              <p className="muted text-sm mb-1">Wire these buttons to GET /api/admin/reports/* for CSV/PDF exports.</p>
+              <div className="row gap-1 wrap">
+                <button className="btn btn-secondary btn-sm">Export users CSV</button>
+                <button className="btn btn-secondary btn-sm">Export jobs CSV</button>
+                <button className="btn btn-secondary btn-sm">Export events CSV</button>
+              </div>
+            </div>
+          </div>
+        </AppLayout>
+      );
+    }
+
+    function DirectoryPage() {
+      const { toast, user, navigate } = useApp();
+      const [q, setQ] = useState('');
+      const [branch, setBranch] = useState('All');
+      const [page, setPage] = useState(1);
+      const per = 4;
+      const filtered = ALUMNI.filter(a => {
+        const matchQ = !q || [a.name, a.company, a.title, a.skills.join(' ')].join(' ').toLowerCase().includes(q.toLowerCase());
+        const matchB = branch === 'All' || a.branch === branch;
+        return matchQ && matchB;
+      });
+      const total = Math.max(1, Math.ceil(filtered.length / per));
+      const slice = filtered.slice((page - 1) * per, page * per);
+      const body = (
+        <>
+          {user && <Breadcrumbs items={[{ label: 'Home', href: user.role === 'student' ? '/student' : `/${user.role}` }, { label: 'Alumni directory' }]} />}
+          <div className="row-between mb-2">
+            <div>
+              <h1 className="page-title" data-od-id="directory-title">Alumni directory</h1>
+              <p className="page-sub">Search and filter verified SOET graduates</p>
+            </div>
+          </div>
+          <div className="row gap-1 wrap mb-1">
+            <div className="search-box" style={{ maxWidth: 360 }}>
+              <I.search />
+              <input value={q} onChange={e => { setQ(e.target.value); setPage(1); }} placeholder="Name, company, skill…" aria-label="Search alumni" />
+            </div>
+          </div>
+          <div className="filters" data-od-id="directory-filters">
+            {['All', 'CSE', 'IT', 'ECE', 'ME', 'EE'].map(b => (
+              <button key={b} className={`chip ${branch === b ? 'active' : ''}`} onClick={() => { setBranch(b); setPage(1); }}>{b}</button>
+            ))}
+          </div>
+          {slice.length === 0 ? (
+            <EmptyState title="No alumni found" body="Try another branch or clear your search." action={<button className="btn btn-secondary btn-sm" onClick={() => { setQ(''); setBranch('All'); }}>Reset filters</button>} />
+          ) : (
+            <div className="grid grid-2">
+              {slice.map(a => (
+                <div key={a.id} className="card card-hover" data-od-id={`alumni-card-${a.id}`}>
+                  <div className="row-between mb-1">
+                    <div className="person-row">
+                      <div className="avatar">{a.name.split(' ').map(w=>w[0]).join('')}</div>
+                      <div className="person-meta">
+                        <div className="name">{a.name}</div>
+                        <div className="sub">{a.title} · {a.company}</div>
+                      </div>
+                    </div>
+                    {a.verified && <span className="badge badge-success">Verified</span>}
+                  </div>
+                  <div className="text-sm muted mb-1 row gap-1 wrap">
+                    <span>Batch {a.batch}</span> · <span>{a.branch}</span> · <span className="row gap-1"><I.map /> {a.location}</span>
+                  </div>
+                  <div className="row gap-1 wrap mb-1">
+                    {a.skills.map(s => <span key={s} className="badge badge-muted">{s}</span>)}
+                  </div>
+                  <div className="row gap-1">
+                    <button className="btn btn-primary btn-sm" onClick={() => {
+                      if (!user) { navigate('/login'); return; }
+                      toast(a.mentoring ? `Mentorship request sent to ${a.name} (demo)` : `${a.name} is not mentoring right now`, a.mentoring ? 'success' : '');
+                    }}>Request mentor</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => user ? navigate('/chat') : navigate('/login')}>Message</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <Pagination page={page} total={total} onChange={setPage} />
+        </>
+      );
+
+      if (user) return <AppLayout>{body}</AppLayout>;
+      return (
+        <PublicLayout>
+          <div className="section" style={{ paddingBottom: '2rem' }}>
+            <div className="section-inner">{body}</div>
+          </div>
+        </PublicLayout>
+      );
+    }
+
+    function JobsPage() {
+      const { toast, user } = useApp();
+      const [type, setType] = useState('All');
+      const list = type === 'All' ? JOBS : JOBS.filter(j => j.type === type);
+      const Wrap = user ? AppLayout : ({ children }) => <PublicLayout><div className="section"><div className="section-inner">{children}</div></div></PublicLayout>;
+      return (
+        <Wrap>
+          {user && <Breadcrumbs items={[{ label: 'Home', href: `/${user.role === 'admin' ? 'admin' : user.role}` }, { label: 'Jobs' }]} />}
+          <h1 className="page-title mb-1" data-od-id="jobs-title">Job portal</h1>
+          <p className="page-sub mb-2">Roles shared by alumni and partners · demo listings</p>
+          <div className="filters">
+            {['All', 'Full-time', 'Contract', 'Part-time'].map(t => (
+              <button key={t} className={`chip ${type === t ? 'active' : ''}`} onClick={() => setType(t)}>{t}</button>
+            ))}
+          </div>
+          <div className="grid grid-2">
+            {list.map(j => (
+              <div key={j.id} className="card card-hover" data-od-id={`job-card-${j.id}`}>
+                <div className="row-between mb-1">
+                  <h3 className="fw-600" style={{ fontSize: '1.05rem' }}>{j.title}</h3>
+                  <span className="badge badge-primary">{j.type}</span>
+                </div>
+                <div className="text-sm muted mb-1 row gap-1 wrap">
+                  <span className="row gap-1"><I.building /> {j.company}</span>
+                  <span className="row gap-1"><I.map /> {j.location}</span>
+                </div>
+                <div className="row gap-1 wrap mb-1">
+                  {j.tags.map(t => <span key={t} className="badge badge-muted">{t}</span>)}
+                </div>
+                <div className="row-between">
+                  <div>
+                    <div className="fw-600 mono text-sm">{j.salary}</div>
+                    <div className="text-xs muted">{j.posted} · {j.applicants} applicants</div>
+                  </div>
+                  <button className="btn btn-primary btn-sm" data-od-id={`apply-${j.id}`} onClick={() => toast(user ? `Application submitted for ${j.title} (demo)` : 'Sign in to apply', user ? 'success' : '')}>Apply</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Wrap>
+      );
+    }
+
+    function InternshipsPage() {
+      const { toast, user } = useApp();
+      const Wrap = user ? AppLayout : ({ children }) => <PublicLayout><div className="section"><div className="section-inner">{children}</div></div></PublicLayout>;
+      return (
+        <Wrap>
+          {user && <Breadcrumbs items={[{ label: 'Home', href: `/${user.role}` }, { label: 'Internships' }]} />}
+          <h1 className="page-title mb-2" data-od-id="internships-title">Internship portal</h1>
+          <div className="grid grid-2">
+            {INTERNSHIPS.map(i => (
+              <div key={i.id} className="card card-hover" data-od-id={`intern-card-${i.id}`}>
+                <div className="row-between mb-1">
+                  <h3 className="fw-600" style={{ fontSize: '1.05rem' }}>{i.title}</h3>
+                  <span className="badge badge-muted">{i.mode}</span>
+                </div>
+                <div className="text-sm muted mb-1">{i.company} · {i.location}</div>
+                <div className="text-sm mb-1"><span className="fw-600 mono">{i.stipend}</span> · {i.duration}</div>
+                <div className="row-between">
+                  <span className="text-xs muted">{i.posted}</span>
+                  <button className="btn btn-primary btn-sm" onClick={() => toast(user ? `Applied to ${i.title} (demo)` : 'Sign in to apply', user ? 'success' : '')}>Apply</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Wrap>
+      );
+    }
+
+    function EventsPage() {
+      const { toast, user } = useApp();
+      const [registered, setRegistered] = useState({});
+      const Wrap = user ? AppLayout : ({ children }) => <PublicLayout><div className="section"><div className="section-inner">{children}</div></div></PublicLayout>;
+      return (
+        <Wrap>
+          {user && <Breadcrumbs items={[{ label: 'Home', href: `/${user.role === 'admin' ? 'admin' : user.role}` }, { label: 'Events' }]} />}
+          <h1 className="page-title mb-2" data-od-id="events-title">Event management</h1>
+          <div className="grid grid-2">
+            {EVENTS.map(e => (
+              <div key={e.id} className="card card-hover" data-od-id={`event-card-${e.id}`}>
+                <div className="row-between mb-1">
+                  <span className="badge badge-primary">{e.type}</span>
+                  <span className="text-xs muted mono">{e.registered}/{e.seats} seats</span>
+                </div>
+                <h3 className="fw-600 mb-1" style={{ fontSize: '1.05rem' }}>{e.title}</h3>
+                <div className="text-sm muted mb-1">{e.date} · {e.time}</div>
+                <div className="text-sm muted mb-1 row gap-1"><I.map /> {e.location}</div>
+                <div className="mt-1" style={{ height: 6, background: 'var(--bg)', borderRadius: 99, overflow: 'hidden' }}>
+                  <div style={{ width: `${(e.registered / e.seats) * 100}%`, height: '100%', background: 'var(--primary)', borderRadius: 99 }} />
+                </div>
+                <button
+                  className="btn btn-primary btn-sm mt-1"
+                  disabled={registered[e.id]}
+                  onClick={() => {
+                    if (!user) { toast('Sign in to register'); return; }
+                    setRegistered(r => ({ ...r, [e.id]: true }));
+                    toast(`Registered for ${e.title} (demo)`, 'success');
+                  }}
+                >
+                  {registered[e.id] ? 'Registered' : 'Register'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </Wrap>
+      );
+    }
+
+    function ChatPage() {
+      const { user } = useApp();
+      const [active, setActive] = useState(CHATS[0].id);
+      const [msgs, setMsgs] = useState(() => Object.fromEntries(CHATS.map(c => [c.id, c.messages])));
+      const [text, setText] = useState('');
+      const chat = CHATS.find(c => c.id === active);
+      const send = () => {
+        if (!text.trim()) return;
+        setMsgs(m => ({
+          ...m,
+          [active]: [...m[active], { id: Date.now(), from: 'me', text: text.trim(), time: 'Now' }],
+        }));
+        setText('');
+      };
+      return (
+        <AppLayout>
+          <Breadcrumbs items={[{ label: 'Home', href: `/${user.role}` }, { label: 'Chat' }]} />
+          <h1 className="page-title mb-2" data-od-id="chat-title">Messages</h1>
+          <div className="chat-layout" data-od-id="chat-ui">
+            <div className="chat-sidebar">
+              {CHATS.map(c => (
+                <button key={c.id} className={`chat-item ${active === c.id ? 'active' : ''}`} onClick={() => setActive(c.id)}>
+                  <div className="avatar sm">{c.name.split(' ').map(w=>w[0]).join('')}</div>
+                  <div className="person-meta">
+                    <div className="name">{c.name} {c.unread ? <span className="badge badge-primary">{c.unread}</span> : null}</div>
+                    <div className="sub">{c.last}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="chat-main">
+              <div className="chat-head">{chat.name} <span className="muted text-sm fw-400">· {chat.role}</span></div>
+              <div className="chat-msgs">
+                {(msgs[active] || []).map(m => (
+                  <div key={m.id} className={`bubble ${m.from === 'me' ? 'me' : 'them'}`}>{m.text}</div>
+                ))}
+              </div>
+              <div className="chat-compose">
+                <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="Write a message…" aria-label="Message" />
+                <button className="btn btn-primary btn-sm" onClick={send} aria-label="Send"><I.send /></button>
+              </div>
+            </div>
+          </div>
+        </AppLayout>
+      );
+    }
+
+    function ProfilePage() {
+      const { user, toast } = useApp();
+      const [edit, setEdit] = useState(false);
+      const [bio, setBio] = useState('Final-year CSE student at SOET focused on full-stack development and open-source. Seeking SDE roles and mentorship in system design.');
+      return (
+        <AppLayout>
+          <Breadcrumbs items={[{ label: 'Home', href: `/${user.role === 'admin' ? 'admin' : user.role}` }, { label: 'Profile' }]} />
+          <div className="card mb-2" data-od-id="profile-header">
+            <div className="row gap-1 wrap" style={{ alignItems: 'flex-start' }}>
+              <div className="avatar lg">{user.avatar}</div>
+              <div className="flex-1">
+                <h1 className="page-title">{user.name}</h1>
+                <p className="page-sub">{user.title} · {user.company}</p>
+                <div className="row gap-1 wrap mt-1">
+                  <span className="badge badge-primary">{user.role}</span>
+                  <span className="badge badge-muted">Batch {user.batch}</span>
+                  <span className="badge badge-muted">{user.branch}</span>
+                </div>
+              </div>
+              <button className="btn btn-secondary btn-sm" onClick={() => setEdit(true)}>Edit profile</button>
+            </div>
+          </div>
+          <div className="grid grid-2">
+            <div className="card">
+              <h2 className="fw-600 mb-1" style={{ fontSize: '1.05rem' }}>About</h2>
+              <p className="text-sm" style={{ lineHeight: 1.55 }}>{bio}</p>
+            </div>
+            <div className="card">
+              <h2 className="fw-600 mb-1" style={{ fontSize: '1.05rem' }}>Contact</h2>
+              <div className="stack-sm text-sm">
+                <div><span className="muted">Email</span><br />{user.email}</div>
+                <div><span className="muted">Branch</span><br />{user.branch}</div>
+                <div><span className="muted">Batch</span><br />{user.batch}</div>
+              </div>
+            </div>
+          </div>
+          <Modal open={edit} onClose={() => setEdit(false)} title="Edit profile" sub="Changes stay local in this demo.">
+            <div className="field"><label>Bio</label><textarea value={bio} onChange={e => setBio(e.target.value)} /></div>
+            <button className="btn btn-primary" onClick={() => { setEdit(false); toast('Profile updated (demo)', 'success'); }}>Save</button>
+          </Modal>
+        </AppLayout>
+      );
+    }
+
+    function NotificationsPage() {
+      const { user } = useApp();
+      const [items, setItems] = useState(NOTIFICATIONS);
+      return (
+        <AppLayout>
+          <Breadcrumbs items={[{ label: 'Home', href: `/${user.role}` }, { label: 'Notifications' }]} />
+          <div className="row-between mb-2">
+            <h1 className="page-title" data-od-id="notifications-title">Notifications</h1>
+            <button className="btn btn-secondary btn-sm" onClick={() => setItems(items.map(n => ({ ...n, read: true })))}>Mark all read</button>
+          </div>
+          <div className="card">
+            {items.map(n => (
+              <div key={n.id} className="notif-item" data-od-id={`notif-${n.id}`}>
+                <div className={`notif-dot ${n.read ? 'read' : ''}`} />
+                <div className="flex-1">
+                  <div className="fw-600 text-sm">{n.title}</div>
+                  <div className="text-sm muted">{n.body}</div>
+                  <div className="text-xs muted mt-1">{n.time}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </AppLayout>
+      );
+    }
+
+    function SettingsPage() {
+      const { user, theme, toggleTheme, toast } = useApp();
+      const Wrap = user ? AppLayout : ({ children }) => <PublicLayout><div className="section"><div className="section-inner" style={{ maxWidth: 640 }}>{children}</div></div></PublicLayout>;
+      return (
+        <Wrap>
+          {user && <Breadcrumbs items={[{ label: 'Home', href: `/${user.role === 'admin' ? 'admin' : user.role}` }, { label: 'Settings' }]} />}
+          <h1 className="page-title mb-2" data-od-id="settings-title">Settings</h1>
+          <div className="card mb-1">
+            <h2 className="fw-600 mb-1" style={{ fontSize: '1.05rem' }}>Appearance</h2>
+            <div className="row-between">
+              <div>
+                <div className="text-sm">Theme</div>
+                <div className="text-xs muted">Currently {theme}</div>
+              </div>
+              <button className="btn btn-secondary btn-sm" onClick={toggleTheme}>{theme === 'dark' ? 'Switch to light' : 'Switch to dark'}</button>
+            </div>
+          </div>
+          <div className="card mb-1">
+            <h2 className="fw-600 mb-1" style={{ fontSize: '1.05rem' }}>Notifications</h2>
+            {['Email digests', 'Mentorship alerts', 'Event reminders'].map(label => (
+              <label key={label} className="row-between" style={{ padding: '8px 0', cursor: 'pointer' }}>
+                <span className="text-sm">{label}</span>
+                <input type="checkbox" defaultChecked onChange={() => toast(`${label} preference saved (demo)`, 'success')} />
+              </label>
+            ))}
+          </div>
+          <div className="card">
+            <h2 className="fw-600 mb-1" style={{ fontSize: '1.05rem' }}>Security</h2>
+            <p className="text-sm muted mb-1">Password change and 2FA will connect to your auth API.</p>
+            <button className="btn btn-secondary btn-sm" onClick={() => toast('Password flow → POST /api/auth/change-password')}>Change password</button>
+          </div>
+        </Wrap>
+      );
+    }
+
+    function AboutPage() {
+      return (
+        <PublicLayout>
+          <div className="section" data-od-id="about-page">
+            <div className="section-inner" style={{ maxWidth: 720 }}>
+              <div className="eyebrow">About</div>
+              <h1 className="page-title mb-1">Alumni Portal for SOET</h1>
+              <p className="page-sub mb-2">A centralized web platform connecting alumni, students, and administrators for mentorship, careers, and community life at the School of Engineering & Technology.</p>
+              <div className="card mb-1">
+                <h2 className="fw-600 mb-1" style={{ fontSize: '1.05rem' }}>What you can do</h2>
+                <ul className="text-sm" style={{ paddingLeft: '1.2rem', color: 'var(--muted)', lineHeight: 1.7 }}>
+                  <li>Students: discover alumni, apply to jobs/internships, join events, chat securely</li>
+                  <li>Alumni: post roles, mentor juniors, host events, grow the network</li>
+                  <li>Admins: verify alumni, manage users, review listings and analytics</li>
+                </ul>
+              </div>
+              <div className="card">
+                <h2 className="fw-600 mb-1" style={{ fontSize: '1.05rem' }}>Project note</h2>
+                <p className="text-sm muted">This deliverable is a production-style frontend prototype for a Final Year Project. All data is demo JSON; no real authentication or backend is included.</p>
+              </div>
+            </div>
+          </div>
+        </PublicLayout>
+      );
+    }
+
+    function ContactPage() {
+      const { toast } = useApp();
+      return (
+        <PublicLayout>
+          <div className="section" data-od-id="contact-page">
+            <div className="section-inner" style={{ maxWidth: 560 }}>
+              <div className="eyebrow">Contact</div>
+              <h1 className="page-title mb-2">Get in touch</h1>
+              <div className="card">
+                <form onSubmit={e => { e.preventDefault(); toast('Message sent (demo — wire to POST /api/contact)', 'success'); e.target.reset(); }}>
+                  <div className="field"><label>Name</label><input required name="name" /></div>
+                  <div className="field"><label>Email</label><input type="email" required name="email" /></div>
+                  <div className="field"><label>Subject</label><input required name="subject" /></div>
+                  <div className="field"><label>Message</label><textarea required name="message" /></div>
+                  <button className="btn btn-primary" type="submit">Send message</button>
+                </form>
+                <div className="divider" />
+                <p className="text-sm muted">Email: alumni@soet.edu · Placement Cell, SOET Campus</p>
+              </div>
+            </div>
+          </div>
+        </PublicLayout>
+      );
+    }
+
+    /* ========== Router ========== */
+    function Router() {
+      const { route, user } = useApp();
+      const path = route.split('?')[0] || '/';
+
+      const needAuth = !['/', '/login', '/register', '/about', '/contact', '/jobs', '/internships', '/events', '/directory', '/settings'].includes(path)
+        && !path.startsWith('/jobs');
+
+      if (needAuth && !user && !['/about','/contact'].includes(path)) {
+        // handled in AppLayout / individual
+      }
+
+      switch (path) {
+        case '/': return <LandingPage />;
+        case '/login': return <LoginPage />;
+        case '/register': return <RegisterPage />;
+        case '/student': return user ? <StudentDashboard /> : <LoginPage />;
+        case '/alumni': return user ? <AlumniDashboard /> : <LoginPage />;
+        case '/alumni/post-job': return user ? <PostJobPage /> : <LoginPage />;
+        case '/alumni/post-internship': return user ? <PostInternshipPage /> : <LoginPage />;
+        case '/alumni/mentors': return user ? <MentorRequestsPage /> : <LoginPage />;
+        case '/admin': return user ? <AdminDashboard /> : <LoginPage />;
+        case '/admin/verify': return user ? <AdminVerifyPage /> : <LoginPage />;
+        case '/admin/students': return user ? <AdminStudentsPage /> : <LoginPage />;
+        case '/admin/alumni': return user ? <AdminAlumniPage /> : <LoginPage />;
+        case '/admin/reports': return user ? <AdminReportsPage /> : <LoginPage />;
+        case '/directory': return <DirectoryPage />;
+        case '/jobs': return <JobsPage />;
+        case '/internships': return <InternshipsPage />;
+        case '/events': return <EventsPage />;
+        case '/chat': return user ? <ChatPage /> : <LoginPage />;
+        case '/profile': return user ? <ProfilePage /> : <LoginPage />;
+        case '/notifications': return user ? <NotificationsPage /> : <LoginPage />;
+        case '/settings': return <SettingsPage />;
+        case '/about': return <AboutPage />;
+        case '/contact': return <ContactPage />;
+        default:
+          return (
+            <PublicLayout>
+              <div className="section"><div className="section-inner">
+                <EmptyState title="Page not found" body={`No route for ${path}`} action={<a className="btn btn-primary btn-sm" href="#/">Back home</a>} />
+              </div></div>
+            </PublicLayout>
+          );
+      }
+    }
+
+    function App() {
+      const [route, navigate] = useHashRoute();
+      const [theme, setTheme] = useState(() => localStorage.getItem('soet-theme') || 'light');
+      const [user, setUser] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('soet-user') || 'null'); } catch { return null; }
+      });
+      const [toasts, setToasts] = useState([]);
+
+      useEffect(() => {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('soet-theme', theme);
+      }, [theme]);
+
+      useEffect(() => {
+        if (user) localStorage.setItem('soet-user', JSON.stringify(user));
+        else localStorage.removeItem('soet-user');
+      }, [user]);
+
+      const toast = useCallback((message, type = '') => {
+        const id = Date.now() + Math.random();
+        setToasts(t => [...t, { id, message, type }]);
+        setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3200);
+      }, []);
+
+      const value = {
+        route, navigate,
+        theme, toggleTheme: () => setTheme(t => t === 'dark' ? 'light' : 'dark'),
+        user,
+        login: (u) => setUser(u),
+        logout: () => { setUser(null); navigate('/'); toast('Signed out'); },
+        toast,
+      };
+
+      return (
+        <AppCtx.Provider value={value}>
+          <Router />
+          <ToastHost toasts={toasts} dismiss={(id) => setToasts(t => t.filter(x => x.id !== id))} />
+        </AppCtx.Provider>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
