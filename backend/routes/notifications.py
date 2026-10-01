@@ -1,0 +1,157 @@
+from datetime import datetime, timezone
+import json
+import uuid
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException
+
+from security.dependencies import get_current_user
+
+
+router = APIRouter(
+    prefix="/notifications",
+    tags=["Notifications"]
+)
+
+
+NOTIFICATIONS_FILE = (
+    Path(__file__).resolve().parent.parent / "notifications_data.json"
+)
+
+
+# ============================================================
+# HELPERS
+# ============================================================
+
+def load_notifications() -> list[dict]:
+    try:
+        if NOTIFICATIONS_FILE.exists():
+            return json.loads(
+                NOTIFICATIONS_FILE.read_text(encoding="utf-8")
+            )
+    except Exception:
+        pass
+
+    return []
+
+
+def save_notifications(notifications: list[dict]):
+    NOTIFICATIONS_FILE.write_text(
+        json.dumps(notifications, indent=2),
+        encoding="utf-8"
+    )
+
+
+def create_notification(
+    user_id: str,
+    title: str,
+    message: str,
+) -> dict:
+    """Create and persist a notification (called by other modules).
+
+    This is a helper for server-side code, not exposed as an endpoint.
+    """
+    notification = {
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "title": title,
+        "message": message,
+        "is_read": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    notifications = load_notifications()
+    notifications.append(notification)
+    save_notifications(notifications)
+
+    return notification
+
+
+# ============================================================
+# GET /notifications  — List own notifications
+# ============================================================
+
+@router.get("")
+def get_notifications(
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user.get("user_id"))
+    notifications = load_notifications()
+
+    user_notifications = [
+        n for n in notifications
+        if str(n.get("user_id")) == user_id
+    ]
+
+    # Most recent first
+    user_notifications.sort(
+        key=lambda n: n.get("created_at", ""),
+        reverse=True
+    )
+
+    return user_notifications
+
+
+# ============================================================
+# PATCH /notifications/{notification_id}/read  — Mark one read
+# ============================================================
+
+@router.patch("/{notification_id}/read")
+def mark_notification_read(
+    notification_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user.get("user_id"))
+    notifications = load_notifications()
+
+    for n in notifications:
+        if str(n.get("id")) == str(notification_id):
+            # Ownership check — users can only touch their own
+            if str(n.get("user_id")) != user_id:
+                raise HTTPException(
+                    status_code=403,
+                    detail="You can only modify your own notifications."
+                )
+
+            n["is_read"] = True
+            n["read_at"] = datetime.now(timezone.utc).isoformat()
+
+            save_notifications(notifications)
+
+            return {
+                "message": "Notification marked as read.",
+                "notification": n,
+            }
+
+    raise HTTPException(
+        status_code=404,
+        detail="Notification not found."
+    )
+
+
+# ============================================================
+# PATCH /notifications/read-all  — Mark all own notifications read
+# ============================================================
+
+@router.patch("/read-all")
+def mark_all_notifications_read(
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user.get("user_id"))
+    notifications = load_notifications()
+
+    updated_count = 0
+    now = datetime.now(timezone.utc).isoformat()
+
+    for n in notifications:
+        if str(n.get("user_id")) == user_id and not n.get("is_read"):
+            n["is_read"] = True
+            n["read_at"] = now
+            updated_count += 1
+
+    save_notifications(notifications)
+
+    return {
+        "message": f"{updated_count} notification(s) marked as read.",
+        "updated_count": updated_count,
+    }
