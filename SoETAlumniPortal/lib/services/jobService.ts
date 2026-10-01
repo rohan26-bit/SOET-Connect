@@ -1,4 +1,4 @@
-import { createClient } from '@/utils/supabase/client';
+
 
 export interface JobItem {
   id: string;
@@ -290,88 +290,31 @@ export const jobService = {
     cover_letter?: string;
   }) {
 
-    const supabase = createClient();
+    const response = await fetch(
+      `${API_URL}/applications`,
+      {
+        method: 'POST',
+        headers: getAuthHeaders(),
 
-    // Check duplicate application
-    const { data: existing } = await supabase
-      .from('job_applications')
-      .select('id')
-      .eq('job_id', applicationData.job_id)
-      .eq(
-        'student_id',
-        applicationData.student_id
-      )
-      .maybeSingle();
+        body: JSON.stringify({
+          job_id: applicationData.job_id,
+          cover_letter:
+            applicationData.cover_letter || '',
+          resume_url: '',
+        }),
+      }
+    );
 
-    if (existing) {
+    const data = await response.json();
+
+    if (!response.ok) {
       throw new Error(
-        'You have already applied for this position.'
+        data.detail ||
+          'Application submission failed.'
       );
     }
 
-    let resumeUrl = '';
-
-    // Upload resume
-    if (applicationData.resume_file) {
-
-      const file = applicationData.resume_file;
-
-      const fileExt =
-        file.name.split('.').pop();
-
-      const filePath =
-        `${applicationData.student_id}/${Date.now()}.${fileExt}`;
-
-      const {
-        error: uploadError
-      } = await supabase.storage
-        .from('resumes')
-        .upload(filePath, file);
-
-      if (uploadError) {
-        throw new Error(
-          'Resume upload failed: ' +
-          uploadError.message
-        );
-      }
-
-      const {
-        data: { publicUrl }
-      } =
-        supabase.storage
-          .from('resumes')
-          .getPublicUrl(filePath);
-
-      resumeUrl = publicUrl;
-    }
-
-    // Insert application
-    const { error } = await supabase
-      .from('job_applications')
-      .insert({
-        job_id: applicationData.job_id,
-        student_id: applicationData.student_id,
-        resume_url:
-          resumeUrl || undefined,
-        cover_letter:
-          applicationData.cover_letter,
-        status: 'applied',
-      });
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    // Notify student
-    await supabase
-      .from('notifications')
-      .insert({
-        user_id: applicationData.student_id,
-        title: 'Application Submitted',
-        message:
-          'Your application has been received and is under review.',
-        type: 'application',
-      });
+    return data;
   },
 
 
@@ -383,29 +326,20 @@ export const jobService = {
     studentId: string
   ): Promise<JobApplicationItem[]> {
 
-    const supabase = createClient();
+    const response = await fetch(
+      `${API_URL}/applications/mine`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
 
-    const { data, error } =
-      await supabase
-        .from('job_applications')
-        .select(`
-          *,
-          jobs (
-            id,
-            title,
-            company,
-            location,
-            employment_type,
-            status
-          )
-        `)
-        .eq('student_id', studentId)
-        .order('created_at', {
-          ascending: false,
-        });
+    const data = await response.json();
 
-    if (error) {
-      throw new Error(error.message);
+    if (!response.ok) {
+      throw new Error(
+        data.detail ||
+          'Failed to load applications.'
+      );
     }
 
     return (data || []).map(
@@ -417,7 +351,7 @@ export const jobService = {
         cover_letter: app.cover_letter,
         status: app.status,
         created_at: app.created_at,
-        job: app.jobs,
+        job: app.job,
       })
     );
   },
@@ -431,28 +365,20 @@ export const jobService = {
     jobId: string
   ): Promise<JobApplicationItem[]> {
 
-    const supabase = createClient();
+    const response = await fetch(
+      `${API_URL}/applications/job/${encodeURIComponent(jobId)}`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
 
-    const { data, error } =
-      await supabase
-        .from('job_applications')
-        .select(`
-          *,
-          profiles:student_id (
-            full_name,
-            email,
-            student_profiles (
-              department
-            )
-          )
-        `)
-        .eq('job_id', jobId)
-        .order('created_at', {
-          ascending: false,
-        });
+    const data = await response.json();
 
-    if (error) {
-      throw new Error(error.message);
+    if (!response.ok) {
+      throw new Error(
+        data.detail ||
+          'Failed to load applicants.'
+      );
     }
 
     return (data || []).map(
@@ -464,15 +390,9 @@ export const jobService = {
         cover_letter: app.cover_letter,
         status: app.status,
         created_at: app.created_at,
-        student_name:
-          app.profiles?.full_name,
-        student_email:
-          app.profiles?.email,
-        department:
-          app.profiles?.student_profiles?.[0]
-            ?.department ||
-          app.profiles?.student_profiles
-            ?.department,
+        student_name: app.student_name,
+        student_email: app.student_email,
+        department: app.department,
       })
     );
   },
@@ -493,39 +413,27 @@ export const jobService = {
       | 'rejected'
   ) {
 
-    const supabase = createClient();
+    const response = await fetch(
+      `${API_URL}/applications/${encodeURIComponent(applicationId)}/status`,
+      {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
 
-    const { data: app, error } =
-      await supabase
-        .from('job_applications')
-        .update({
+        body: JSON.stringify({
           status,
-          updated_at:
-            new Date().toISOString(),
-        })
-        .eq('id', applicationId)
-        .select(
-          'student_id, jobs(title)'
-        )
-        .single();
+        }),
+      }
+    );
 
-    if (error) {
-      throw new Error(error.message);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.detail ||
+          'Failed to update application status.'
+      );
     }
 
-    if (app) {
-      await supabase
-        .from('notifications')
-        .insert({
-          user_id: app.student_id,
-          title:
-            'Job Application Status Updated',
-          message:
-            `Your application for "${(app.jobs as any)?.title || 'Job'}" status changed to: ${status
-              .replace('_', ' ')
-              .toUpperCase()}`,
-          type: 'application',
-        });
-    }
+    return data;
   },
 };
