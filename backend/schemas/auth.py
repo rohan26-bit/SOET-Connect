@@ -9,6 +9,9 @@ class RegisterRequest(BaseModel):
     password: str = Field(min_length=8, max_length=100)
     role: str
 
+    # Admin registration
+    admin_secret: Optional[str] = None
+
     # Student fields
     student_id: Optional[str] = None
     department: Optional[str] = None
