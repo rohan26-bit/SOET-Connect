@@ -1,4 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import Button from "./ui/Button";
+import Input from "./ui/Input";
+import { Info } from "lucide-react";
 
 const emptyForm = {
   title: "",
@@ -13,18 +16,15 @@ const emptyForm = {
 };
 
 function EventForm({ event, onSave, onCancel }) {
-  const [formData, setFormData] = useState(emptyForm);
+  const [formData, setFormData] = useState(event || emptyForm);
+  const [prevEvent, setPrevEvent] = useState(event);
   const [errors, setErrors] = useState({});
 
-  useEffect(() => {
-    if (event) {
-      setFormData(event);
-    } else {
-      setFormData(emptyForm);
-    }
-
+  if (event !== prevEvent) {
+    setPrevEvent(event);
+    setFormData(event || emptyForm);
     setErrors({});
-  }, [event]);
+  }
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -46,49 +46,40 @@ function EventForm({ event, onSave, onCancel }) {
     const newErrors = {};
 
     if (!formData.title.trim()) {
-      newErrors.title = "Title is required.";
+      newErrors.title = "Event title is required.";
     }
 
     if (!formData.description.trim()) {
-      newErrors.description = "Description is required.";
+      newErrors.description = "Event description is required.";
     }
 
     if (!formData.date) {
-      newErrors.date = "Date is required.";
+      newErrors.date = "Event date is required.";
     }
 
     if (!formData.time) {
-      newErrors.time = "Time is required.";
+      newErrors.time = "Event time is required.";
     }
 
     if (!formData.location.trim()) {
-      newErrors.location = "Location is required.";
+      newErrors.location = "Location or meeting link is required.";
     }
 
     if (!formData.organizer.trim()) {
-      newErrors.organizer = "Organizer is required.";
+      newErrors.organizer = "Organizer name is required.";
     }
 
     if (!formData.eventType) {
-      newErrors.eventType = "Event type is required.";
+      newErrors.eventType = "Please select an event type.";
     }
 
     if (!formData.registrationDeadline) {
-      newErrors.registrationDeadline =
-        "Registration deadline is required.";
-    }
-
-    if (
-      formData.date &&
-      formData.registrationDeadline &&
-      formData.registrationDeadline > formData.date
-    ) {
-      newErrors.registrationDeadline =
-        "Registration deadline must be before the event date.";
+      newErrors.registrationDeadline = "Registration deadline is required.";
+    } else if (formData.date && formData.registrationDeadline > formData.date) {
+      newErrors.registrationDeadline = "Registration deadline must be on or before the event date.";
     }
 
     setErrors(newErrors);
-
     return Object.keys(newErrors).length === 0;
   };
 
@@ -103,106 +94,127 @@ function EventForm({ event, onSave, onCancel }) {
   };
 
   return (
-    <form className="event-form" onSubmit={handleSubmit}>
+    <form className="event-form" onSubmit={handleSubmit} noValidate>
       <div className="form-header">
         <div>
-          <h3>{event ? "Edit Event" : "Create Event"}</h3>
+          <h3>{event ? "Edit Event" : "Create New Event"}</h3>
           <p>
             {event
-              ? "Update the event information."
-              : "Add a new event to SOET Connect."}
+              ? "Update event details for the local catalog preview."
+              : "Add an event to the SOET Connect local catalog."}
           </p>
+        </div>
+
+        <div className="demo-notice-pill" role="note">
+          <Info size={14} aria-hidden="true" />
+          <span>Local Demo Mode — Not persisted to backend</span>
         </div>
       </div>
 
       <div className="form-grid">
         <div className="form-group full-width">
-          <label>Title *</label>
-          <input
+          <Input
+            id="event-title"
             name="title"
+            label="Event Title"
+            required
             value={formData.title}
             onChange={handleChange}
-            placeholder="Enter event title"
+            placeholder="e.g. Annual Alumni Career Summit"
+            error={errors.title}
           />
-          {errors.title && (
-            <span className="form-error">{errors.title}</span>
-          )}
         </div>
 
         <div className="form-group full-width">
-          <label>Description *</label>
+          <label htmlFor="event-description" className="form-label">
+            Event Description <span className="required-indicator" aria-hidden="true">*</span>
+          </label>
           <textarea
+            id="event-description"
             name="description"
+            className={`form-input form-textarea ${errors.description ? "has-error" : ""}`}
             value={formData.description}
             onChange={handleChange}
-            placeholder="Describe the event"
-            rows="4"
+            placeholder="Provide a comprehensive summary of the event schedule and topics..."
+            rows={4}
+            required
+            aria-invalid={Boolean(errors.description)}
+            aria-describedby={errors.description ? "event-desc-error" : undefined}
           />
           {errors.description && (
-            <span className="form-error">{errors.description}</span>
+            <span id="event-desc-error" className="form-error" role="alert">
+              {errors.description}
+            </span>
           )}
         </div>
 
         <div className="form-group">
-          <label>Date *</label>
-          <input
-            type="date"
+          <Input
+            id="event-date"
             name="date"
+            type="date"
+            label="Event Date"
+            required
             value={formData.date}
             onChange={handleChange}
+            error={errors.date}
           />
-          {errors.date && (
-            <span className="form-error">{errors.date}</span>
-          )}
         </div>
 
         <div className="form-group">
-          <label>Time *</label>
-          <input
-            type="time"
+          <Input
+            id="event-time"
             name="time"
+            type="time"
+            label="Event Time"
+            required
             value={formData.time}
             onChange={handleChange}
+            error={errors.time}
           />
-          {errors.time && (
-            <span className="form-error">{errors.time}</span>
-          )}
         </div>
 
         <div className="form-group">
-          <label>Location / Online *</label>
-          <input
+          <Input
+            id="event-location"
             name="location"
+            label="Location / Platform"
+            required
             value={formData.location}
             onChange={handleChange}
-            placeholder="SOET Campus / Online"
+            placeholder="e.g. Auditorium / Online (Zoom)"
+            error={errors.location}
           />
-          {errors.location && (
-            <span className="form-error">{errors.location}</span>
-          )}
         </div>
 
         <div className="form-group">
-          <label>Organizer *</label>
-          <input
+          <Input
+            id="event-organizer"
             name="organizer"
+            label="Organizer"
+            required
             value={formData.organizer}
             onChange={handleChange}
-            placeholder="Event organizer"
+            placeholder="e.g. SOET Alumni Association"
+            error={errors.organizer}
           />
-          {errors.organizer && (
-            <span className="form-error">{errors.organizer}</span>
-          )}
         </div>
 
         <div className="form-group">
-          <label>Event Type *</label>
+          <label htmlFor="event-type" className="form-label">
+            Event Category <span className="required-indicator" aria-hidden="true">*</span>
+          </label>
           <select
+            id="event-type"
             name="eventType"
+            className={`form-input filter-select ${errors.eventType ? "has-error" : ""}`}
             value={formData.eventType}
             onChange={handleChange}
+            required
+            aria-invalid={Boolean(errors.eventType)}
+            aria-describedby={errors.eventType ? "event-type-error" : undefined}
           >
-            <option value="">Select event type</option>
+            <option value="">Select category</option>
             <option value="Networking">Networking</option>
             <option value="Workshop">Workshop</option>
             <option value="Career">Career</option>
@@ -211,54 +223,59 @@ function EventForm({ event, onSave, onCancel }) {
             <option value="Other">Other</option>
           </select>
           {errors.eventType && (
-            <span className="form-error">{errors.eventType}</span>
-          )}
-        </div>
-
-        <div className="form-group">
-          <label>Registration Deadline *</label>
-          <input
-            type="date"
-            name="registrationDeadline"
-            value={formData.registrationDeadline}
-            onChange={handleChange}
-          />
-          {errors.registrationDeadline && (
-            <span className="form-error">
-              {errors.registrationDeadline}
+            <span id="event-type-error" className="form-error" role="alert">
+              {errors.eventType}
             </span>
           )}
         </div>
 
         <div className="form-group">
-          <label>Visibility *</label>
+          <Input
+            id="event-deadline"
+            name="registrationDeadline"
+            type="date"
+            label="Registration Deadline"
+            required
+            value={formData.registrationDeadline}
+            onChange={handleChange}
+            error={errors.registrationDeadline}
+          />
+        </div>
+
+        <div className="form-group full-width">
+          <label htmlFor="event-visibility" className="form-label">
+            Audience Visibility
+          </label>
           <select
+            id="event-visibility"
             name="visibility"
+            className="form-input filter-select"
             value={formData.visibility}
             onChange={handleChange}
           >
-            <option value="Everyone">Everyone</option>
-            <option value="Students">Students</option>
-            <option value="Alumni">Alumni</option>
-            <option value="Students + Alumni">
-              Students + Alumni
-            </option>
+            <option value="Everyone">Everyone (Public)</option>
+            <option value="Students">Students Only</option>
+            <option value="Alumni">Alumni Only</option>
+            <option value="Students + Alumni">Students + Alumni</option>
           </select>
         </div>
       </div>
 
       <div className="form-actions">
-        <button
+        <Button
           type="button"
-          className="button secondary"
+          variant="secondary"
           onClick={onCancel}
         >
           Cancel
-        </button>
+        </Button>
 
-        <button type="submit" className="button primary">
+        <Button
+          type="submit"
+          variant="primary"
+        >
           {event ? "Save Changes" : "Create Event"}
-        </button>
+        </Button>
       </div>
     </form>
   );

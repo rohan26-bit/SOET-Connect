@@ -1,72 +1,100 @@
+import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
   CalendarDays,
   Users,
   UserCheck,
   Briefcase,
+  User,
+  Megaphone,
+  Bell,
+  Settings,
 } from "lucide-react";
 
-function Sidebar({ activePage, setActivePage }) {
+function Sidebar() {
   const menuItems = [
     {
       name: "Dashboard",
       icon: LayoutDashboard,
-      page: "dashboard",
+      path: "/dashboard",
     },
     {
       name: "Events",
       icon: CalendarDays,
-      page: "events",
+      path: "/events",
     },
     {
       name: "Users",
       icon: Users,
-      page: "users",
+      path: "/users",
     },
     {
       name: "Verification",
       icon: UserCheck,
-      page: "verification",
+      path: "/verification",
     },
     {
       name: "Opportunities",
       icon: Briefcase,
-      page: "opportunities",
+      path: "/opportunities",
+    },
+    {
+      name: "Announcements",
+      icon: Megaphone,
+      path: "/announcements",
+    },
+    {
+      name: "Notifications",
+      icon: Bell,
+      path: "/notifications",
+    },
+    {
+      name: "Profile",
+      icon: User,
+      path: "/profile",
+    },
+    {
+      name: "Settings",
+      icon: Settings,
+      path: "/settings",
     },
   ];
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" aria-label="Sidebar Navigation">
       <div className="sidebar-logo">
-        <div className="logo-mark">S</div>
+        <div className="logo-mark" aria-hidden="true">
+          S
+        </div>
         <div>
           <h2>SOET Connect</h2>
-          <span>Admin Panel</span>
+          <span>Student &amp; Alumni Portal</span>
         </div>
       </div>
 
-      <nav className="sidebar-nav">
+      <nav className="sidebar-nav" aria-label="Main Navigation">
         {menuItems.map((item) => {
           const Icon = item.icon;
 
           return (
-            <button
-              key={item.page}
-              className={`nav-item ${
-                activePage === item.page ? "active" : ""
-              }`}
-              onClick={() => setActivePage(item.page)}
+            <NavLink
+              key={item.path}
+              to={item.path}
+              className={({ isActive }) =>
+                `nav-item ${isActive ? "active" : ""}`
+              }
+              title={item.name}
             >
-              <Icon size={19} />
+              <Icon size={19} aria-hidden="true" />
               <span>{item.name}</span>
-            </button>
+            </NavLink>
           );
         })}
       </nav>
 
       <div className="sidebar-footer">
         <span>SOET Connect</span>
-        <small>Admin Portal</small>
+        <small>Campus Network</small>
       </div>
     </aside>
   );
