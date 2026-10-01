@@ -8,6 +8,7 @@ from routes.alumni import router as alumni_router
 from routes.jobs import router as jobs_router
 from routes.admin import router as admin_router
 from routes.applications import router as applications_router
+from routes.events import router as events_router
 
 
 app = FastAPI(
@@ -35,6 +36,7 @@ app.include_router(alumni_router)
 app.include_router(jobs_router)
 app.include_router(admin_router)
 app.include_router(applications_router)
+app.include_router(events_router)
 
 @app.get("/")
 def root():

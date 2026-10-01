@@ -121,38 +121,27 @@ export default function AdminEventsPage() {
     try {
       if (editingEvent) {
         // Update existing event
-        const supabase = (await import('@/utils/supabase/client')).createClient();
-        const { error } = await supabase
-          .from('events')
-          .update({
-            title: formData.title,
-            description: formData.description,
-            event_date: formData.event_date,
-            start_time: formData.start_time || null,
-            location: formData.location,
-            registration_deadline: formData.registration_deadline || null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', editingEvent.id);
-
-        if (error) throw new Error(error.message);
+        await eventService.updateEvent(editingEvent.id, {
+          title: formData.title,
+          description: formData.description,
+          event_date: formData.event_date,
+          start_time: formData.start_time || undefined,
+          location: formData.location,
+          event_type: formData.event_type || undefined,
+          registration_deadline: formData.registration_deadline || undefined,
+        });
       } else {
-        // Create new event (auto-approved since admin creates it)
-        const supabase = (await import('@/utils/supabase/client')).createClient();
-        const { error } = await supabase
-          .from('events')
-          .insert({
-            created_by: user?.id,
-            title: formData.title,
-            description: formData.description,
-            event_date: formData.event_date,
-            start_time: formData.start_time || null,
-            location: formData.location,
-            registration_deadline: formData.registration_deadline || null,
-            status: 'approved', // Admin-created events are auto-approved
-          });
-
-        if (error) throw new Error(error.message);
+        // Create new event
+        await eventService.createEvent({
+          created_by: user?.id,
+          title: formData.title,
+          description: formData.description,
+          event_date: formData.event_date,
+          start_time: formData.start_time || undefined,
+          location: formData.location,
+          event_type: formData.event_type || undefined,
+          registration_deadline: formData.registration_deadline || undefined,
+        });
       }
 
       setShowModal(false);
