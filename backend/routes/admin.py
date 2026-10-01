@@ -50,19 +50,14 @@ def _count_by(items: list[dict], field: str) -> dict[str, int]:
 
 
 # ============================================================
-# GET /admin/stats  — Dashboard statistics (admin only)
+# SHARED DATA GATHERING
 # ============================================================
 
-@router.get("/stats")
-def get_admin_stats(
-    current_user: dict = Depends(get_current_user),
-):
-    if current_user.get("role") != "admin":
-        raise HTTPException(
-            status_code=403,
-            detail="Admin access required."
-        )
+def _gather_stats() -> dict:
+    """Gather all dashboard statistics from MongoDB and JSON files.
 
+    Returns a dict of intermediate values reused by multiple endpoints.
+    """
     # ---- Users (from MongoDB) ----
     all_users = list(users_collection.find({}, {"role": 1, "is_verified": 1}))
 
@@ -98,34 +93,98 @@ def get_admin_stats(
     notifications = _load_json(NOTIFICATIONS_FILE)
 
     return {
+        "all_users": all_users,
+        "users_by_role": users_by_role,
+        "alumni_users": alumni_users,
+        "alumni_verified": alumni_verified,
+        "alumni_pending": alumni_pending,
+        "jobs": jobs,
+        "jobs_by_status": jobs_by_status,
+        "applications": applications,
+        "applications_by_status": applications_by_status,
+        "events": events,
+        "events_by_status": events_by_status,
+        "event_registrations": event_registrations,
+        "announcements": announcements,
+        "notifications": notifications,
+    }
+
+
+# ============================================================
+# GET /admin/stats  — Dashboard statistics (admin only)
+# ============================================================
+
+@router.get("/stats")
+def get_admin_stats(
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user.get("role") != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Admin access required."
+        )
+
+    s = _gather_stats()
+
+    return {
         "users": {
-            "total": len(all_users),
-            "by_role": users_by_role,
+            "total": len(s["all_users"]),
+            "by_role": s["users_by_role"],
         },
         "alumni": {
-            "total": len(alumni_users),
-            "verified": alumni_verified,
-            "pending": alumni_pending,
+            "total": len(s["alumni_users"]),
+            "verified": s["alumni_verified"],
+            "pending": s["alumni_pending"],
         },
         "jobs": {
-            "total": len(jobs),
-            "by_status": jobs_by_status,
+            "total": len(s["jobs"]),
+            "by_status": s["jobs_by_status"],
         },
         "applications": {
-            "total": len(applications),
-            "by_status": applications_by_status,
+            "total": len(s["applications"]),
+            "by_status": s["applications_by_status"],
         },
         "events": {
-            "total": len(events),
-            "by_status": events_by_status,
+            "total": len(s["events"]),
+            "by_status": s["events_by_status"],
         },
         "event_registrations": {
-            "total": len(event_registrations),
+            "total": len(s["event_registrations"]),
         },
         "announcements": {
-            "total": len(announcements),
+            "total": len(s["announcements"]),
         },
         "notifications": {
-            "total": len(notifications),
+            "total": len(s["notifications"]),
         },
+    }
+
+
+# ============================================================
+# GET /admin/metrics  — Flat metrics for the Next.js frontend
+# ============================================================
+
+@router.get("/metrics")
+def get_admin_metrics(
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user.get("role") != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Admin access required."
+        )
+
+    s = _gather_stats()
+
+    return {
+        "totalStudents": s["users_by_role"].get("student", 0),
+        "totalAlumni": len(s["alumni_users"]),
+        "verifiedAlumni": s["alumni_verified"],
+        "pendingAlumni": s["alumni_pending"],
+        "totalJobs": len(s["jobs"]),
+        "pendingJobs": s["jobs_by_status"].get("pending", 0),
+        "totalEvents": len(s["events"]),
+        "pendingEvents": s["events_by_status"].get("pending", 0),
+        "totalApplications": len(s["applications"]),
+        "totalRegistrations": len(s["event_registrations"]),
     }
