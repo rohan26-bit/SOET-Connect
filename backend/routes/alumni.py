@@ -96,7 +96,16 @@ def get_pending_alumni(
 
     for alumni in alumni_users:
 
-        if alumni.get("is_verified", False):
+        # Only genuinely pending alumni should appear here.
+        #
+        # Approved   -> verification_status = "approved"
+        # Rejected   -> verification_status = "rejected"
+        # Suspended  -> verification_status = "suspended"
+        # Pending    -> verification_status = "pending"
+        #
+        # The default keeps older records without a status
+        # compatible with the existing registration flow.
+        if alumni.get("verification_status", "pending") != "pending":
             continue
 
         profile = alumni.get("alumni_profile", {})
@@ -118,6 +127,10 @@ def get_pending_alumni(
             "website": profile.get("website"),
             "bio": profile.get("bio"),
             "is_verified": alumni.get("is_verified", False),
+            "verification_status": alumni.get(
+                "verification_status",
+                "pending"
+            ),
             "created_at": alumni.get("created_at")
         })
 

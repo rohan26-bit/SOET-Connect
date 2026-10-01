@@ -1,4 +1,4 @@
-import { createClient } from '@/utils/supabase/client';
+const API_URL = 'http://127.0.0.1:8000';
 
 export interface AdminMetrics {
   totalStudents: number;
@@ -13,136 +13,127 @@ export interface AdminMetrics {
   totalRegistrations: number;
 }
 
-export interface UserManagementItem {
+export interface PendingAlumni {
   id: string;
-  email: string;
   full_name: string;
-  role: 'student' | 'alumni' | 'admin';
+  email: string;
   avatar_url?: string;
-  is_active: boolean;
-  created_at: string;
   department?: string;
-  course_or_company?: string;
+  degree?: string;
   graduation_year?: string;
-  verification_status?: string;
+  company?: string;
+  designation?: string;
+  industry?: string;
+  location?: string;
+  skills?: string[];
+  linkedin?: string;
+  github?: string;
+  website?: string;
+  bio?: string;
+  is_verified: boolean;
+  created_at?: string;
+}
+
+function getToken(): string {
+  const token = localStorage.getItem('soet_access_token');
+
+  if (!token) {
+    throw new Error('Your session has expired. Please log in again.');
+  }
+
+  return token;
+}
+
+async function parseResponse(response: Response) {
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const detail =
+      typeof data.detail === 'string'
+        ? data.detail
+        : JSON.stringify(data.detail || 'Request failed.');
+
+    throw new Error(detail);
+  }
+
+  return data;
 }
 
 export const adminService = {
-  async getDashboardMetrics(): Promise<AdminMetrics> {
-    const supabase = createClient();
 
-    const [
-      { count: totalStudents },
-      { count: totalAlumni },
-      { count: verifiedAlumni },
-      { count: pendingAlumni },
-      { count: totalJobs },
-      { count: pendingJobs },
-      { count: totalEvents },
-      { count: pendingEvents },
-      { count: totalApplications },
-      { count: totalRegistrations }
-    ] = await Promise.all([
-      supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student'),
-      supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'alumni'),
-      supabase.from('alumni_profiles').select('*', { count: 'exact', head: true }).eq('verification_status', 'approved'),
-      supabase.from('alumni_profiles').select('*', { count: 'exact', head: true }).eq('verification_status', 'pending'),
-      supabase.from('jobs').select('*', { count: 'exact', head: true }),
-      supabase.from('jobs').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-      supabase.from('events').select('*', { count: 'exact', head: true }),
-      supabase.from('events').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-      supabase.from('job_applications').select('*', { count: 'exact', head: true }),
-      supabase.from('event_registrations').select('*', { count: 'exact', head: true }),
-    ]);
+  // ============================================================
+  // GET PENDING ALUMNI
+  // ============================================================
 
-    return {
-      totalStudents: totalStudents || 0,
-      totalAlumni: totalAlumni || 0,
-      verifiedAlumni: verifiedAlumni || 0,
-      pendingAlumni: pendingAlumni || 0,
-      totalJobs: totalJobs || 0,
-      pendingJobs: pendingJobs || 0,
-      totalEvents: totalEvents || 0,
-      pendingEvents: pendingEvents || 0,
-      totalApplications: totalApplications || 0,
-      totalRegistrations: totalRegistrations || 0,
-    };
-  },
-
-  async getAllStudents(): Promise<UserManagementItem[]> {
-    const supabase = createClient();
-
-    const { data, error } = await supabase
-      .from('profiles')
-      .select(`
-        *,
-        student_profiles (*)
-      `)
-      .eq('role', 'student')
-      .order('created_at', { ascending: false });
-
-    if (error) throw new Error(error.message);
-
-    return (data || []).map((p: any) => ({
-      id: p.id,
-      email: p.email,
-      full_name: p.full_name,
-      role: p.role,
-      avatar_url: p.avatar_url,
-      is_active: p.is_active ?? true,
-      created_at: p.created_at,
-      department: p.student_profiles?.[0]?.department || p.student_profiles?.department,
-      course_or_company: p.student_profiles?.[0]?.course || p.student_profiles?.course,
-      graduation_year: p.student_profiles?.[0]?.graduation_year || p.student_profiles?.graduation_year,
-    }));
-  },
-
-  async getAllAlumni(): Promise<UserManagementItem[]> {
-    const supabase = createClient();
-
-    const { data, error } = await supabase
-      .from('profiles')
-      .select(`
-        *,
-        alumni_profiles (*)
-      `)
-      .eq('role', 'alumni')
-      .order('created_at', { ascending: false });
-
-    if (error) throw new Error(error.message);
-
-    return (data || []).map((p: any) => ({
-      id: p.id,
-      email: p.email,
-      full_name: p.full_name,
-      role: p.role,
-      avatar_url: p.avatar_url,
-      is_active: p.is_active ?? true,
-      created_at: p.created_at,
-      department: p.alumni_profiles?.[0]?.department || p.alumni_profiles?.department,
-      course_or_company: p.alumni_profiles?.[0]?.company || p.alumni_profiles?.company,
-      graduation_year: p.alumni_profiles?.[0]?.graduation_year || p.alumni_profiles?.graduation_year,
-      verification_status: p.alumni_profiles?.[0]?.verification_status || p.alumni_profiles?.verification_status,
-    }));
-  },
-
-  async toggleUserActive(userId: string, currentActiveStatus: boolean) {
-    const supabase = createClient();
-
-    // Check if trying to suspend last admin
-    const { data: user } = await supabase.from('profiles').select('role').eq('id', userId).single();
-    if (user?.role === 'admin' && currentActiveStatus) {
-      const { count } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin').eq('is_active', true);
-      if (count && count <= 1) {
-        throw new Error('Cannot suspend the last active administrator.');
+  async getPendingAlumni(): Promise<PendingAlumni[]> {
+    const response = await fetch(
+      `${API_URL}/alumni/pending`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
       }
-    }
+    );
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({ is_active: !currentActiveStatus, updated_at: new Date().toISOString() })
-      .eq('id', userId);
+    return parseResponse(response);
+  },
 
-    if (error) throw new Error(error.message);
-  }
+  // ============================================================
+  // UPDATE ALUMNI VERIFICATION
+  // ============================================================
+
+  async updateAlumniVerification(
+    userId: string,
+    status: 'approved' | 'rejected' | 'suspended'
+  ) {
+    const response = await fetch(
+      `${API_URL}/alumni/verify/${encodeURIComponent(userId)}?status=${encodeURIComponent(status)}`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    return parseResponse(response);
+  },
+
+  // ============================================================
+  // ADMIN DASHBOARD METRICS
+  // ============================================================
+
+  async getDashboardMetrics(): Promise<AdminMetrics> {
+    throw new Error(
+      'Admin dashboard metrics are not connected to the FastAPI backend yet.'
+    );
+  },
+
+  // ============================================================
+  // PLACEHOLDERS FOR EXISTING ADMIN FEATURES
+  // ============================================================
+
+  async getAllStudents() {
+    throw new Error(
+      'Student management API is not connected to the FastAPI backend yet.'
+    );
+  },
+
+  async getAllAlumni() {
+    throw new Error(
+      'Alumni management API is not connected to the FastAPI backend yet.'
+    );
+  },
+
+  async toggleUserActive(
+    _userId: string,
+    _currentActiveStatus: boolean
+  ) {
+    throw new Error(
+      'User activation API is not connected to the FastAPI backend yet.'
+    );
+  },
 };
