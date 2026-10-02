@@ -3,6 +3,7 @@ import json
 import uuid
 from pathlib import Path
 
+from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -67,22 +68,26 @@ def get_user_from_token(current_user: dict):
     user_id = current_user.get("user_id")
     role = current_user.get("role")
 
-    user = users_collection.find_one({
-        "_id": user_id
-    })
+    try:
+        user = users_collection.find_one({"_id": ObjectId(user_id)})
+        if user:
+            return user
+    except Exception:
+        pass
+
+    user = users_collection.find_one({"_id": user_id})
+    if user:
+        return user
 
     # Compatibility with MongoDB ObjectId/string IDs
-    if not user:
-        users = users_collection.find({
-            "role": role
-        })
+    if role:
+        users = users_collection.find({"role": role})
 
         for candidate in users:
             if str(candidate.get("_id")) == str(user_id):
-                user = candidate
-                break
+                return candidate
 
-    return user
+    return None
 
 
 # ============================================================
@@ -107,6 +112,12 @@ def create_job(
         raise HTTPException(
             status_code=404,
             detail="User account not found."
+        )
+
+    if not user.get("is_active", True):
+        raise HTTPException(
+            status_code=403,
+            detail="This account has been deactivated."
         )
 
     # Alumni must be verified

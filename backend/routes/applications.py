@@ -3,6 +3,7 @@ import json
 import uuid
 from pathlib import Path
 
+from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -11,7 +12,6 @@ from security.dependencies import get_current_user
 
 
 router = APIRouter(
-    prefix="/applications",
     tags=["Applications"]
 )
 
@@ -20,6 +20,22 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 APPLICATIONS_FILE = BACKEND_DIR / "applications_data.json"
 JOBS_FILE = BACKEND_DIR / "jobs_data.json"
+
+
+# ============================================================
+# VALID STATUSES
+# ============================================================
+
+VALID_APPLICATION_STATUSES = {
+    "applied",
+    "under_review",
+    "shortlisted",
+    "interview",
+    "selected",
+    "rejected",
+}
+
+VALID_STATUSES = VALID_APPLICATION_STATUSES
 
 
 # ============================================================
@@ -32,7 +48,17 @@ class ApplicationCreateRequest(BaseModel):
     resume_url: str = ""
 
 
+class JobApplicationCreateRequest(BaseModel):
+    cover_letter: str = ""
+    resume_url: str = ""
+    skills: list[str] | None = None
+
+
 class ApplicationStatusRequest(BaseModel):
+    status: str
+
+
+class ApplicationStatusUpdateRequest(BaseModel):
     status: str
 
 
@@ -40,26 +66,26 @@ class ApplicationStatusRequest(BaseModel):
 # HELPERS
 # ============================================================
 
-def load_applications():
+def load_applications() -> list[dict]:
     try:
         if APPLICATIONS_FILE.exists():
-            data = APPLICATIONS_FILE.read_text(encoding="utf-8").strip()
-            if data:
-                return json.loads(data)
+            return json.loads(
+                APPLICATIONS_FILE.read_text(encoding="utf-8")
+            )
     except Exception:
         pass
 
     return []
 
 
-def save_applications(applications):
+def save_applications(applications: list[dict]):
     APPLICATIONS_FILE.write_text(
         json.dumps(applications, indent=2),
         encoding="utf-8"
     )
 
 
-def load_jobs():
+def load_jobs() -> list[dict]:
     try:
         if JOBS_FILE.exists():
             return json.loads(
@@ -71,20 +97,31 @@ def load_jobs():
     return []
 
 
-def get_user_from_token(current_user: dict):
+def _load_jobs() -> list[dict]:
+    return load_jobs()
+
+
+def _find_job(job_id: str) -> dict | None:
+    for job in load_jobs():
+        if str(job.get("id")) == str(job_id):
+            return job
+    return None
+
+
+def get_user_from_token(current_user: dict) -> dict | None:
     user_id = current_user.get("user_id")
     role = current_user.get("role")
 
-    user = users_collection.find_one({
-        "_id": user_id
-    })
+    try:
+        user = users_collection.find_one({"_id": ObjectId(user_id)})
+        if user:
+            return user
+    except Exception:
+        pass
 
-    # Compatibility with MongoDB ObjectId/string IDs
-    if not user:
-        users = users_collection.find({
-            "role": role
-        })
-
+    user = users_collection.find_one({"_id": user_id})
+    if not user and role:
+        users = users_collection.find({"role": role})
         for candidate in users:
             if str(candidate.get("_id")) == str(user_id):
                 user = candidate
@@ -93,37 +130,26 @@ def get_user_from_token(current_user: dict):
     return user
 
 
-VALID_APPLICATION_STATUSES = {
-    "applied",
-    "under_review",
-    "shortlisted",
-    "interview",
-    "selected",
-    "rejected",
-}
+def _resolve_user(current_user: dict) -> dict | None:
+    return get_user_from_token(current_user)
 
 
 # ============================================================
-# POST /applications — Student applies to a job
+# NEW API ENDPOINTS: /applications
 # ============================================================
 
-@router.post("")
+@router.post("/applications/apply")
 def apply_for_job(
     application: ApplicationCreateRequest,
     current_user: dict = Depends(get_current_user)
 ):
-    # Only students can apply
     if current_user.get("role") != "student":
         raise HTTPException(
             status_code=403,
-            detail="Only students can apply to jobs."
+            detail="Only students can apply for jobs."
         )
 
-    student_id = str(current_user.get("user_id"))
-
-    # Verify the job exists and is approved
     jobs = load_jobs()
-
     target_job = None
     for job in jobs:
         if str(job.get("id")) == str(application.job_id):
@@ -139,11 +165,11 @@ def apply_for_job(
     if target_job.get("status") != "approved":
         raise HTTPException(
             status_code=400,
-            detail="This job is not currently accepting applications."
+            detail="Applications can only be submitted for approved jobs."
         )
 
-    # Prevent duplicate applications
     applications = load_applications()
+    student_id = str(current_user.get("user_id"))
 
     for existing in applications:
         if (
@@ -155,11 +181,14 @@ def apply_for_job(
                 detail="You have already applied for this position."
             )
 
-    # Resolve student name
     user = get_user_from_token(current_user)
+    if user and not user.get("is_active", True):
+        raise HTTPException(
+            status_code=403,
+            detail="This account has been deactivated."
+        )
     student_name = user.get("name", "Student") if user else "Student"
 
-    # Create the application document
     app_document = {
         "id": str(uuid.uuid4()),
         "job_id": str(application.job_id),
@@ -181,12 +210,9 @@ def apply_for_job(
     }
 
 
-# ============================================================
-# GET /applications/mine — Student's own applications
-# ============================================================
-
-@router.get("/mine")
-def get_my_applications(
+@router.get("/applications/mine")
+@router.get("/applications/me")
+def get_my_applications_endpoint(
     current_user: dict = Depends(get_current_user)
 ):
     if current_user.get("role") != "student":
@@ -199,13 +225,11 @@ def get_my_applications(
     applications = load_applications()
     jobs = load_jobs()
 
-    # Build a job lookup
     job_lookup = {}
     for job in jobs:
         job_lookup[str(job.get("id"))] = job
 
     results = []
-
     for app in applications:
         if str(app.get("student_id")) == student_id:
             job = job_lookup.get(str(app.get("job_id")))
@@ -233,7 +257,6 @@ def get_my_applications(
 
             results.append(result)
 
-    # Sort by created_at descending
     results.sort(
         key=lambda x: x.get("created_at", ""),
         reverse=True
@@ -242,12 +265,7 @@ def get_my_applications(
     return results
 
 
-# ============================================================
-# GET /applications/job/{job_id} — Applicants for a job
-# Admin or authorized job poster only
-# ============================================================
-
-@router.get("/job/{job_id}")
+@router.get("/applications/job/{job_id}")
 def get_job_applicants(
     job_id: str,
     current_user: dict = Depends(get_current_user)
@@ -255,10 +273,8 @@ def get_job_applicants(
     user_id = str(current_user.get("user_id"))
     role = current_user.get("role")
 
-    # Verify the job exists
     jobs = load_jobs()
     target_job = None
-
     for job in jobs:
         if str(job.get("id")) == str(job_id):
             target_job = job
@@ -270,7 +286,6 @@ def get_job_applicants(
             detail="Job not found."
         )
 
-    # Authorization: admin or the job poster
     if role != "admin" and str(target_job.get("posted_by")) != user_id:
         raise HTTPException(
             status_code=403,
@@ -278,12 +293,10 @@ def get_job_applicants(
         )
 
     applications = load_applications()
-
     results = []
 
     for app in applications:
         if str(app.get("job_id")) == str(job_id):
-            # Resolve student info
             student_name = app.get("student_name", "")
             student_email = ""
             department = ""
@@ -293,28 +306,17 @@ def get_job_applicants(
             )
 
             if not student_user:
-                all_students = users_collection.find(
-                    {"role": "student"}
-                )
-
+                all_students = users_collection.find({"role": "student"})
                 for candidate in all_students:
-                    if str(candidate.get("_id")) == str(
-                        app.get("student_id")
-                    ):
+                    if str(candidate.get("_id")) == str(app.get("student_id")):
                         student_user = candidate
                         break
 
             if student_user:
-                student_name = student_user.get(
-                    "name", student_name
-                )
+                student_name = student_user.get("name", student_name)
                 student_email = student_user.get("email", "")
-                student_profile = student_user.get(
-                    "student_profile", {}
-                )
-                department = student_profile.get(
-                    "department", ""
-                )
+                student_profile = student_user.get("student_profile", {})
+                department = student_profile.get("department", "")
 
             results.append({
                 "id": app.get("id"),
@@ -330,7 +332,6 @@ def get_job_applicants(
                 "updated_at": app.get("updated_at"),
             })
 
-    # Sort by created_at descending
     results.sort(
         key=lambda x: x.get("created_at", ""),
         reverse=True
@@ -339,12 +340,7 @@ def get_job_applicants(
     return results
 
 
-# ============================================================
-# PATCH /applications/{application_id}/status
-# Admin or authorized job poster only
-# ============================================================
-
-@router.patch("/{application_id}/status")
+@router.patch("/applications/{application_id}/status")
 def update_application_status(
     application_id: str,
     request: ApplicationStatusRequest,
@@ -366,15 +362,10 @@ def update_application_status(
     applications = load_applications()
     jobs = load_jobs()
 
-    # Build job lookup
-    job_lookup = {}
-    for job in jobs:
-        job_lookup[str(job.get("id"))] = job
+    job_lookup = {str(job.get("id")): job for job in jobs}
 
     for app in applications:
         if str(app.get("id")) == str(application_id):
-
-            # Authorization check
             job = job_lookup.get(str(app.get("job_id")))
 
             if role != "admin":
@@ -387,24 +378,16 @@ def update_application_status(
                 if str(job.get("posted_by")) != user_id:
                     raise HTTPException(
                         status_code=403,
-                        detail=(
-                            "You do not have permission "
-                            "to update this application."
-                        )
+                        detail="You do not have permission to update this application."
                     )
 
             app["status"] = request.status
-            app["updated_at"] = datetime.now(
-                timezone.utc
-            ).isoformat()
+            app["updated_at"] = datetime.now(timezone.utc).isoformat()
 
             save_applications(applications)
 
             return {
-                "message": (
-                    "Application status updated to "
-                    f"{request.status}."
-                ),
+                "message": f"Application status updated to {request.status}.",
                 "application": app
             }
 
@@ -413,3 +396,205 @@ def update_application_status(
         detail="Application not found."
     )
 
+
+@router.delete("/applications/{application_id}")
+def withdraw_application(
+    application_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    user_id = str(current_user.get("user_id"))
+    applications = load_applications()
+
+    for index, app in enumerate(applications):
+        if str(app.get("id")) == str(application_id):
+            if str(app.get("student_id")) != user_id:
+                raise HTTPException(
+                    status_code=403,
+                    detail="You can only withdraw your own applications."
+                )
+
+            if app.get("status") != "applied":
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot withdraw application that is already being reviewed."
+                )
+
+            deleted_app = applications.pop(index)
+            save_applications(applications)
+
+            return {
+                "message": "Application withdrawn successfully.",
+                "application": deleted_app
+            }
+
+    raise HTTPException(
+        status_code=404,
+        detail="Application not found."
+    )
+
+
+# ============================================================
+# COMPATIBILITY ROUTES: /jobs/.../applications
+# ============================================================
+
+@router.post("/jobs/{job_id}/applications")
+def apply_to_job_compatibility(
+    job_id: str,
+    body: JobApplicationCreateRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user.get("role") != "student":
+        raise HTTPException(
+            status_code=403,
+            detail="Only students can apply to jobs."
+        )
+
+    job = _find_job(job_id)
+    if not job:
+        raise HTTPException(
+            status_code=404,
+            detail="Job not found."
+        )
+
+    if job.get("status") != "approved":
+        raise HTTPException(
+            status_code=400,
+            detail="Applications are only accepted for approved jobs."
+        )
+
+    student_id = str(current_user.get("user_id"))
+    applications = load_applications()
+
+    for app in applications:
+        if (
+            str(app.get("student_id")) == student_id
+            and str(app.get("job_id")) == str(job_id)
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="You have already applied to this job."
+            )
+
+    user = get_user_from_token(current_user)
+    if user and not user.get("is_active", True):
+        raise HTTPException(
+            status_code=403,
+            detail="This account has been deactivated."
+        )
+    student_name = user.get("name", "Student") if user else "Student"
+
+    application = {
+        "id": str(uuid.uuid4()),
+        "job_id": str(job_id),
+        "job_title": job.get("title", ""),
+        "company": job.get("company", ""),
+        "student_id": student_id,
+        "student_name": student_name,
+        "cover_letter": body.cover_letter or "",
+        "resume_url": body.resume_url or "",
+        "status": "applied",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    applications.append(application)
+    save_applications(applications)
+
+    return {
+        "message": "Application submitted successfully.",
+        "application": application,
+    }
+
+
+@router.get("/jobs/applications/me")
+def get_my_applications_jobs_compatibility(
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user.get("role") != "student":
+        raise HTTPException(
+            status_code=403,
+            detail="Only students can view their own applications."
+        )
+
+    student_id = str(current_user.get("user_id"))
+    applications = load_applications()
+
+    return [
+        app for app in applications
+        if str(app.get("student_id")) == student_id
+    ]
+
+
+@router.get("/jobs/{job_id}/applications")
+def get_job_applications_compatibility(
+    job_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    user_id = str(current_user.get("user_id"))
+
+    job = _find_job(job_id)
+    if not job:
+        raise HTTPException(
+            status_code=404,
+            detail="Job not found."
+        )
+
+    if role != "admin" and str(job.get("posted_by")) != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to view applications for this job."
+        )
+
+    applications = load_applications()
+
+    return [
+        app for app in applications
+        if str(app.get("job_id")) == str(job_id)
+    ]
+
+
+@router.patch("/jobs/applications/{application_id}/status")
+def update_application_status_compatibility(
+    application_id: str,
+    body: ApplicationStatusUpdateRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    user_id = str(current_user.get("user_id"))
+
+    if body.status not in VALID_APPLICATION_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid status. Must be one of: "
+                f"{', '.join(sorted(VALID_APPLICATION_STATUSES))}."
+            ),
+        )
+
+    applications = load_applications()
+
+    for app in applications:
+        if str(app.get("id")) == str(application_id):
+            if role != "admin":
+                job = _find_job(app.get("job_id"))
+                if not job or str(job.get("posted_by")) != user_id:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="You do not have permission to update this application."
+                    )
+
+            app["status"] = body.status
+            app["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+            save_applications(applications)
+
+            return {
+                "message": f"Application status updated to '{body.status}'.",
+                "application": app,
+            }
+
+    raise HTTPException(
+        status_code=404,
+        detail="Application not found."
+    )

@@ -33,7 +33,7 @@ def _get_or_create_user(uid: str, name: str, email: str, role: str, is_verified:
             "is_verified": is_verified,
             "verification_status": "approved" if is_verified else "pending",
         }
-        users_collection.users.append(user) if hasattr(users_collection, "users") else users_collection.insert_one(user)
+        users_collection.insert_one(user)
     return user
 
 

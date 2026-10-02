@@ -14,6 +14,7 @@ from main import app
 from database import users_collection
 from security.jwt import create_access_token
 import routes.admin as admin_module
+from routes.notifications import create_notification
 
 
 client = TestClient(app)
@@ -44,11 +45,7 @@ def _get_or_create_user(
             "is_verified": is_verified,
             "verification_status": verification_status,
         }
-
-        if hasattr(users_collection, "users"):
-            users_collection.users.append(user)
-        else:
-            users_collection.insert_one(user)
+        users_collection.insert_one(user)
 
     return user
 
@@ -89,11 +86,15 @@ def setup_test_users():
 @pytest.fixture(autouse=True)
 def isolate_data_files(tmp_path, monkeypatch):
     """Redirect all JSON data files to temp directory per test."""
-    for attr in ("JOBS_FILE", "EVENTS_FILE",
-                 "REGISTRATIONS_FILE", "APPLICATIONS_FILE"):
-        test_file = tmp_path / f"{attr.lower()}.json"
-        test_file.write_text("[]", encoding="utf-8")
-        monkeypatch.setattr(admin_module, attr, test_file)
+    import routes.jobs
+    import routes.events
+    import routes.applications
+    monkeypatch.setattr(admin_module, "JOBS_FILE", getattr(routes.jobs, "JOBS_FILE", tmp_path / "jobs_data.json"))
+    monkeypatch.setattr(admin_module, "EVENTS_FILE", getattr(routes.events, "EVENTS_FILE", tmp_path / "events_data.json"))
+    reg_file = getattr(routes.events, "REGISTRATIONS_FILE", tmp_path / "event_registrations_data.json")
+    monkeypatch.setattr(admin_module, "REGISTRATIONS_FILE", reg_file)
+    monkeypatch.setattr(admin_module, "EVENT_REGISTRATIONS_FILE", reg_file)
+    monkeypatch.setattr(admin_module, "APPLICATIONS_FILE", getattr(routes.applications, "APPLICATIONS_FILE", tmp_path / "applications_data.json"))
 
 
 def _write_json(filepath, data):
@@ -101,7 +102,124 @@ def _write_json(filepath, data):
 
 
 # ============================================================
-# 1. ADMIN METRICS — BASIC ACCESS
+# ADMIN STATS & VERIFICATION (feature/backend-api)
+# ============================================================
+
+def test_admin_stats_authorization(client, student_user, verified_alumni_user, admin_user):
+    """Only admin can access /admin/stats; students and alumni receive 403."""
+    res_stu = client.get("/admin/stats", headers=student_user["headers"])
+    assert res_stu.status_code == 403
+
+    res_alu = client.get("/admin/stats", headers=verified_alumni_user["headers"])
+    assert res_alu.status_code == 403
+
+    res_admin = client.get("/admin/stats", headers=admin_user["headers"])
+    assert res_admin.status_code == 200
+
+
+def test_admin_stats_aggregation_accuracy(client, admin_user, student_user, verified_alumni_user, unverified_alumni_user):
+    """Stats endpoint correctly aggregates users, alumni, jobs, applications, events, and notifications."""
+    res_job = client.post("/jobs", json={
+        "title": "Admin Job",
+        "company": "Enterprise Inc",
+        "description": "Desc",
+        "location": "Remote",
+        "employment_type": "full-time"
+    }, headers=admin_user["headers"])
+    job_id = res_job.json()["job"]["id"]
+
+    client.post(f"/jobs/{job_id}/applications", json={
+        "resume_url": "https://example.com/res.pdf"
+    }, headers=student_user["headers"])
+
+    res_ev = client.post("/events", json={
+        "title": "Summit 2026",
+        "description": "Desc",
+        "event_date": "2026-12-15",
+        "event_time": "09:00",
+        "location": "Convention Center"
+    }, headers=admin_user["headers"])
+    event_id = res_ev.json()["event"]["id"]
+
+    client.post(f"/events/{event_id}/register", headers=student_user["headers"])
+
+    client.post("/announcements", json={
+        "title": "Platform Maintenance",
+        "content": "Server updates scheduled",
+        "target_audience": "all"
+    }, headers=admin_user["headers"])
+
+    create_notification(user_id=student_user["id"], title="Alert", message="Hello")
+
+    res = client.get("/admin/stats", headers=admin_user["headers"])
+    assert res.status_code == 200
+    stats = res.json()
+
+    assert stats["users"]["total"] == 4
+    assert stats["users"]["by_role"]["student"] == 1
+    assert stats["users"]["by_role"]["alumni"] == 2
+    assert stats["users"]["by_role"]["admin"] == 1
+
+    assert stats["alumni"]["total"] == 2
+    assert stats["alumni"]["verified"] == 1
+    assert stats["alumni"]["pending"] == 1
+
+    assert stats["jobs"]["total"] == 1
+    assert stats["jobs"]["by_status"].get("approved") == 1
+
+    assert stats["applications"]["total"] == 1
+    assert stats["applications"]["by_status"].get("applied") == 1
+
+    assert stats["events"]["total"] == 1
+    assert stats["events"]["by_status"].get("approved") == 1
+    assert stats["event_registrations"]["total"] == 1
+
+    assert stats["announcements"]["total"] == 1
+    assert stats["notifications"]["total"] == 1
+
+    raw_text = res.text.lower()
+    assert "password" not in raw_text
+    assert "secret" not in raw_text
+    assert "hash" not in raw_text
+
+
+def test_alumni_pending_and_verification(client, admin_user, student_user, unverified_alumni_user):
+    """Admin can view pending alumni and approve/reject/suspend them. Non-admin gets 403."""
+    res_forbid = client.get("/alumni/pending", headers=student_user["headers"])
+    assert res_forbid.status_code == 403
+
+    res_list = client.get("/alumni/pending", headers=admin_user["headers"])
+    assert res_list.status_code == 200
+    pending_list = res_list.json()
+    assert any(a["id"] == unverified_alumni_user["id"] for a in pending_list)
+
+    res_v_forbid = client.patch(
+        f"/alumni/verify/{unverified_alumni_user['id']}?status=approved",
+        headers=student_user["headers"]
+    )
+    assert res_v_forbid.status_code == 403
+
+    res_v_bad = client.patch(
+        f"/alumni/verify/{unverified_alumni_user['id']}?status=invalid_status",
+        headers=admin_user["headers"]
+    )
+    assert res_v_bad.status_code == 400
+
+    res_approve = client.patch(
+        f"/alumni/verify/{unverified_alumni_user['id']}?status=approved",
+        headers=admin_user["headers"]
+    )
+    assert res_approve.status_code == 200
+    assert res_approve.json()["is_verified"] is True
+    assert res_approve.json()["status"] == "approved"
+
+    res_list_after = client.get("/alumni/pending", headers=admin_user["headers"])
+    assert res_list_after.status_code == 200
+    assert not any(a["id"] == unverified_alumni_user["id"] for a in res_list_after.json())
+
+
+# ============================================================
+# 1. ADMIN METRICS — BASIC ACCESS (origin/main)
 # ============================================================
 
 def test_admin_metrics_returns_200():
@@ -128,7 +246,7 @@ def test_admin_metrics_contains_all_fields():
 
 
 # ============================================================
-# 2. METRICS — REAL COUNTS
+# 2. METRICS — REAL COUNTS (origin/main)
 # ============================================================
 
 def test_metrics_user_counts():
@@ -206,7 +324,7 @@ def test_metrics_application_counts(tmp_path, monkeypatch):
 
 
 # ============================================================
-# 3-4. RBAC — METRICS
+# 3-4. RBAC — METRICS (origin/main)
 # ============================================================
 
 def test_student_cannot_access_metrics():
@@ -224,7 +342,7 @@ def test_alumni_cannot_access_metrics():
 
 
 # ============================================================
-# 5-6. ADMIN STUDENTS ENDPOINT
+# 5-6. ADMIN STUDENTS ENDPOINT (origin/main)
 # ============================================================
 
 def test_admin_can_retrieve_students():
@@ -267,7 +385,7 @@ def test_students_response_has_expected_fields():
 
 
 # ============================================================
-# 7-8. RBAC — STUDENTS
+# 7-8. RBAC — STUDENTS (origin/main)
 # ============================================================
 
 def test_student_cannot_access_students_endpoint():
@@ -285,7 +403,7 @@ def test_alumni_cannot_access_students_endpoint():
 
 
 # ============================================================
-# 9. SENSITIVE FIELDS NOT EXPOSED
+# 9. SENSITIVE FIELDS NOT EXPOSED (origin/main)
 # ============================================================
 
 def test_students_response_excludes_passwords():
@@ -307,14 +425,13 @@ def test_students_response_excludes_passwords():
 
 
 # ============================================================
-# TOGGLE USER ACTIVE
+# TOGGLE USER ACTIVE (origin/main)
 # ============================================================
 
 def test_admin_can_toggle_student_active():
     """Admin can suspend and reactivate a student."""
     headers = setup_test_users()
 
-    # First toggle: should suspend (currently active)
     resp = client.patch(
         "/admin/users/demo-student-id/active",
         headers=headers["admin"],
@@ -324,7 +441,6 @@ def test_admin_can_toggle_student_active():
     data = resp.json()
     assert data["is_active"] is False
 
-    # Second toggle: should reactivate
     resp = client.patch(
         "/admin/users/demo-student-id/active",
         headers=headers["admin"],

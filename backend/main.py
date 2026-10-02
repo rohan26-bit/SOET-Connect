@@ -6,9 +6,11 @@ from routes.auth import router as auth_router
 from routes.profile import router as profile_router
 from routes.alumni import router as alumni_router
 from routes.jobs import router as jobs_router
-from routes.admin import router as admin_router
 from routes.applications import router as applications_router
 from routes.events import router as events_router
+from routes.announcements import router as announcements_router
+from routes.notifications import router as notifications_router
+from routes.admin import router as admin_router
 
 
 app = FastAPI(
@@ -34,9 +36,11 @@ app.include_router(auth_router)
 app.include_router(profile_router)
 app.include_router(alumni_router)
 app.include_router(jobs_router)
-app.include_router(admin_router)
 app.include_router(applications_router)
 app.include_router(events_router)
+app.include_router(announcements_router)
+app.include_router(notifications_router)
+app.include_router(admin_router)
 
 @app.get("/")
 def root():
