@@ -49,10 +49,7 @@ def _get_or_create_user(
         if alumni_profile:
             user["alumni_profile"] = alumni_profile
 
-        if hasattr(users_collection, "users"):
-            users_collection.users.append(user)
-        else:
-            users_collection.insert_one(user)
+        users_collection.insert_one(user)
     else:
         if student_profile:
             user["student_profile"] = student_profile
