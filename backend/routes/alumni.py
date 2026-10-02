@@ -192,6 +192,8 @@ def get_pending_alumni(
             "id": str(alumni["_id"]),
             "full_name": alumni.get("name"),
             "email": alumni.get("email"),
+            "alumni_id": profile.get("alumni_id"),
+            "avatar_url": alumni.get("avatar_url"),
             "department": profile.get("department"),
             "degree": profile.get("degree"),
             "graduation_year": profile.get("graduation_year"),

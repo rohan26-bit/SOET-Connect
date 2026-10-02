@@ -116,3 +116,64 @@ def test_login_nonexistent_user(client):
         "password": "SomePassword123"
     })
     assert response.status_code == 401
+
+
+def test_register_password_under_8_chars_fails(client):
+    """Registering with password shorter than 8 characters returns 422."""
+    payload = {
+        "name": "Short Password User",
+        "email": "shortpw@example.com",
+        "password": "1234567",
+        "role": "student"
+    }
+    response = client.post("/auth/register", json=payload)
+    assert response.status_code == 422
+
+
+def test_register_whitespace_name_fails(client):
+    """Registering with a whitespace-only name returns 422."""
+    payload = {
+        "name": "   ",
+        "email": "whitespacename@example.com",
+        "password": "ValidPassword123!",
+        "role": "student"
+    }
+    response = client.post("/auth/register", json=payload)
+    assert response.status_code == 422
+
+
+def test_register_name_trimmed_and_preserves_special_characters(client):
+    """Registering with leading/trailing whitespace trims name, and preserves hyphens/accents."""
+    payload = {
+        "name": "  Jean-Luc O'Connor  ",
+        "email": "jeanluc@example.com",
+        "password": "ValidPassword123!",
+        "role": "student"
+    }
+    response = client.post("/auth/register", json=payload)
+    assert response.status_code == 201
+
+
+def test_login_password_oversized_fails(client):
+    """Attempting to log in with password exceeding 128 characters returns 422."""
+    response = client.post("/auth/login", json={
+        "email": "user@example.com",
+        "password": "A" * 129
+    })
+    assert response.status_code == 422
+
+
+def test_register_admin_valid_secret_constant_time(client, monkeypatch):
+    """Registering as admin with valid secret succeeds."""
+    import routes.auth
+    monkeypatch.setattr(routes.auth, "ADMIN_REGISTRATION_SECRET", "super-secret-key-12345")
+    payload = {
+        "name": "Authorized Admin",
+        "email": "authadmin@example.com",
+        "password": "AdminPassword123!",
+        "role": "admin",
+        "admin_secret": "super-secret-key-12345"
+    }
+    response = client.post("/auth/register", json=payload)
+    assert response.status_code == 201
+    assert response.json()["role"] == "admin"

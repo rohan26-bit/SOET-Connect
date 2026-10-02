@@ -2,7 +2,8 @@ from datetime import datetime, timezone
 from typing import Optional, List
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from urllib.parse import urlparse
+from pydantic import BaseModel, Field, field_validator
 
 from database import users_collection
 from schemas.profile import ProfileUpdateRequest
@@ -20,7 +21,20 @@ router = APIRouter(
 # ============================================================
 
 class AvatarUploadRequest(BaseModel):
-    avatar_url: str
+    avatar_url: str = Field(..., max_length=3_000_000)
+
+    @field_validator("avatar_url")
+    @classmethod
+    def validate_avatar_url(cls, v: str) -> str:
+        trimmed = v.strip()
+        if not trimmed:
+            raise ValueError("Avatar URL cannot be empty.")
+        if trimmed.startswith("data:image/"):
+            return trimmed
+        parsed = urlparse(trimmed)
+        if parsed.scheme.lower() in {"http", "https"} and parsed.netloc:
+            return trimmed
+        raise ValueError("Avatar URL must be a valid http/https URL or an image data URI.")
 
 
 # ============================================================
