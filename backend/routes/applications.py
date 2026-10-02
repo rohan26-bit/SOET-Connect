@@ -183,12 +183,18 @@ def apply_for_job(
             )
 
     user = get_user_from_token(current_user)
-    if user and not user.get("is_active", True):
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User account not found."
+        )
+
+    if not user.get("is_active", True):
         raise HTTPException(
             status_code=403,
             detail="This account has been deactivated."
         )
-    student_name = user.get("name", "Student") if user else "Student"
+    student_name = user.get("name", "Student")
 
     app_document = {
         "id": str(uuid.uuid4()),
@@ -509,12 +515,18 @@ def apply_to_job_compatibility(
             )
 
     user = get_user_from_token(current_user)
-    if user and not user.get("is_active", True):
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User account not found."
+        )
+
+    if not user.get("is_active", True):
         raise HTTPException(
             status_code=403,
             detail="This account has been deactivated."
         )
-    student_name = user.get("name", "Student") if user else "Student"
+    student_name = user.get("name", "Student")
 
     application = {
         "id": str(uuid.uuid4()),

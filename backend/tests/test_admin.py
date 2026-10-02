@@ -8,6 +8,7 @@ if str(backend_dir) not in sys.path:
 
 import json
 import pytest
+from bson import ObjectId
 from fastapi.testclient import TestClient
 
 from main import app
@@ -545,3 +546,110 @@ def test_verified_alumni_missing_status_not_counted_as_pending():
     assert data["totalAlumni"] == 1
     assert data["verifiedAlumni"] == 1
     assert data["pendingAlumni"] == 0
+
+
+# ============================================================
+# REGRESSION: REAL BSON OBJECTID TOGGLE ACTIVE & RBAC
+# ============================================================
+
+def test_admin_can_toggle_real_objectid_user_deactivation_and_reactivation():
+    """Admin can suspend and reactivate a real BSON ObjectId user, persisting state."""
+    headers = setup_test_users()
+
+    # 1. Create a user stored with a real BSON ObjectId
+    real_oid = ObjectId()
+    user_id_str = str(real_oid)
+    user_doc = {
+        "_id": real_oid,
+        "name": "Real Mongo Student",
+        "email": "realmongo@student.com",
+        "role": "student",
+        "is_active": True,
+        "is_verified": True,
+        "verification_status": "approved",
+    }
+    users_collection.insert_one(user_doc)
+
+    # 2. Deactivation: active -> inactive
+    resp_deactivate = client.patch(
+        f"/admin/users/{user_id_str}/active",
+        headers=headers["admin"],
+    )
+    assert resp_deactivate.status_code == 200
+    data_deact = resp_deactivate.json()
+    assert data_deact["is_active"] is False
+    assert data_deact["user_id"] == user_id_str
+    assert data_deact["message"] == "User account suspended."
+
+    # Verify persisted state in database
+    persisted_user = users_collection.find_one({"_id": real_oid})
+    assert persisted_user is not None
+    assert persisted_user["is_active"] is False
+
+    # 3. Reactivation: inactive -> active
+    resp_reactivate = client.patch(
+        f"/admin/users/{user_id_str}/active",
+        headers=headers["admin"],
+    )
+    assert resp_reactivate.status_code == 200
+    data_react = resp_reactivate.json()
+    assert data_react["is_active"] is True
+    assert data_react["user_id"] == user_id_str
+    assert data_react["message"] == "User account activated."
+
+    # Verify persisted state in database
+    persisted_user2 = users_collection.find_one({"_id": real_oid})
+    assert persisted_user2 is not None
+    assert persisted_user2["is_active"] is True
+
+
+def test_toggle_real_objectid_user_rbac_and_invalid_ids():
+    """RBAC and validation: non-admins cannot toggle real ObjectId users; malformed/nonexistent IDs return 404."""
+    headers = setup_test_users()
+
+    real_oid = ObjectId()
+    user_id_str = str(real_oid)
+    users_collection.insert_one({
+        "_id": real_oid,
+        "name": "Target Student",
+        "email": "target@student.com",
+        "role": "student",
+        "is_active": True,
+        "is_verified": True,
+        "verification_status": "approved",
+    })
+
+    # 1. Unauthenticated request rejected
+    resp_unauth = client.patch(f"/admin/users/{user_id_str}/active")
+    assert resp_unauth.status_code == 401
+
+    # 2. Student rejected (403)
+    resp_student = client.patch(
+        f"/admin/users/{user_id_str}/active",
+        headers=headers["student"],
+    )
+    assert resp_student.status_code == 403
+
+    # 3. Alumni rejected (403)
+    resp_alumni = client.patch(
+        f"/admin/users/{user_id_str}/active",
+        headers=headers["alumni"],
+    )
+    assert resp_alumni.status_code == 403
+
+    # 4. Non-existent valid ObjectId returns 404
+    non_existent_oid = str(ObjectId())
+    resp_404 = client.patch(
+        f"/admin/users/{non_existent_oid}/active",
+        headers=headers["admin"],
+    )
+    assert resp_404.status_code == 404
+    assert "not found" in resp_404.json().get("detail", "").lower()
+
+    # 5. Malformed invalid ID returns 404
+    resp_malformed = client.patch(
+        "/admin/users/not-a-valid-object-id/active",
+        headers=headers["admin"],
+    )
+    assert resp_malformed.status_code == 404
+    assert "not found" in resp_malformed.json().get("detail", "").lower()

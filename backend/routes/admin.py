@@ -2,6 +2,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
+from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 
 from database import users_collection
@@ -317,6 +318,35 @@ def get_all_students(
 # TOGGLE USER ACTIVE STATUS (origin/main)
 # ============================================================
 
+def _find_user_by_id(user_id: str) -> dict | None:
+    """Find a user by BSON ObjectId, string _id, or candidate scan."""
+    if not user_id:
+        return None
+
+    user_id_str = str(user_id).strip()
+
+    try:
+        if ObjectId.is_valid(user_id_str):
+            user = users_collection.find_one({"_id": ObjectId(user_id_str)})
+            if user:
+                return user
+    except Exception:
+        pass
+
+    try:
+        user = users_collection.find_one({"_id": user_id_str})
+        if user:
+            return user
+    except Exception:
+        pass
+
+    for candidate in users_collection.find({}):
+        if str(candidate.get("_id")) == user_id_str:
+            return candidate
+
+    return None
+
+
 @router.patch("/users/{user_id}/active")
 def toggle_user_active(
     user_id: str,
@@ -332,12 +362,19 @@ def toggle_user_active(
         )
 
     # Find the target user
-    target_user = users_collection.find_one({"_id": user_id})
+    target_user = _find_user_by_id(user_id)
 
     if not target_user:
         raise HTTPException(
             status_code=404,
             detail="User not found."
+        )
+
+    # Prevent admin from deactivating themselves if target user's _id matches admin token
+    if str(target_user.get("_id")) == str(current_user.get("user_id")):
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot change your own account status."
         )
 
     # Do not allow deactivation of admin accounts
