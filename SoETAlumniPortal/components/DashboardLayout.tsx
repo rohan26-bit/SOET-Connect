@@ -1,13 +1,14 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import { 
   Home, Users, Briefcase, Calendar, 
-  MessageSquare, Bell, User, Settings, Info, 
-  Search, Moon, LogOut, Shield, BarChart3, GraduationCap, Megaphone
+  Bell, User, Settings, Info, 
+  LogOut, Shield, BarChart3, GraduationCap, Megaphone,
+  Menu, X
 } from 'lucide-react';
 
 const mainNavItems = [
@@ -56,6 +57,23 @@ const adminMoreNavItems = [
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, logout, loading } = useAuth();
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+
+  // Close mobile navigation on route changes
+  useEffect(() => {
+    setIsMobileNavOpen(false);
+  }, [pathname]);
+
+  // Close mobile navigation on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isMobileNavOpen) {
+        setIsMobileNavOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isMobileNavOpen]);
 
   const getInitials = (name: string) => {
     if (!name) return 'U';
@@ -88,10 +106,129 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const navItems = isAdmin ? adminNavItems : isAlumni ? alumniNavItems : mainNavItems;
   const moreItems = isAdmin ? adminMoreNavItems : isAlumni ? alumniMoreNavItems : studentMoreNavItems;
 
+  const renderNavLinks = (onItemClick?: () => void) => (
+    <div className="flex-1 overflow-y-auto px-4 py-6 dark-scrollbar">
+      <p className="text-xs font-semibold text-gray-500 mb-4 px-2 tracking-wider uppercase">Main Menu</p>
+      <nav className="space-y-1">
+        {navItems.map((item) => {
+          const isActive = pathname === item.href;
+          return (
+            <Link
+              key={item.name}
+              href={item.href}
+              onClick={onItemClick}
+              className={`flex items-center px-3 py-2.5 rounded-xl transition-all duration-150 ${
+                isActive ? 'bg-blue-600 text-white font-semibold shadow-md shadow-blue-600/20' : 'hover:bg-gray-800 hover:text-white text-gray-300'
+              }`}
+            >
+              <item.icon className={`w-5 h-5 mr-3 ${isActive ? 'text-white' : 'text-gray-400'}`} />
+              {item.name}
+            </Link>
+          );
+        })}
+      </nav>
+
+      <p className="text-xs font-semibold text-gray-500 mt-8 mb-4 px-2 tracking-wider uppercase">Preferences</p>
+      <nav className="space-y-1">
+        {moreItems.map((item) => {
+          const isActive = pathname === item.href;
+          return (
+            <Link
+              key={item.name}
+              href={item.href}
+              onClick={onItemClick}
+              className={`flex items-center px-3 py-2.5 rounded-xl transition-all duration-150 ${
+                isActive ? 'bg-blue-600 text-white font-semibold shadow-md shadow-blue-600/20' : 'hover:bg-gray-800 hover:text-white text-gray-300'
+              }`}
+            >
+              <item.icon className={`w-5 h-5 mr-3 ${isActive ? 'text-white' : 'text-gray-400'}`} />
+              {item.name}
+            </Link>
+          );
+        })}
+      </nav>
+    </div>
+  );
+
+  const renderUserProfile = (onSignOutClick?: () => void) => (
+    <div className="p-4 bg-[#080F1E] border-t border-gray-800 shrink-0">
+      <div className="flex items-center mb-3">
+        {user?.avatar_url ? (
+          <img src={user.avatar_url} alt={userName} className="w-10 h-10 rounded-full object-cover mr-3 border border-gray-700" />
+        ) : (
+          <div className="w-10 h-10 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold mr-3 shadow">
+            {userInitials}
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-white leading-tight truncate">{userName}</p>
+          <p className="text-xs text-gray-400 truncate">{userEmail}</p>
+        </div>
+      </div>
+      <button
+        onClick={() => {
+          if (onSignOutClick) onSignOutClick();
+          logout();
+        }}
+        className="flex items-center justify-center text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-950/40 transition-colors w-full px-3 py-2 rounded-lg"
+      >
+        <LogOut className="w-4 h-4 mr-2" />
+        Sign Out
+      </button>
+    </div>
+  );
+
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
-      {/* Sidebar */}
-      <aside className="w-64 bg-[#0B1528] text-gray-300 flex flex-col hidden md:flex shrink-0 h-full">
+      {/* Mobile Navigation Drawer & Backdrop */}
+      {isMobileNavOpen && (
+        <div
+          className="fixed inset-0 z-50 md:hidden flex"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Mobile Navigation"
+        >
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/60 transition-opacity"
+            onClick={() => setIsMobileNavOpen(false)}
+            aria-hidden="true"
+          />
+
+          {/* Drawer */}
+          <div className="relative w-72 max-w-[85vw] bg-[#0B1528] text-gray-300 flex flex-col h-full shadow-2xl z-10">
+            {/* Header / Logo + Close Button */}
+            <div className="h-16 flex items-center justify-between px-6 border-b border-gray-800 shrink-0">
+              <div className="flex items-center">
+                <div className="w-8 h-8 bg-blue-600 rounded-md flex items-center justify-center text-white font-bold mr-3 shadow-md shadow-blue-600/30">
+                  SOET
+                </div>
+                <div>
+                  <h1 className="text-white font-bold leading-tight tracking-wide">Alumni Portal</h1>
+                  <p className="text-xs text-blue-400 font-medium uppercase tracking-wider">{user?.role || 'Student'}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMobileNavOpen(false)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                aria-label="Close navigation"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Nav items */}
+            {renderNavLinks(() => setIsMobileNavOpen(false))}
+
+            {/* User profile */}
+            {renderUserProfile(() => setIsMobileNavOpen(false))}
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Sidebar */}
+      <aside className="w-64 bg-[#0B1528] text-gray-300 flex-col hidden md:flex shrink-0 h-full">
         {/* Logo */}
         <div className="h-16 flex items-center px-6 border-b border-gray-800 shrink-0">
           <div className="w-8 h-8 bg-blue-600 rounded-md flex items-center justify-center text-white font-bold mr-3 shadow-md shadow-blue-600/30">
@@ -104,83 +241,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* Navigation */}
-        <div className="flex-1 overflow-y-auto px-4 py-6 dark-scrollbar">
-          <p className="text-xs font-semibold text-gray-500 mb-4 px-2 tracking-wider uppercase">Main Menu</p>
-          <nav className="space-y-1">
-            {navItems.map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <Link 
-                  key={item.name} 
-                  href={item.href}
-                  className={`flex items-center px-3 py-2.5 rounded-xl transition-all duration-150 ${
-                    isActive ? 'bg-blue-600 text-white font-semibold shadow-md shadow-blue-600/20' : 'hover:bg-gray-800 hover:text-white text-gray-300'
-                  }`}
-                >
-                  <item.icon className={`w-5 h-5 mr-3 ${isActive ? 'text-white' : 'text-gray-400'}`} />
-                  {item.name}
-                </Link>
-              );
-            })}
-          </nav>
-
-          <p className="text-xs font-semibold text-gray-500 mt-8 mb-4 px-2 tracking-wider uppercase">Preferences</p>
-          <nav className="space-y-1">
-            {moreItems.map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <Link 
-                  key={item.name} 
-                  href={item.href}
-                  className={`flex items-center px-3 py-2.5 rounded-xl transition-all duration-150 ${
-                    isActive ? 'bg-blue-600 text-white font-semibold shadow-md shadow-blue-600/20' : 'hover:bg-gray-800 hover:text-white text-gray-300'
-                  }`}
-                >
-                  <item.icon className={`w-5 h-5 mr-3 ${isActive ? 'text-white' : 'text-gray-400'}`} />
-                  {item.name}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
+        {renderNavLinks()}
 
         {/* User Profile Section */}
-        <div className="p-4 bg-[#080F1E] border-t border-gray-800 shrink-0">
-          <div className="flex items-center mb-3">
-            {user?.avatar_url ? (
-              <img src={user.avatar_url} alt={userName} className="w-10 h-10 rounded-full object-cover mr-3 border border-gray-700" />
-            ) : (
-              <div className="w-10 h-10 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold mr-3 shadow">
-                {userInitials}
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-white leading-tight truncate">{userName}</p>
-              <p className="text-xs text-gray-400 truncate">{userEmail}</p>
-            </div>
-          </div>
-          <button 
-            onClick={logout}
-            className="flex items-center justify-center text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-950/40 transition-colors w-full px-3 py-2 rounded-lg"
-          >
-            <LogOut className="w-4 h-4 mr-2" />
-            Sign Out
-          </button>
-        </div>
+        {renderUserProfile()}
       </aside>
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* Top Header */}
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
+        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-8 shrink-0">
           <div className="flex items-center gap-3">
-            <span className="font-semibold text-gray-800 text-sm hidden sm:inline">SOET Connect</span>
+            <button
+              type="button"
+              onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
+              className="md:hidden p-2 -ml-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              aria-label={isMobileNavOpen ? "Close navigation" : "Open navigation"}
+              aria-expanded={isMobileNavOpen}
+            >
+              {isMobileNavOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+            <span className="font-semibold text-gray-800 text-sm">SOET Connect</span>
           </div>
-          <div className="flex items-center space-x-6">
-            <Link href="/student/notifications" className="text-gray-500 hover:text-gray-700 relative p-1">
+          <div className="flex items-center space-x-4 sm:space-x-6">
+            <Link href="/student/notifications" className="text-gray-500 hover:text-gray-700 relative p-1" aria-label="Notifications">
               <Bell className="w-5 h-5" />
             </Link>
-            <div className="flex items-center space-x-2 border-l border-gray-200 pl-6">
+            <div className="flex items-center space-x-2 border-l border-gray-200 pl-4 sm:pl-6">
               {user?.avatar_url ? (
                 <img src={user.avatar_url} alt={userName} className="w-8 h-8 rounded-full object-cover border border-gray-200" />
               ) : (
@@ -194,7 +281,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-8 light-scrollbar bg-[#F8FAFC]">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-8 light-scrollbar bg-[#F8FAFC]">
           {children}
         </div>
       </main>
