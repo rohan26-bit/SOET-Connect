@@ -13,30 +13,53 @@ router = APIRouter(
 )
 
 
-JOBS_FILE = Path(__file__).resolve().parent.parent / "jobs_data.json"
+# ============================================================
+# DATA FILE PATHS
+# ============================================================
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+
+JOBS_FILE = BACKEND_DIR / "jobs_data.json"
+EVENTS_FILE = BACKEND_DIR / "events_data.json"
+REGISTRATIONS_FILE = BACKEND_DIR / "event_registrations_data.json"
+APPLICATIONS_FILE = BACKEND_DIR / "applications_data.json"
 
 
-def load_jobs():
+# ============================================================
+# HELPERS
+# ============================================================
+
+def _load_json(filepath: Path) -> list:
+    """Load a JSON array from a file, returning [] on any error."""
     try:
-        if JOBS_FILE.exists():
-            return json.loads(
-                JOBS_FILE.read_text(encoding="utf-8")
-            )
+        if filepath.exists():
+            data = filepath.read_text(encoding="utf-8").strip()
+            if data:
+                return json.loads(data)
     except Exception:
         pass
 
     return []
 
 
-@router.get("/metrics")
-def get_dashboard_metrics(
-    current_user: dict = Depends(get_current_user)
-):
+def _require_admin(current_user: dict):
+    """Raise 403 if the authenticated user is not an admin."""
     if current_user.get("role") != "admin":
         raise HTTPException(
             status_code=403,
             detail="Admin access required."
         )
+
+
+# ============================================================
+# ADMIN DASHBOARD METRICS
+# ============================================================
+
+@router.get("/metrics")
+def get_dashboard_metrics(
+    current_user: dict = Depends(get_current_user)
+):
+    _require_admin(current_user)
 
     # ------------------------------------------------------------
     # USER METRICS
@@ -70,7 +93,7 @@ def get_dashboard_metrics(
     # JOB METRICS
     # ------------------------------------------------------------
 
-    jobs = load_jobs()
+    jobs = _load_json(JOBS_FILE)
 
     total_jobs = len(jobs)
 
@@ -81,15 +104,29 @@ def get_dashboard_metrics(
     )
 
     # ------------------------------------------------------------
-    # EVENTS / APPLICATIONS
+    # EVENT METRICS
     # ------------------------------------------------------------
-    # These are not connected to the FastAPI backend yet.
-    # Keep them at zero rather than displaying fake data.
-    
-    total_events = 0
-    pending_events = 0
-    total_applications = 0
-    total_registrations = 0
+
+    events = _load_json(EVENTS_FILE)
+    registrations = _load_json(REGISTRATIONS_FILE)
+
+    total_events = len(events)
+
+    pending_events = sum(
+        1
+        for event in events
+        if event.get("status") == "pending"
+    )
+
+    total_registrations = len(registrations)
+
+    # ------------------------------------------------------------
+    # APPLICATION METRICS
+    # ------------------------------------------------------------
+
+    applications = _load_json(APPLICATIONS_FILE)
+
+    total_applications = len(applications)
 
     return {
         "totalStudents": total_students,
@@ -102,4 +139,121 @@ def get_dashboard_metrics(
         "pendingEvents": pending_events,
         "totalApplications": total_applications,
         "totalRegistrations": total_registrations,
+    }
+
+
+# ============================================================
+# ADMIN STUDENTS MANAGEMENT
+# ============================================================
+
+SENSITIVE_FIELDS = {
+    "password_hash", "password", "token", "secret",
+    "refresh_token", "access_token",
+}
+
+
+def _sanitize_user(user: dict) -> dict:
+    """Build a safe user response, stripping sensitive fields."""
+    profile = user.get("student_profile", {}) or {}
+
+    if user.get("role") == "alumni":
+        profile = user.get("alumni_profile", {}) or {}
+
+    return {
+        "id": str(user["_id"]),
+        "full_name": user.get("name", ""),
+        "email": user.get("email", ""),
+        "role": user.get("role", ""),
+        "avatar_url": user.get("avatar_url"),
+        "department": profile.get("department"),
+        "degree": profile.get("degree"),
+        "graduation_year": profile.get("graduation_year"),
+        "course_or_company": (
+            profile.get("course")
+            or profile.get("company")
+            or profile.get("department")
+        ),
+        "company": profile.get("company"),
+        "designation": profile.get("designation"),
+        "industry": profile.get("industry"),
+        "location": profile.get("location"),
+        "skills": profile.get("skills", []),
+        "linkedin": profile.get("linkedin"),
+        "github": profile.get("github"),
+        "website": profile.get("website"),
+        "bio": profile.get("bio"),
+        "is_verified": user.get("is_verified", False),
+        "verification_status": user.get(
+            "verification_status", "pending"
+        ),
+        "is_active": user.get("is_active", True),
+        "created_at": user.get("created_at"),
+    }
+
+
+@router.get("/students")
+def get_all_students(
+    current_user: dict = Depends(get_current_user)
+):
+    _require_admin(current_user)
+
+    student_users = users_collection.find({
+        "role": "student",
+    })
+
+    return [
+        _sanitize_user(student)
+        for student in student_users
+    ]
+
+
+# ============================================================
+# TOGGLE USER ACTIVE STATUS
+# ============================================================
+
+@router.patch("/users/{user_id}/active")
+def toggle_user_active(
+    user_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    _require_admin(current_user)
+
+    # Prevent admin from deactivating themselves
+    if current_user.get("user_id") == user_id:
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot change your own account status."
+        )
+
+    # Find the target user
+    target_user = users_collection.find_one({"_id": user_id})
+
+    if not target_user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found."
+        )
+
+    # Do not allow deactivation of admin accounts
+    if target_user.get("role") == "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot change activation status of admin accounts."
+        )
+
+    new_active = not target_user.get("is_active", True)
+
+    users_collection.update_one(
+        {"_id": target_user["_id"]},
+        {"$set": {"is_active": new_active}}
+    )
+
+    return {
+        "message": (
+            "User account activated."
+            if new_active
+            else "User account suspended."
+        ),
+        "user_id": user_id,
+        "is_active": new_active,
     }
