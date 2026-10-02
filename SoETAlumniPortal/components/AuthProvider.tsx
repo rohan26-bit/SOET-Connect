@@ -2,7 +2,6 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { createClient } from '@/utils/supabase/client';
 import { authService, UserProfile } from '@/lib/services/authService';
 
 interface AuthContextType {
@@ -24,7 +23,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
-  const supabase = createClient();
 
   const fetchProfile = async () => {
     try {
@@ -48,7 +46,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           router.push('/student');
         }
       }
-    } catch (e) {
+    } catch {
       setUser(null);
     } finally {
       setLoading(false);
@@ -57,19 +55,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     fetchProfile();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-        await fetchProfile();
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setLoading(false);
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, [pathname]);
 
   const logout = async () => {
