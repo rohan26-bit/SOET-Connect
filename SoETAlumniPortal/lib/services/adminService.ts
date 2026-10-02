@@ -17,6 +17,7 @@ export interface PendingAlumni {
   id: string;
   full_name: string;
   email: string;
+  alumni_id?: string;
   avatar_url?: string;
   department?: string;
   degree?: string;

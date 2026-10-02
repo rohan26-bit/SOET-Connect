@@ -28,11 +28,18 @@ export default function AdminRegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    const trimmedName = formData.fullName.trim();
+    if (trimmedName.length < 2) {
+      setError('Full name must be at least 2 characters long.');
+      return;
+    }
+
     setLoading(true);
 
     try {
       await authService.registerAdmin({
-        fullName: formData.fullName,
+        fullName: trimmedName,
         email: formData.email,
         password: formData.password,
         adminSecret: formData.adminSecret,

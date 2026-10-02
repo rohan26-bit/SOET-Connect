@@ -6,6 +6,16 @@ import { useAuth } from '@/components/AuthProvider';
 import { profileService } from '@/lib/services/profileService';
 import { User, Camera, CheckCircle2, AlertCircle, Save } from 'lucide-react';
 
+const DEPARTMENTS = [
+  'Computer Engineering',
+  'Information Technology',
+  'Artificial Intelligence & Data Science',
+  'Electronics & Telecommunication',
+  'Mechanical Engineering',
+  'Civil Engineering',
+  'Electrical Engineering'
+];
+
 export default function ProfilePage() {
   const { user, refreshProfile } = useAuth();
   const [saving, setSaving] = useState(false);
@@ -283,12 +293,19 @@ export default function ProfilePage() {
                     <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                       Department
                     </label>
-                    <input
-                      type="text"
+                    <select
                       value={department}
                       onChange={(e) => setDepartment(e.target.value)}
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
-                    />
+                    >
+                      <option value="">Select Department</option>
+                      {DEPARTMENTS.map((dept) => (
+                        <option key={dept} value={dept}>{dept}</option>
+                      ))}
+                      {department && !DEPARTMENTS.includes(department) && (
+                        <option value={department}>{department}</option>
+                      )}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
@@ -349,12 +366,19 @@ export default function ProfilePage() {
                     <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                       Department
                     </label>
-                    <input
-                      type="text"
+                    <select
                       value={department}
                       onChange={(e) => setDepartment(e.target.value)}
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
-                    />
+                    >
+                      <option value="">Select Department</option>
+                      {DEPARTMENTS.map((dept) => (
+                        <option key={dept} value={dept}>{dept}</option>
+                      ))}
+                      {department && !DEPARTMENTS.includes(department) && (
+                        <option value={department}>{department}</option>
+                      )}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">

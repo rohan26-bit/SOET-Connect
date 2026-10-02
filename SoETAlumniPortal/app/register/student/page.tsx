@@ -37,10 +37,20 @@ export default function StudentRegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    const trimmedName = formData.fullName.trim();
+    if (trimmedName.length < 2) {
+      setError('Full name must be at least 2 characters long.');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await authService.registerStudent(formData);
+      await authService.registerStudent({
+        ...formData,
+        fullName: trimmedName,
+      });
       setSuccess(true);
       setTimeout(() => {
         router.push('/login');
@@ -144,10 +154,10 @@ export default function StudentRegisterPage() {
                   <input
                     type="password"
                     required
-                    minLength={6}
+                    minLength={8}
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="Min 6 characters"
+                    placeholder="Min 8 characters"
                     className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                   />
                 </div>
