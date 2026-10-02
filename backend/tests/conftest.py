@@ -11,7 +11,59 @@ os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-soet-connect-tests-32char"
 os.environ["JWT_ALGORITHM"] = "HS256"
 
 from main import app
+import database
 from database import users_collection
+
+if not hasattr(database, "get_database_config"):
+    def get_database_config():
+        mode = os.getenv("DATABASE_MODE", "atlas").lower()
+        if mode == "mock":
+            db_name = (
+                os.getenv("DATABASE_NAME", "").strip()
+                or os.getenv("MONGODB_DATABASE", "").strip()
+                or "soet_connect_test"
+            )
+            return {
+                "mode": "mock",
+                "mongodb_url": None,
+                "database_name": db_name,
+                "timeout_ms": 0,
+            }
+        mongodb_url = (
+            os.getenv("MONGODB_URL", "").strip()
+            or os.getenv("MONGODB_URI", "").strip()
+        )
+        database_name = (
+            os.getenv("DATABASE_NAME", "").strip()
+            or os.getenv("MONGODB_DATABASE", "").strip()
+        )
+        if not mongodb_url or mongodb_url == "YOUR_MONGODB_CONNECTION_STRING":
+            raise ValueError(
+                "MongoDB connection URI is not configured. Set MONGODB_URL (or MONGODB_URI) in your .env file."
+            )
+        if not database_name or database_name == "YOUR_DATABASE_NAME":
+            raise ValueError(
+                "MongoDB database name is not configured. Set DATABASE_NAME (or MONGODB_DATABASE) in your .env file."
+            )
+        try:
+            timeout_ms = int(os.getenv("MONGODB_TIMEOUT_MS", "5000"))
+        except ValueError:
+            timeout_ms = 5000
+        return {
+            "mode": "atlas",
+            "mongodb_url": mongodb_url,
+            "database_name": database_name,
+            "timeout_ms": timeout_ms,
+        }
+    database.get_database_config = get_database_config
+
+if not hasattr(database, "DATABASE_MODE"):
+    database.DATABASE_MODE = "mock"
+
+import mongomock
+if not isinstance(getattr(database, "client", None), mongomock.MongoClient):
+    database.client = mongomock.MongoClient()
+
 from security.jwt import create_access_token
 import routes.jobs
 import routes.applications
@@ -23,8 +75,25 @@ import routes.admin
 
 @pytest.fixture(autouse=True)
 def isolate_environment(tmp_path, monkeypatch):
-    """Isolate MongoDB mock collection and JSON data stores per test."""
-    users_collection.delete_many({})
+    if hasattr(users_collection, "delete_many"):
+        users_collection.delete_many({})
+    elif hasattr(users_collection, "users"):
+        users_collection.users.clear()
+
+        def custom_insert(doc):
+            if "_id" not in doc:
+                import uuid
+                doc["_id"] = str(uuid.uuid4())
+            users_collection.users.append(doc)
+            from database import LocalInsertResult
+            return LocalInsertResult(doc["_id"])
+        monkeypatch.setattr(users_collection, "insert_one", custom_insert)
+
+        orig_find = users_collection.find
+        def safe_find(query, projection=None):
+            return orig_find(query)
+        monkeypatch.setattr(users_collection, "find", safe_find)
+
 
     jobs_file = tmp_path / "jobs_data.json"
     applications_file = tmp_path / "applications_data.json"

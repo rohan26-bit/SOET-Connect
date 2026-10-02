@@ -18,4 +18,4 @@ def get_current_user(
 
     token = credentials.credentials
 
-    return decode_access_token(token)
+    return decode_access_token(token)
