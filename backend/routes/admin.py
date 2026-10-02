@@ -75,7 +75,10 @@ def _gather_stats() -> dict:
     alumni_verified = sum(
         1 for u in alumni_users if u.get("is_verified", False)
     )
-    alumni_pending = len(alumni_users) - alumni_verified
+    alumni_pending = sum(
+        1 for u in alumni_users
+        if not u.get("is_verified", False) and u.get("verification_status", "pending") == "pending"
+    )
 
     jobs = _load_json(JOBS_FILE)
     jobs_by_status = _count_by(jobs, "status")
@@ -144,7 +147,7 @@ def get_dashboard_metrics(
             if user.get("is_verified", False):
                 verified_alumni += 1
 
-            if user.get("verification_status", "pending") == "pending":
+            if not user.get("is_verified", False) and user.get("verification_status", "pending") == "pending":
                 pending_alumni += 1
 
     # ------------------------------------------------------------

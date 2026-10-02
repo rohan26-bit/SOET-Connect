@@ -10,9 +10,8 @@ os.environ["DATABASE_NAME"] = "soet_connect_test"
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-soet-connect-tests-32char"
 os.environ["JWT_ALGORITHM"] = "HS256"
 
-from main import app
 import database
-from database import users_collection
+import mongomock
 
 if not hasattr(database, "get_database_config"):
     def get_database_config():
@@ -60,9 +59,14 @@ if not hasattr(database, "get_database_config"):
 if not hasattr(database, "DATABASE_MODE"):
     database.DATABASE_MODE = "mock"
 
-import mongomock
 if not isinstance(getattr(database, "client", None), mongomock.MongoClient):
     database.client = mongomock.MongoClient()
+
+if getattr(database, "database", None) is None:
+    database.database = database.client[os.getenv("DATABASE_NAME", "soet_connect_test")]
+
+from main import app
+from database import users_collection
 
 from security.jwt import create_access_token
 import routes.jobs
@@ -93,6 +97,14 @@ def isolate_environment(tmp_path, monkeypatch):
         def safe_find(query, projection=None):
             return orig_find(query)
         monkeypatch.setattr(users_collection, "find", safe_find)
+
+        def safe_delete_one(query):
+            for i, user in enumerate(users_collection.users):
+                if all(user.get(k) == v for k, v in query.items()):
+                    users_collection.users.pop(i)
+                    return True
+            return False
+        monkeypatch.setattr(users_collection, "delete_one", safe_delete_one, raising=False)
 
 
     jobs_file = tmp_path / "jobs_data.json"

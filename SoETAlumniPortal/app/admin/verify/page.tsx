@@ -122,9 +122,17 @@ export default function AdminVerifyPage() {
               >
                 {/* Alumni Summary */}
                 <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 bg-blue-600 text-white font-bold rounded-2xl flex items-center justify-center text-base shrink-0 shadow-md shadow-blue-600/20">
-                    {alum.full_name.substring(0, 2).toUpperCase()}
-                  </div>
+                  {alum.avatar_url ? (
+                    <img
+                      src={alum.avatar_url}
+                      alt={alum.full_name}
+                      className="w-12 h-12 rounded-2xl object-cover shrink-0 shadow-md"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 bg-blue-600 text-white font-bold rounded-2xl flex items-center justify-center text-base shrink-0 shadow-md shadow-blue-600/20">
+                      {alum.full_name.substring(0, 2).toUpperCase()}
+                    </div>
+                  )}
 
                   <div>
                     <h3 className="text-base font-bold text-slate-900 leading-tight">
@@ -243,11 +251,19 @@ export default function AdminVerifyPage() {
             <div className="p-6 overflow-y-auto max-h-[65vh]">
               {/* Profile Header */}
               <div className="flex items-center gap-4 p-5 bg-slate-50 rounded-2xl mb-6">
-                <div className="w-16 h-16 bg-blue-600 text-white font-black rounded-2xl flex items-center justify-center text-xl shadow-md shadow-blue-600/20">
-                  {selectedAlumni.full_name
-                    .substring(0, 2)
-                    .toUpperCase()}
-                </div>
+                {selectedAlumni.avatar_url ? (
+                  <img
+                    src={selectedAlumni.avatar_url}
+                    alt={selectedAlumni.full_name}
+                    className="w-16 h-16 rounded-2xl object-cover shadow-md"
+                  />
+                ) : (
+                  <div className="w-16 h-16 bg-blue-600 text-white font-black rounded-2xl flex items-center justify-center text-xl shadow-md shadow-blue-600/20">
+                    {selectedAlumni.full_name
+                      .substring(0, 2)
+                      .toUpperCase()}
+                  </div>
+                )}
 
                 <div>
                   <h3 className="text-xl font-black text-slate-900">
@@ -268,6 +284,15 @@ export default function AdminVerifyPage() {
                 </h3>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-4 rounded-2xl border border-blue-200 bg-blue-50/50">
+                    <p className="text-[11px] font-semibold text-blue-500 uppercase tracking-wide">
+                      Alumni ID / PRN
+                    </p>
+                    <p className="text-sm font-bold text-slate-800 mt-1">
+                      {selectedAlumni.alumni_id || 'Not provided'}
+                    </p>
+                  </div>
+
                   <div className="p-4 rounded-2xl border border-slate-200">
                     <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
                       Department

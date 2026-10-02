@@ -134,6 +134,14 @@ export const profileService = {
   // ============================================================
 
   async uploadAvatar(_userId: string, file: File): Promise<string> {
+    const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      throw new Error('Avatar image size must not exceed 2MB.');
+    }
+    if (!file.type || !file.type.startsWith('image/')) {
+      throw new Error('Only image files (JPEG, PNG, WebP, GIF) are allowed.');
+    }
+
     // Convert image file to base64 Data URL for persistent storage
     const base64Url = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();

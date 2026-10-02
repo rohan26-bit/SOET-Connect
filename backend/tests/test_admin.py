@@ -500,6 +500,54 @@ def test_alumni_cannot_toggle_active():
     assert resp.status_code == 403
 
 
+def test_dashboard_metrics_empty_data_state():
+    """When there are no students, alumni, jobs, events, or applications, all counters are zero."""
+    _get_or_create_user(
+        "admin-only-id", "Admin Only",
+        "admin@test.com", "admin",
+    )
+    admin_token = create_access_token("admin-only-id", "admin")
+    resp = client.get("/admin/metrics", headers={"Authorization": f"Bearer {admin_token}"})
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["totalStudents"] == 0
+    assert data["totalAlumni"] == 0
+    assert data["verifiedAlumni"] == 0
+    assert data["pendingAlumni"] == 0
+    assert data["totalJobs"] == 0
+    assert data["pendingJobs"] == 0
+    assert data["totalEvents"] == 0
+    assert data["pendingEvents"] == 0
+    assert data["totalApplications"] == 0
+    assert data["totalRegistrations"] == 0
+
+
+def test_verified_alumni_missing_status_not_counted_as_pending():
+    """Alumni with is_verified=True but no verification_status must NOT be counted as pending."""
+    _get_or_create_user(
+        "admin-id", "Admin", "admin2@test.com", "admin"
+    )
+    user = {
+        "_id": "verified-alumni-no-status",
+        "name": "Verified Alumni",
+        "email": "verified@alumni.com",
+        "role": "alumni",
+        "is_active": True,
+        "is_verified": True,
+    }
+    users_collection.insert_one(user)
+
+    admin_token = create_access_token("admin-id", "admin")
+    resp = client.get("/admin/metrics", headers={"Authorization": f"Bearer {admin_token}"})
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["totalAlumni"] == 1
+    assert data["verifiedAlumni"] == 1
+    assert data["pendingAlumni"] == 0
+
+
 # ============================================================
 # REGRESSION: REAL BSON OBJECTID TOGGLE ACTIVE & RBAC
 # ============================================================

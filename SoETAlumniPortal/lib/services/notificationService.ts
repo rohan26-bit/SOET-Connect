@@ -1,4 +1,27 @@
-import { createClient } from '@/utils/supabase/client';
+const API_URL = 'http://127.0.0.1:8000';
+
+function getToken(): string {
+  const token = localStorage.getItem('soet_access_token');
+  if (!token) {
+    throw new Error('Your session has expired. Please log in again.');
+  }
+  return token;
+}
+
+async function parseResponse(response: Response) {
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('Your session has expired. Please log in again.');
+    }
+    const detail =
+      typeof data.detail === 'string'
+        ? data.detail
+        : JSON.stringify(data.detail || 'Request failed.');
+    throw new Error(detail);
+  }
+  return data;
+}
 
 export interface NotificationItem {
   id: string;
@@ -9,39 +32,62 @@ export interface NotificationItem {
   link?: string;
   is_read: boolean;
   created_at: string;
+  read_at?: string;
+  entity_type?: string;
+  entity_id?: string;
+  dedupe_key?: string;
 }
 
 export const notificationService = {
-  async getNotifications(userId: string): Promise<NotificationItem[]> {
-    const supabase = createClient();
+  // ============================================================
+  // GET ALL NOTIFICATIONS
+  // ============================================================
 
-    const { data, error } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+  async getNotifications(_userId?: string): Promise<NotificationItem[]> {
+    const response = await fetch(`${API_URL}/notifications`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+        'Content-Type': 'application/json',
+      },
+    });
 
-    if (error) throw new Error(error.message);
-    return data || [];
+    const data = await parseResponse(response);
+    return Array.isArray(data) ? data : [];
   },
+
+  // ============================================================
+  // MARK A SINGLE NOTIFICATION AS READ
+  // ============================================================
 
   async markAsRead(notificationId: string) {
-    const supabase = createClient();
-    const { error } = await supabase
-      .from('notifications')
-      .update({ is_read: true })
-      .eq('id', notificationId);
+    const response = await fetch(
+      `${API_URL}/notifications/${encodeURIComponent(notificationId)}/read`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
 
-    if (error) throw new Error(error.message);
+    return await parseResponse(response);
   },
 
-  async markAllAsRead(userId: string) {
-    const supabase = createClient();
-    const { error } = await supabase
-      .from('notifications')
-      .update({ is_read: true })
-      .eq('user_id', userId);
+  // ============================================================
+  // MARK ALL NOTIFICATIONS AS READ
+  // ============================================================
 
-    if (error) throw new Error(error.message);
-  }
+  async markAllAsRead(_userId?: string) {
+    const response = await fetch(`${API_URL}/notifications/read-all`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    return await parseResponse(response);
+  },
 };

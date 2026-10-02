@@ -176,7 +176,7 @@ export const eventService = {
     event_type?: string;
     tags?: string[];
   }) {
-    // Note on image upload: Supabase Storage is disconnected.
+    // Note on image upload: FastAPI events API accepts image_url string directly.
     // Preserving image_url string if provided.
     const response = await fetch(`${API_URL}/events`, {
       method: 'POST',
