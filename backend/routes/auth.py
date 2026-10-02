@@ -1,4 +1,5 @@
 import os
+import secrets
 
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, status
@@ -45,7 +46,7 @@ def register_user(user: RegisterRequest):
                 detail="Admin registration is not configured."
             )
 
-        if user.admin_secret != ADMIN_REGISTRATION_SECRET:
+        if not user.admin_secret or not secrets.compare_digest(user.admin_secret, ADMIN_REGISTRATION_SECRET):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Invalid admin registration secret."

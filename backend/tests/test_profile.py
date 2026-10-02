@@ -343,3 +343,135 @@ def test_nonexistent_user_returns_404():
     resp = test_client.get("/profile/me", headers=headers["nonexistent"])
 
     assert resp.status_code == 404
+
+
+# ============================================================
+# 9. VALIDATION HARDENING TESTS (PHASE 2)
+# ============================================================
+
+def test_profile_invalid_phone_fails():
+    """Invalid phone number formats and length out of bounds fail with 422."""
+    headers = setup_test_users()
+
+    # Letters
+    resp = test_client.patch("/profile/me", json={"phone": "invalid-phone"}, headers=headers["student"])
+    assert resp.status_code == 422
+
+    # Too short (< 7 digits)
+    resp = test_client.patch("/profile/me", json={"phone": "12345"}, headers=headers["student"])
+    assert resp.status_code == 422
+
+    # Too long (> 15 digits)
+    resp = test_client.patch("/profile/me", json={"phone": "12345678901234567"}, headers=headers["student"])
+    assert resp.status_code == 422
+
+
+def test_profile_valid_phone_succeeds():
+    """Valid phone numbers with spaces, +, hyphens, parens succeed."""
+    headers = setup_test_users()
+
+    resp = test_client.patch("/profile/me", json={"phone": "+91 98765-43210"}, headers=headers["student"])
+    assert resp.status_code == 200
+    assert resp.json()["student_profile"]["phone"] == "+91 98765-43210"
+
+    resp = test_client.patch("/profile/me", json={"phone": "(123) 456-7890"}, headers=headers["student"])
+    assert resp.status_code == 200
+    assert resp.json()["student_profile"]["phone"] == "(123) 456-7890"
+
+
+def test_profile_invalid_graduation_year_fails():
+    """Invalid graduation year formats and ranges fail with 422."""
+    headers = setup_test_users()
+
+    # Non-digits
+    resp = test_client.patch("/profile/me", json={"graduation_year": "abcd"}, headers=headers["student"])
+    assert resp.status_code == 422
+
+    # Before 1970
+    resp = test_client.patch("/profile/me", json={"graduation_year": "1960"}, headers=headers["student"])
+    assert resp.status_code == 422
+
+    # After 2035
+    resp = test_client.patch("/profile/me", json={"graduation_year": "2050"}, headers=headers["student"])
+    assert resp.status_code == 422
+
+    # Less than 4 digits
+    resp = test_client.patch("/profile/me", json={"graduation_year": "25"}, headers=headers["student"])
+    assert resp.status_code == 422
+
+
+def test_profile_valid_graduation_year_succeeds():
+    """Valid 4-digit graduation years between 1970 and 2035 succeed."""
+    headers = setup_test_users()
+
+    resp = test_client.patch("/profile/me", json={"graduation_year": "2026"}, headers=headers["student"])
+    assert resp.status_code == 200
+    assert resp.json()["student_profile"]["graduation_year"] == "2026"
+
+    resp = test_client.patch("/profile/me", json={"graduationYear": "1995"}, headers=headers["student"])
+    assert resp.status_code == 200
+    assert resp.json()["student_profile"]["graduation_year"] == "1995"
+
+
+def test_profile_invalid_url_protocol_fails():
+    """Non-http/https URLs or javascript: protocols fail with 422."""
+    headers = setup_test_users()
+
+    # javascript: scheme
+    resp = test_client.patch("/profile/me", json={"linkedin": "javascript:alert(1)"}, headers=headers["alumni"])
+    assert resp.status_code == 422
+
+    # ftp: scheme
+    resp = test_client.patch("/profile/me", json={"github": "ftp://files.example.com"}, headers=headers["alumni"])
+    assert resp.status_code == 422
+
+    # plain string without domain
+    resp = test_client.patch("/profile/me", json={"website": "not-a-url"}, headers=headers["alumni"])
+    assert resp.status_code == 422
+
+
+def test_profile_valid_http_https_url_succeeds():
+    """Valid http and https URLs with domains succeed."""
+    headers = setup_test_users()
+
+    resp = test_client.patch(
+        "/profile/me",
+        json={
+            "linkedin": "https://www.linkedin.com/in/john-doe",
+            "github": "https://github.com/johndoe",
+            "website": "http://johndoe.me",
+        },
+        headers=headers["alumni"]
+    )
+    assert resp.status_code == 200
+    profile = resp.json()["alumni_profile"]
+    assert profile["linkedin"] == "https://www.linkedin.com/in/john-doe"
+    assert profile["github"] == "https://github.com/johndoe"
+    assert profile["website"] == "http://johndoe.me"
+
+
+def test_profile_avatar_payload_exceeding_limit_fails():
+    """Avatar payload exceeding 3,000,000 characters fails with 422."""
+    headers = setup_test_users()
+    oversized = "data:image/png;base64," + ("A" * 3_000_001)
+
+    # Via POST /profile/avatar
+    resp = test_client.post("/profile/avatar", json={"avatar_url": oversized}, headers=headers["student"])
+    assert resp.status_code == 422
+
+    # Via PATCH /profile/me
+    resp = test_client.patch("/profile/me", json={"avatar_url": oversized}, headers=headers["student"])
+    assert resp.status_code == 422
+
+
+def test_profile_avatar_invalid_format_fails():
+    """Avatar URL with invalid scheme or format fails with 422."""
+    headers = setup_test_users()
+
+    # Plain text
+    resp = test_client.post("/profile/avatar", json={"avatar_url": "invalid-avatar-string"}, headers=headers["student"])
+    assert resp.status_code == 422
+
+    # javascript: scheme
+    resp = test_client.post("/profile/avatar", json={"avatar_url": "javascript:alert(1)"}, headers=headers["student"])
+    assert resp.status_code == 422
