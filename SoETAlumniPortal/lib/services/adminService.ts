@@ -154,7 +154,7 @@ export const adminService = {
   // ============================================================
 
   async getAllStudents(): Promise<UserManagementItem[]> {
-    const response = await fetch(`${API_URL}/alumni/directory?role=student`, {
+    const response = await fetch(`${API_URL}/admin/students`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${getToken()}`,
@@ -163,23 +163,21 @@ export const adminService = {
     });
 
     const data = await parseResponse(response);
-    return (data || [])
-      .filter((u: any) => u.role === 'student')
-      .map((s: any) => ({
-        id: s.id,
-        full_name: s.full_name || s.name || '',
-        email: s.email || '',
-        role: 'student' as const,
-        avatar_url: s.avatar_url,
-        department: s.department,
-        degree: s.degree,
-        graduation_year: s.graduation_year,
-        course_or_company: s.course_or_company || s.course || s.department || 'B.Tech',
-        is_verified: s.is_verified ?? true,
-        verification_status: s.verification_status || 'approved',
-        is_active: s.is_active ?? true,
-        created_at: s.created_at,
-      }));
+    return (data || []).map((s: any) => ({
+      id: s.id,
+      full_name: s.full_name || s.name || '',
+      email: s.email || '',
+      role: s.role || ('student' as const),
+      avatar_url: s.avatar_url,
+      department: s.department,
+      degree: s.degree,
+      graduation_year: s.graduation_year,
+      course_or_company: s.course_or_company || s.course || s.department || 'B.Tech',
+      is_verified: s.is_verified ?? true,
+      verification_status: s.verification_status || 'approved',
+      is_active: s.is_active ?? true,
+      created_at: s.created_at,
+    }));
   },
 
   async getAllAlumni(): Promise<UserManagementItem[]> {
@@ -265,11 +263,20 @@ export const adminService = {
   },
 
   async toggleUserActive(
-    _userId: string,
+    userId: string,
     _currentActiveStatus?: boolean
   ) {
-    throw new Error(
-      'User activation API is not connected to the FastAPI backend yet.'
+    const response = await fetch(
+      `${API_URL}/admin/users/${encodeURIComponent(userId)}/active`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+      }
     );
+
+    return parseResponse(response);
   },
 };
