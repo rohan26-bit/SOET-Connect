@@ -2,12 +2,69 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from database import users_collection
 from security.dependencies import get_current_user
+from services.aci import (
+    calculate_alumni_aci,
+    load_json_data,
+    JOBS_FILE,
+    EVENTS_FILE,
+    REGISTRATIONS_FILE,
+)
 
 
 router = APIRouter(
     prefix="/alumni",
     tags=["Alumni"]
 )
+
+
+def get_user_from_token(current_user: dict):
+    user_id = current_user.get("user_id")
+    role = current_user.get("role")
+
+    user = users_collection.find_one({"_id": user_id})
+    if not user:
+        users = users_collection.find({"role": role})
+        for candidate in users:
+            if str(candidate.get("_id")) == str(user_id):
+                user = candidate
+                break
+    return user
+
+
+# ============================================================
+# ALUMNI CONTRIBUTION INDEX (ACI)
+# ============================================================
+
+@router.get("/me/aci")
+def get_my_aci(
+    current_user: dict = Depends(get_current_user)
+):
+    if current_user.get("role") != "alumni":
+        raise HTTPException(
+            status_code=403,
+            detail="Only alumni can access this resource."
+        )
+
+    user = get_user_from_token(current_user)
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User account not found."
+        )
+
+    if not user.get("is_active", True):
+        raise HTTPException(
+            status_code=403,
+            detail="This account has been deactivated."
+        )
+
+    if not user.get("is_verified", False) or user.get("verification_status") != "approved":
+        raise HTTPException(
+            status_code=403,
+            detail="Your alumni account must be verified by an administrator before accessing ACI."
+        )
+
+    return calculate_alumni_aci(str(user["_id"]), user_doc=user)
 
 
 # ============================================================
@@ -18,6 +75,7 @@ router = APIRouter(
 def get_alumni_directory(
     search: str | None = None,
     department: str | None = None,
+    sort_by: str | None = None,
     current_user: dict = Depends(get_current_user)
 ):
     query = {
@@ -27,6 +85,11 @@ def get_alumni_directory(
     }
 
     alumni_users = users_collection.find(query)
+
+    # Preload activity datasets once for performance
+    jobs = load_json_data(JOBS_FILE)
+    events = load_json_data(EVENTS_FILE)
+    registrations = load_json_data(REGISTRATIONS_FILE)
 
     results = []
 
@@ -50,6 +113,14 @@ def get_alumni_directory(
         if search and search.lower() not in searchable_text:
             continue
 
+        aci_data = calculate_alumni_aci(
+            user_id=str(alumni["_id"]),
+            user_doc=alumni,
+            jobs=jobs,
+            events=events,
+            registrations=registrations,
+        )
+
         results.append({
             "id": str(alumni["_id"]),
             "full_name": alumni.get("name"),
@@ -65,8 +136,14 @@ def get_alumni_directory(
             "linkedin": profile.get("linkedin"),
             "github": profile.get("github"),
             "website": profile.get("website"),
-            "bio": profile.get("bio")
+            "bio": profile.get("bio"),
+            "aci_score": aci_data["score"],
+            "aci_tier": aci_data["tier"],
+            "aci_badge": aci_data["badge"],
         })
+
+    if sort_by == "aci":
+        results.sort(key=lambda x: x.get("aci_score", 0), reverse=True)
 
     return results
 
