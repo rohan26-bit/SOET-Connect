@@ -298,12 +298,13 @@ export const authService = {
       const user = JSON.parse(storedUser);
 
       return {
-        id: user.id,
+        id: user.id || user._id,
         email: user.email,
         role: user.role,
-        full_name: user.name,
+        full_name: user.full_name || user.name || '',
+        avatar_url: user.avatar_url,
         is_verified: user.is_verified,
-        is_active: true,
+        is_active: user.is_active ?? true,
         student_profile:
           user.student_profile,
         alumni_profile:

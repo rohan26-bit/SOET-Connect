@@ -64,7 +64,7 @@ def _count_by(items: list[dict], field: str) -> dict[str, int]:
 
 def _gather_stats() -> dict:
     """Gather all dashboard statistics from MongoDB and JSON files."""
-    all_users = list(users_collection.find({}, {"role": 1, "is_verified": 1}))
+    all_users = list(users_collection.find({}))
 
     users_by_role = dict(Counter(
         u.get("role", "unknown") for u in all_users

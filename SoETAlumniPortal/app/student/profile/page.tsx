@@ -37,6 +37,44 @@ export default function ProfilePage() {
   const [bio, setBio] = useState('');
 
   useEffect(() => {
+    async function loadFreshProfile() {
+      try {
+        const fresh = await profileService.getMyProfile();
+        if (fresh) {
+          setFullName(fresh.full_name || fresh.name || '');
+          setAvatarUrl(fresh.avatar_url || '');
+
+          if (fresh.role === 'student' && fresh.student_profile) {
+            setStudentId(fresh.student_profile.student_id || '');
+            setDepartment(fresh.student_profile.department || '');
+            setCourse(fresh.student_profile.course || '');
+            setAcademicYear(fresh.student_profile.academic_year || '');
+            setGraduationYear(fresh.student_profile.graduation_year || '');
+            setPhone(fresh.student_profile.phone || '');
+          }
+
+          if (fresh.role === 'alumni' && fresh.alumni_profile) {
+            setDepartment(fresh.alumni_profile.department || '');
+            setGraduationYear(fresh.alumni_profile.graduation_year || '');
+            setCompany(fresh.alumni_profile.company || '');
+            setDesignation(fresh.alumni_profile.designation || '');
+            setIndustry(fresh.alumni_profile.industry || '');
+            setLocation(fresh.alumni_profile.location || '');
+            setSkillsStr(fresh.alumni_profile.skills?.join(', ') || '');
+            setLinkedin(fresh.alumni_profile.linkedin || '');
+            setGithub(fresh.alumni_profile.github || '');
+            setWebsite(fresh.alumni_profile.website || '');
+            setBio(fresh.alumni_profile.bio || '');
+          }
+        }
+      } catch {
+        // Fall back to user state from useAuth()
+      }
+    }
+    loadFreshProfile();
+  }, []);
+
+  useEffect(() => {
     if (user) {
       setFullName(user.full_name || '');
       setAvatarUrl(user.avatar_url || '');

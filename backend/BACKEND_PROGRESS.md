@@ -597,7 +597,7 @@ Real MongoDB Atlas cluster (team/staging/production)
 
 ### 4. Integration Status
 
-> **Status: READY FOR ATLAS CONFIGURATION**  
+> **Status: READY FOR ATLAS CONFIGURATION**
 > *(Note: This backend is fully prepared and audited for Atlas integration, but is NOT YET ACTUALLY CONNECTED TO ATLAS because real team credentials and network whitelisting must be supplied in `.env` by the team).*
 
 ### 5. Remaining Team / Environment Requirements
