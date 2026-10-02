@@ -25,11 +25,12 @@ app = FastAPI(
 DEFAULT_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://soet-connect.vercel.app",
 ]
 
 raw_origins = os.getenv("ALLOWED_ORIGINS", "")
 configured_origins = [
-    origin.strip()
+    origin.strip().rstrip("/")
     for origin in raw_origins.split(",")
     if origin.strip()
 ]
@@ -39,6 +40,7 @@ allowed_origins = list(dict.fromkeys(DEFAULT_ORIGINS + configured_origins))
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=r"^https:\/\/soet-connect(-[a-z0-9\-]+)?\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
