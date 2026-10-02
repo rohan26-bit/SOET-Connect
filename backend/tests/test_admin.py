@@ -175,7 +175,7 @@ def test_admin_stats_aggregation_accuracy(client, admin_user, student_user, veri
     assert stats["event_registrations"]["total"] == 1
 
     assert stats["announcements"]["total"] == 1
-    assert stats["notifications"]["total"] == 1
+    assert stats["notifications"]["total"] == 6
 
     raw_text = res.text.lower()
     assert "password" not in raw_text

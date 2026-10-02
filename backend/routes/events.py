@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from database import users_collection
 from security.dependencies import get_current_user
+from services.notifications import NOTIFICATION_TYPES, create_notification_once
 
 
 router = APIRouter(
@@ -265,6 +266,21 @@ def create_event(
     events.append(event_document)
     save_events(events)
 
+    if initial_status == "pending":
+        creator_id = str(event_document["created_by"])
+        try:
+            create_notification_once(
+                user_id=creator_id,
+                title="Event submitted for review",
+                message=f'Your event "{event_document["title"]}" was submitted and is pending administrator review.',
+                notification_type=NOTIFICATION_TYPES["event_submission"],
+                entity_type="event",
+                entity_id=str(event_document["id"]),
+                dedupe_key=f"event_submission:{event_document['id']}",
+            )
+        except Exception:
+            pass
+
     return {
         "message": "Event created successfully.",
         "event": event_document,
@@ -364,7 +380,7 @@ def update_event(
                         )
                     )
 
-            # Apply only the provided (non-None) fields
+            old_status = event.get("status")
             update_data = body.model_dump(exclude_none=True)
 
             for key, value in update_data.items():
@@ -379,6 +395,56 @@ def update_event(
             event["updated_at"] = datetime.now(timezone.utc).isoformat()
 
             save_events(events)
+
+            new_status = update_data.get("status")
+            if new_status is not None and old_status != new_status:
+                creator_id = str(event.get("created_by"))
+                event_title = event.get("title", "")
+                if new_status == "approved":
+                    try:
+                        create_notification_once(
+                            user_id=creator_id,
+                            title="Event approved",
+                            message=f'Your event "{event_title}" has been approved.',
+                            notification_type=NOTIFICATION_TYPES["event_approval"],
+                            entity_type="event",
+                            entity_id=str(event_id),
+                            dedupe_key=f"event_approval:{event_id}",
+                        )
+                    except Exception:
+                        pass
+                elif new_status == "rejected":
+                    try:
+                        create_notification_once(
+                            user_id=creator_id,
+                            title="Event rejected",
+                            message=f'Your event "{event_title}" was not approved.',
+                            notification_type=NOTIFICATION_TYPES["event_rejection"],
+                            entity_type="event",
+                            entity_id=str(event_id),
+                            dedupe_key=f"event_rejection:{event_id}",
+                        )
+                    except Exception:
+                        pass
+                elif new_status == "cancelled":
+                    registrations = load_registrations()
+                    reg_user_ids = {
+                        str(r.get("user_id")) for r in registrations
+                        if str(r.get("event_id")) == str(event_id) and r.get("user_id")
+                    }
+                    for uid in reg_user_ids:
+                        try:
+                            create_notification_once(
+                                user_id=uid,
+                                title="Event cancelled",
+                                message=f'The event "{event_title}" has been cancelled.',
+                                notification_type=NOTIFICATION_TYPES["event_cancellation"],
+                                entity_type="event",
+                                entity_id=str(event_id),
+                                dedupe_key=f"event_cancellation:{event_id}:{uid}",
+                            )
+                        except Exception:
+                            pass
 
             return {
                 "message": "Event updated successfully.",
@@ -517,6 +583,19 @@ def register_for_event(
 
     registrations.append(registration)
     save_registrations(registrations)
+
+    try:
+        create_notification_once(
+            user_id=user_id,
+            title="Event registration confirmed",
+            message=f'You have successfully registered for "{event.get("title", "")}".',
+            notification_type=NOTIFICATION_TYPES["event_registration"],
+            entity_type="event",
+            entity_id=str(event_id),
+            dedupe_key=f"event_registration:{event_id}:{user_id}",
+        )
+    except Exception:
+        pass
 
     return {
         "message": "Registration successful.",
