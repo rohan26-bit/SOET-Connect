@@ -14,11 +14,11 @@ from database import users_collection
 from security.jwt import create_access_token
 
 
-client = TestClient(app)
+test_client = TestClient(app)
 
 
 # ============================================================
-# TEST USERS SETUP
+# TEST USERS SETUP (Standalone Helpers)
 # ============================================================
 
 def _get_or_create_user(
@@ -58,6 +58,7 @@ def _get_or_create_user(
             user["student_profile"] = student_profile
         if alumni_profile:
             user["alumni_profile"] = alumni_profile
+        user["is_active"] = is_active
 
     return user
 
@@ -114,7 +115,7 @@ def setup_test_users():
 def test_get_my_profile_student():
     """Student can view their own profile."""
     headers = setup_test_users()
-    resp = client.get("/profile/me", headers=headers["student"])
+    resp = test_client.get("/profile/me", headers=headers["student"])
 
     assert resp.status_code == 200
     data = resp.json()
@@ -129,7 +130,7 @@ def test_get_my_profile_student():
 def test_get_my_profile_alumni():
     """Alumni can view their own profile."""
     headers = setup_test_users()
-    resp = client.get("/profile/me", headers=headers["alumni"])
+    resp = test_client.get("/profile/me", headers=headers["alumni"])
 
     assert resp.status_code == 200
     data = resp.json()
@@ -143,16 +144,16 @@ def test_get_my_profile_alumni():
 
 def test_get_my_profile_unauthorized():
     """Unauthenticated request to /profile/me is rejected."""
-    resp = client.get("/profile/me")
-    assert resp.status_code == 403 or resp.status_code == 401
+    resp = test_client.get("/profile/me")
+    assert resp.status_code in [401, 403]
 
 
 # ============================================================
-# 2. UPDATE STUDENT PROFILE
+# 2. UPDATE STUDENT PROFILE (PUT & PATCH)
 # ============================================================
 
 def test_update_student_profile():
-    """Student can update their own profile fields."""
+    """Student can update their own profile fields via PUT."""
     headers = setup_test_users()
     payload = {
         "fullName": "Updated Student Name",
@@ -163,7 +164,7 @@ def test_update_student_profile():
         "phone": "9998887776",
     }
 
-    resp = client.put("/profile/me", json=payload, headers=headers["student"])
+    resp = test_client.put("/profile/me", json=payload, headers=headers["student"])
 
     assert resp.status_code == 200
     data = resp.json()
@@ -173,6 +174,23 @@ def test_update_student_profile():
     assert data["student_profile"]["course"] == "M.Tech"
     assert data["student_profile"]["graduation_year"] == "2027"
     assert data["student_profile"]["phone"] == "9998887776"
+
+
+def test_update_student_profile_patch():
+    """Student can update their own profile fields via PATCH."""
+    headers = setup_test_users()
+    update_payload = {
+        "full_name": "Patch Student Name",
+        "phone": "9991112233",
+        "course": "B.Tech CSE"
+    }
+    res = test_client.patch("/profile/me", json=update_payload, headers=headers["student"])
+    assert res.status_code == 200
+    data = res.json()
+    assert data["message"] == "Profile updated successfully."
+    assert data["profile"]["name"] == "Patch Student Name"
+    assert data["profile"]["student_profile"]["phone"] == "9991112233"
+    assert data["profile"]["student_profile"]["course"] == "B.Tech CSE"
 
 
 # ============================================================
@@ -195,7 +213,7 @@ def test_update_alumni_profile():
         "bio": "Staff Engineer at Google working on cloud platforms.",
     }
 
-    resp = client.put("/profile/me", json=payload, headers=headers["alumni"])
+    resp = test_client.put("/profile/me", json=payload, headers=headers["alumni"])
 
     assert resp.status_code == 200
     data = resp.json()
@@ -218,13 +236,12 @@ def test_patch_partial_update():
         "bio": "Newly updated short bio."
     }
 
-    resp = client.patch("/profile/me", json=payload, headers=headers["alumni"])
+    resp = test_client.patch("/profile/me", json=payload, headers=headers["alumni"])
 
     assert resp.status_code == 200
     data = resp.json()
 
     assert data["alumni_profile"]["bio"] == "Newly updated short bio."
-    # Previous company should still be preserved
     assert data["alumni_profile"]["company"] in ["Tech Corp", "Google"]
 
 
@@ -237,7 +254,7 @@ def test_update_avatar_via_post():
     headers = setup_test_users()
     avatar_data_url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 
-    resp = client.post(
+    resp = test_client.post(
         "/profile/avatar",
         json={"avatar_url": avatar_data_url},
         headers=headers["student"],
@@ -247,20 +264,19 @@ def test_update_avatar_via_post():
     data = resp.json()
     assert data["avatar_url"] == avatar_data_url
 
-    # Verify /profile/me returns the updated avatar
-    me_resp = client.get("/profile/me", headers=headers["student"])
+    me_resp = test_client.get("/profile/me", headers=headers["student"])
     assert me_resp.json()["avatar_url"] == avatar_data_url
 
 
 # ============================================================
-# 6. SECURITY & SENSITIVE FIELDS
+# 6. SECURITY & VALIDATION (from PR #1 & Profile Migration)
 # ============================================================
 
 def test_sensitive_fields_never_exposed():
     """Password hash and authentication secrets are never exposed in profile responses."""
     headers = setup_test_users()
 
-    get_resp = client.get("/profile/me", headers=headers["student"])
+    get_resp = test_client.get("/profile/me", headers=headers["student"])
     data = get_resp.json()
 
     sensitive_keys = {
@@ -271,11 +287,41 @@ def test_sensitive_fields_never_exposed():
     for key in sensitive_keys:
         assert key not in data, f"Sensitive key '{key}' found in GET /profile/me"
 
-    put_resp = client.put("/profile/me", json={"fullName": "Safe Name"}, headers=headers["student"])
+    put_resp = test_client.put("/profile/me", json={"fullName": "Safe Name"}, headers=headers["student"])
     put_data = put_resp.json()
 
     for key in sensitive_keys:
         assert key not in put_data, f"Sensitive key '{key}' found in PUT /profile/me"
+
+
+def test_update_profile_empty_body_fails():
+    """Sending an empty update body returns 400 Bad Request."""
+    headers = setup_test_users()
+    res = test_client.patch("/profile/me", json={}, headers=headers["student"])
+    assert res.status_code == 400
+    assert "No profile changes were provided" in res.json().get("detail", "")
+
+
+def test_update_profile_empty_name_fails():
+    """Sending an empty whitespace full_name returns 400 Bad Request."""
+    headers = setup_test_users()
+    res = test_client.patch("/profile/me", json={"full_name": "   "}, headers=headers["student"])
+    assert res.status_code == 400
+    assert "Full name cannot be empty" in res.json().get("detail", "")
+
+
+def test_profile_ownership_isolation():
+    """Updating one user's profile does not affect another user's profile."""
+    headers = setup_test_users()
+    _get_or_create_user("student-2-id", "Student Two", "s2@student.com", "student")
+    token2 = create_access_token("student-2-id", "student")
+    h2 = {"Authorization": f"Bearer {token2}"}
+
+    test_client.patch("/profile/me", json={"full_name": "New Name Student 1"}, headers=headers["student"])
+
+    res2 = test_client.get("/profile/me", headers=h2)
+    assert res2.status_code == 200
+    assert res2.json()["name"] == "Student Two"
 
 
 # ============================================================
@@ -285,7 +331,7 @@ def test_sensitive_fields_never_exposed():
 def test_inactive_user_cannot_update_profile():
     """Deactivated user receives 403 when attempting to update profile."""
     headers = setup_test_users()
-    resp = client.put("/profile/me", json={"fullName": "Test"}, headers=headers["inactive"])
+    resp = test_client.put("/profile/me", json={"fullName": "Test"}, headers=headers["inactive"])
 
     assert resp.status_code == 403
 
@@ -297,6 +343,6 @@ def test_inactive_user_cannot_update_profile():
 def test_nonexistent_user_returns_404():
     """Token with unknown user ID returns 404."""
     headers = setup_test_users()
-    resp = client.get("/profile/me", headers=headers["nonexistent"])
+    resp = test_client.get("/profile/me", headers=headers["nonexistent"])
 
     assert resp.status_code == 404

@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+pymongo
+certifi
+python-dotenv
+pwdlib[argon2]
+PyJWT
+email-validator
+httpx
+pytest
+mongomock

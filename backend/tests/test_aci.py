@@ -47,10 +47,7 @@ def _get_or_create_user(
                 "skills": ["Python", "FastAPI"],
             } if role == "alumni" else {},
         }
-        if hasattr(users_collection, "users"):
-            users_collection.users.append(user)
-        else:
-            users_collection.insert_one(user)
+        users_collection.insert_one(user)
     else:
         user["is_verified"] = is_verified
         user["verification_status"] = verification_status

@@ -1,3 +1,4 @@
+from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 
 from database import users_collection
@@ -103,11 +104,11 @@ def get_alumni_directory(
                 continue
 
         searchable_text = " ".join([
-            alumni.get("name", ""),
+            alumni.get("name", "") or "",
             profile.get("company", "") or "",
             profile.get("designation", "") or "",
             profile.get("industry", "") or "",
-            " ".join(profile.get("skills", []) or [])
+            " ".join(str(s) for s in (profile.get("skills", []) or []))
         ]).lower()
 
         if search and search.lower() not in searchable_text:
@@ -236,16 +237,27 @@ def update_alumni_verification(
             detail="Invalid verification status."
         )
 
-    alumni_users = users_collection.find({
-        "role": "alumni"
-    })
-
     target_user = None
 
-    for alumni in alumni_users:
-        if str(alumni["_id"]) == user_id:
-            target_user = alumni
-            break
+    try:
+        target_user = users_collection.find_one({
+            "_id": ObjectId(user_id),
+            "role": "alumni"
+        })
+    except Exception:
+        pass
+
+    if not target_user:
+        target_user = users_collection.find_one({
+            "_id": user_id,
+            "role": "alumni"
+        })
+
+    if not target_user:
+        for candidate in users_collection.find({"role": "alumni"}):
+            if str(candidate.get("_id")) == str(user_id):
+                target_user = candidate
+                break
 
     if not target_user:
         raise HTTPException(

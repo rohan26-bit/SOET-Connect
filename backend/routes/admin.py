@@ -1,5 +1,6 @@
-from pathlib import Path
 import json
+from collections import Counter
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -22,7 +23,10 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 JOBS_FILE = BACKEND_DIR / "jobs_data.json"
 EVENTS_FILE = BACKEND_DIR / "events_data.json"
 REGISTRATIONS_FILE = BACKEND_DIR / "event_registrations_data.json"
+EVENT_REGISTRATIONS_FILE = BACKEND_DIR / "event_registrations_data.json"
 APPLICATIONS_FILE = BACKEND_DIR / "applications_data.json"
+ANNOUNCEMENTS_FILE = BACKEND_DIR / "announcements_data.json"
+NOTIFICATIONS_FILE = BACKEND_DIR / "notifications_data.json"
 
 
 # ============================================================
@@ -51,8 +55,61 @@ def _require_admin(current_user: dict):
         )
 
 
+def _count_by(items: list[dict], field: str) -> dict[str, int]:
+    """Return a dict mapping field values to their counts."""
+    return dict(Counter(
+        str(item.get(field, "unknown")) for item in items
+    ))
+
+
+def _gather_stats() -> dict:
+    """Gather all dashboard statistics from MongoDB and JSON files."""
+    all_users = list(users_collection.find({}))
+
+    users_by_role = dict(Counter(
+        u.get("role", "unknown") for u in all_users
+    ))
+
+    alumni_users = [u for u in all_users if u.get("role") == "alumni"]
+    alumni_verified = sum(
+        1 for u in alumni_users if u.get("is_verified", False)
+    )
+    alumni_pending = len(alumni_users) - alumni_verified
+
+    jobs = _load_json(JOBS_FILE)
+    jobs_by_status = _count_by(jobs, "status")
+
+    applications = _load_json(APPLICATIONS_FILE)
+    applications_by_status = _count_by(applications, "status")
+
+    events = _load_json(EVENTS_FILE)
+    events_by_status = _count_by(events, "status")
+
+    event_registrations = _load_json(EVENT_REGISTRATIONS_FILE)
+
+    announcements = _load_json(ANNOUNCEMENTS_FILE)
+    notifications = _load_json(NOTIFICATIONS_FILE)
+
+    return {
+        "all_users": all_users,
+        "users_by_role": users_by_role,
+        "alumni_users": alumni_users,
+        "alumni_verified": alumni_verified,
+        "alumni_pending": alumni_pending,
+        "jobs": jobs,
+        "jobs_by_status": jobs_by_status,
+        "applications": applications,
+        "applications_by_status": applications_by_status,
+        "events": events,
+        "events_by_status": events_by_status,
+        "event_registrations": event_registrations,
+        "announcements": announcements,
+        "notifications": notifications,
+    }
+
+
 # ============================================================
-# ADMIN DASHBOARD METRICS
+# ADMIN DASHBOARD METRICS (origin/main)
 # ============================================================
 
 @router.get("/metrics")
@@ -143,7 +200,53 @@ def get_dashboard_metrics(
 
 
 # ============================================================
-# ADMIN STUDENTS MANAGEMENT
+# GET /admin/stats — Dashboard statistics (feature/backend-api)
+# ============================================================
+
+@router.get("/stats")
+def get_admin_stats(
+    current_user: dict = Depends(get_current_user),
+):
+    _require_admin(current_user)
+
+    s = _gather_stats()
+
+    return {
+        "users": {
+            "total": len(s["all_users"]),
+            "by_role": s["users_by_role"],
+        },
+        "alumni": {
+            "total": len(s["alumni_users"]),
+            "verified": s["alumni_verified"],
+            "pending": s["alumni_pending"],
+        },
+        "jobs": {
+            "total": len(s["jobs"]),
+            "by_status": s["jobs_by_status"],
+        },
+        "applications": {
+            "total": len(s["applications"]),
+            "by_status": s["applications_by_status"],
+        },
+        "events": {
+            "total": len(s["events"]),
+            "by_status": s["events_by_status"],
+        },
+        "event_registrations": {
+            "total": len(s["event_registrations"]),
+        },
+        "announcements": {
+            "total": len(s["announcements"]),
+        },
+        "notifications": {
+            "total": len(s["notifications"]),
+        },
+    }
+
+
+# ============================================================
+# ADMIN STUDENTS MANAGEMENT (origin/main)
 # ============================================================
 
 SENSITIVE_FIELDS = {
@@ -208,7 +311,7 @@ def get_all_students(
 
 
 # ============================================================
-# TOGGLE USER ACTIVE STATUS
+# TOGGLE USER ACTIVE STATUS (origin/main)
 # ============================================================
 
 @router.patch("/users/{user_id}/active")
