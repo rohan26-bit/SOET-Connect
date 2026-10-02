@@ -1,3 +1,8 @@
+from bson import ObjectId
+from database import users_collection
+from security.jwt import create_access_token
+
+
 def _create_approved_job(client, admin_user):
     res = client.post("/jobs", json={
         "title": "Backend Intern",
@@ -143,3 +148,60 @@ def test_update_application_status_permissions(client, verified_alumni_user, oth
     res_admin = client.patch(f"/jobs/applications/{app_id}/status", json={"status": "selected"}, headers=admin_user["headers"])
     assert res_admin.status_code == 200
     assert res_admin.json()["application"]["status"] == "selected"
+
+
+def test_deleted_user_jwt_rejected_from_applying(client, admin_user, student_user, other_student_user):
+    """Deleted or nonexistent user with a valid JWT cannot submit job applications."""
+    job_id = _create_approved_job(client, admin_user)
+
+    # 1. Existing valid user -> write succeeds
+    valid_payload = {
+        "job_id": job_id,
+        "resume_url": "https://example.com/valid.pdf",
+        "cover_letter": "Valid application",
+    }
+    res_valid = client.post("/applications/apply", json=valid_payload, headers=other_student_user["headers"])
+    assert res_valid.status_code == 200
+    assert res_valid.json()["application"]["student_id"] == other_student_user["id"]
+
+    # 2. Delete student user from database while keeping their JWT
+    users_collection.delete_one({"_id": student_user["doc_id"]})
+
+    # Submitting via /applications/apply is rejected (404)
+    res_del1 = client.post(
+        "/applications/apply",
+        json={"job_id": job_id, "resume_url": "https://example.com/ghost.pdf"},
+        headers=student_user["headers"],
+    )
+    assert res_del1.status_code == 404
+    assert "not found" in res_del1.json().get("detail", "").lower()
+
+    # Submitting via /jobs/{job_id}/applications is rejected (404)
+    res_del2 = client.post(
+        f"/jobs/{job_id}/applications",
+        json={"resume_url": "https://example.com/ghost.pdf"},
+        headers=student_user["headers"],
+    )
+    assert res_del2.status_code == 404
+    assert "not found" in res_del2.json().get("detail", "").lower()
+
+    # 3. Nonexistent user ID in valid token is rejected (404)
+    fake_token = create_access_token(user_id=str(ObjectId()), role="student")
+    fake_headers = {"Authorization": f"Bearer {fake_token}"}
+    res_nonexistent = client.post(
+        "/applications/apply",
+        json={"job_id": job_id, "resume_url": "https://example.com/fake.pdf"},
+        headers=fake_headers,
+    )
+    assert res_nonexistent.status_code == 404
+    assert "not found" in res_nonexistent.json().get("detail", "").lower()
+
+    # 4. Unauthorized user attempting another user's protected resource remains rejected (403)
+    from tests.conftest import _create_mock_user
+    unauth_student = _create_mock_user("Student Three", "student3@example.com", "student")
+    app_id = res_valid.json()["application"]["id"]
+    res_unauth = client.delete(
+        f"/applications/{app_id}",
+        headers=unauth_student["headers"],
+    )
+    assert res_unauth.status_code == 403

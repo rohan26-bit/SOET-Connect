@@ -348,3 +348,37 @@ def test_get_events_includes_counts_and_is_registered():
     assert ev2["registration_count"] == 1
     assert ev2["is_registered"] is False
 
+
+def test_deleted_user_jwt_rejected_from_event_registration():
+    """Deleted or nonexistent user with otherwise valid JWT is rejected from event registration."""
+    headers = setup_test_users()
+    # 1. Existing valid user -> write succeeds
+    res_create = client.post(
+        "/events",
+        json={"title": "Hardening Event", "description": "Desc", "event_date": "2026-11-20"},
+        headers=headers["admin"],
+    )
+    assert res_create.status_code == 200
+    event_id = res_create.json()["event"]["id"]
+
+    res_reg_valid = client.post(f"/events/{event_id}/register", headers=headers["student"])
+    assert res_reg_valid.status_code == 200
+
+    # 2. Deleted user with otherwise valid JWT -> write is rejected (404)
+    users_collection.delete_one({"_id": "student-2-id"})
+    res_reg_deleted = client.post(f"/events/{event_id}/register", headers=headers["student2"])
+    assert res_reg_deleted.status_code == 404
+    assert "not found" in res_reg_deleted.json().get("detail", "").lower()
+
+    # Nonexistent user with valid JWT signature -> write is rejected (404)
+    from bson import ObjectId
+    ghost_token = create_access_token(str(ObjectId()), "student")
+    ghost_headers = {"Authorization": f"Bearer {ghost_token}"}
+    res_reg_ghost = client.post(f"/events/{event_id}/register", headers=ghost_headers)
+    assert res_reg_ghost.status_code == 404
+    assert "not found" in res_reg_ghost.json().get("detail", "").lower()
+
+    # 3. Unauthorized user attempting another user's protected resource -> remains rejected (403)
+    res_delete_unauth = client.delete(f"/events/{event_id}", headers=headers["student"])
+    assert res_delete_unauth.status_code == 403
+

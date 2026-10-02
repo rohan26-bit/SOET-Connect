@@ -559,14 +559,20 @@ def register_for_event(
 
     # Resolve user details
     user = get_user_from_token(current_user)
-    if user and not user.get("is_active", True):
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User account not found."
+        )
+
+    if not user.get("is_active", True):
         raise HTTPException(
             status_code=403,
             detail="This account has been deactivated."
         )
 
-    user_name = user.get("name", "User") if user else "User"
-    user_email = user.get("email", "") if user else ""
+    user_name = user.get("name", "User")
+    user_email = user.get("email", "")
     now_iso = datetime.now(timezone.utc).isoformat()
 
     registration = {
