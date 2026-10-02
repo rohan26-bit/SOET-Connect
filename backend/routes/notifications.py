@@ -1,70 +1,24 @@
 from datetime import datetime, timezone
-import json
-import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from security.dependencies import get_current_user
-
+import services.notifications
+from services.notifications import (
+    NOTIFICATION_TYPES,
+    NOTIFICATIONS_FILE,
+    create_notification,
+    create_notification_once,
+    create_notifications_for_users,
+    load_notifications,
+    save_notifications,
+)
 
 router = APIRouter(
     prefix="/notifications",
-    tags=["Notifications"]
+    tags=["Notifications"],
 )
-
-
-NOTIFICATIONS_FILE = (
-    Path(__file__).resolve().parent.parent / "notifications_data.json"
-)
-
-
-# ============================================================
-# HELPERS
-# ============================================================
-
-def load_notifications() -> list[dict]:
-    try:
-        if NOTIFICATIONS_FILE.exists():
-            return json.loads(
-                NOTIFICATIONS_FILE.read_text(encoding="utf-8")
-            )
-    except Exception:
-        pass
-
-    return []
-
-
-def save_notifications(notifications: list[dict]):
-    NOTIFICATIONS_FILE.write_text(
-        json.dumps(notifications, indent=2),
-        encoding="utf-8"
-    )
-
-
-def create_notification(
-    user_id: str,
-    title: str,
-    message: str,
-) -> dict:
-    """Create and persist a notification (called by other modules).
-
-    This is a helper for server-side code, not exposed as an endpoint.
-    """
-    notification = {
-        "id": str(uuid.uuid4()),
-        "user_id": user_id,
-        "title": title,
-        "message": message,
-        "is_read": False,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-
-    notifications = load_notifications()
-    notifications.append(notification)
-    save_notifications(notifications)
-
-    return notification
 
 
 # ============================================================

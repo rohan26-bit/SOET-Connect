@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from database import users_collection
 from security.dependencies import get_current_user
+from services.notifications import NOTIFICATION_TYPES, create_notification_once
 
 
 router = APIRouter(
@@ -157,6 +158,20 @@ def create_job(
     jobs.append(job_document)
     save_jobs(jobs)
 
+    if initial_status == "pending":
+        try:
+            create_notification_once(
+                user_id=str(job_document["posted_by"]),
+                title="Job submission received",
+                message=f'Your job posting "{job.title}" was submitted successfully and is pending administrator review.',
+                notification_type=NOTIFICATION_TYPES["job_submission"],
+                entity_type="job",
+                entity_id=str(job_document["id"]),
+                dedupe_key=f"job_submission:{job_document['id']}",
+            )
+        except Exception:
+            pass
+
     return {
         "message": "Job posting submitted successfully.",
         "job": job_document
@@ -244,12 +259,43 @@ def update_job_status(
 
     for job in jobs:
         if str(job.get("id")) == str(job_id):
+            old_status = job.get("status")
             job["status"] = request.status
             job["updated_at"] = datetime.now(
                 timezone.utc
             ).isoformat()
 
             save_jobs(jobs)
+
+            if old_status != request.status:
+                owner_id = str(job.get("posted_by"))
+                job_title = job.get("title", "")
+                if request.status == "approved":
+                    try:
+                        create_notification_once(
+                            user_id=owner_id,
+                            title="Job posting approved",
+                            message=f'Your job posting "{job_title}" has been approved and is now visible to users.',
+                            notification_type=NOTIFICATION_TYPES["job_approval"],
+                            entity_type="job",
+                            entity_id=str(job_id),
+                            dedupe_key=f"job_approval:{job_id}",
+                        )
+                    except Exception:
+                        pass
+                elif request.status == "rejected":
+                    try:
+                        create_notification_once(
+                            user_id=owner_id,
+                            title="Job posting rejected",
+                            message=f'Your job posting "{job_title}" was not approved.',
+                            notification_type=NOTIFICATION_TYPES["job_rejection"],
+                            entity_type="job",
+                            entity_id=str(job_id),
+                            dedupe_key=f"job_rejection:{job_id}",
+                        )
+                    except Exception:
+                        pass
 
             return {
                 "message": f"Job {request.status} successfully.",

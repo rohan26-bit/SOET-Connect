@@ -6,7 +6,9 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from database import users_collection
 from security.dependencies import get_current_user
+from services.notifications import NOTIFICATION_TYPES, create_notification_once
 
 
 router = APIRouter(
@@ -142,6 +144,40 @@ def create_announcement(
     announcements = load_announcements()
     announcements.append(announcement)
     save_announcements(announcements)
+
+    # Broadcast notifications to eligible active users
+    try:
+        query = {"is_active": True}
+        if body.target_audience == "students":
+            query["role"] = "student"
+        elif body.target_audience == "alumni":
+            query["role"] = "alumni"
+
+        eligible_users = list(users_collection.find(query))
+        announcement_id = announcement["id"]
+        announcement_title = announcement["title"]
+
+        for u in eligible_users:
+            role = u.get("role")
+            if body.target_audience == "all" and role not in {"student", "alumni"}:
+                continue
+            if not u.get("is_active", True):
+                continue
+            uid = str(u["_id"])
+            try:
+                create_notification_once(
+                    user_id=uid,
+                    title="New announcement",
+                    message=f'A new announcement "{announcement_title}" has been posted.',
+                    notification_type=NOTIFICATION_TYPES["announcement"],
+                    entity_type="announcement",
+                    entity_id=str(announcement_id),
+                    dedupe_key=f"announcement:{announcement_id}:{uid}",
+                )
+            except Exception:
+                pass
+    except Exception:
+        pass
 
     return {
         "message": "Announcement created successfully.",

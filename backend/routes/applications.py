@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from database import users_collection
 from security.dependencies import get_current_user
+from services.notifications import NOTIFICATION_TYPES, create_notification_once
 
 
 router = APIRouter(
@@ -204,6 +205,21 @@ def apply_for_job(
     applications.append(app_document)
     save_applications(applications)
 
+    poster_id = str(target_job.get("posted_by"))
+    job_title = target_job.get("title", "")
+    try:
+        create_notification_once(
+            user_id=poster_id,
+            title="New job application",
+            message=f'{student_name} applied for your job "{job_title}".',
+            notification_type=NOTIFICATION_TYPES["job_application"],
+            entity_type="application",
+            entity_id=str(app_document["id"]),
+            dedupe_key=f"job_application:{app_document['id']}",
+        )
+    except Exception:
+        pass
+
     return {
         "message": "Application submitted successfully.",
         "application": app_document
@@ -381,10 +397,27 @@ def update_application_status(
                         detail="You do not have permission to update this application."
                     )
 
+            old_status = app.get("status")
             app["status"] = request.status
             app["updated_at"] = datetime.now(timezone.utc).isoformat()
 
             save_applications(applications)
+
+            if old_status != request.status:
+                student_id = str(app.get("student_id"))
+                job_title = job.get("title", "") if job else ""
+                try:
+                    create_notification_once(
+                        user_id=student_id,
+                        title="Application status updated",
+                        message=f'Your application for "{job_title}" is now "{request.status}".',
+                        notification_type=NOTIFICATION_TYPES["application_status"],
+                        entity_type="application",
+                        entity_id=str(application_id),
+                        dedupe_key=f"application_status:{application_id}:{request.status}",
+                    )
+                except Exception:
+                    pass
 
             return {
                 "message": f"Application status updated to {request.status}.",
@@ -500,6 +533,21 @@ def apply_to_job_compatibility(
     applications.append(application)
     save_applications(applications)
 
+    poster_id = str(job.get("posted_by"))
+    job_title = job.get("title", "")
+    try:
+        create_notification_once(
+            user_id=poster_id,
+            title="New job application",
+            message=f'{student_name} applied for your job "{job_title}".',
+            notification_type=NOTIFICATION_TYPES["job_application"],
+            entity_type="application",
+            entity_id=str(application["id"]),
+            dedupe_key=f"job_application:{application['id']}",
+        )
+    except Exception:
+        pass
+
     return {
         "message": "Application submitted successfully.",
         "application": application,
@@ -584,10 +632,28 @@ def update_application_status_compatibility(
                         detail="You do not have permission to update this application."
                     )
 
+            old_status = app.get("status")
             app["status"] = body.status
             app["updated_at"] = datetime.now(timezone.utc).isoformat()
 
             save_applications(applications)
+
+            if old_status != body.status:
+                student_id = str(app.get("student_id"))
+                job_obj = _find_job(app.get("job_id"))
+                job_title = job_obj.get("title", "") if job_obj else app.get("job_title", "")
+                try:
+                    create_notification_once(
+                        user_id=student_id,
+                        title="Application status updated",
+                        message=f'Your application for "{job_title}" is now "{body.status}".',
+                        notification_type=NOTIFICATION_TYPES["application_status"],
+                        entity_type="application",
+                        entity_id=str(application_id),
+                        dedupe_key=f"application_status:{application_id}:{body.status}",
+                    )
+                except Exception:
+                    pass
 
             return {
                 "message": f"Application status updated to '{body.status}'.",

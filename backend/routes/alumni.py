@@ -10,6 +10,7 @@ from services.aci import (
     EVENTS_FILE,
     REGISTRATIONS_FILE,
 )
+from services.notifications import NOTIFICATION_TYPES, create_notification_once
 
 
 router = APIRouter(
@@ -266,6 +267,8 @@ def update_alumni_verification(
         )
 
     is_verified = status == "approved"
+    old_status = target_user.get("verification_status", "pending")
+    target_uid = str(target_user["_id"])
 
     users_collection.update_one(
         {"_id": target_user["_id"]},
@@ -276,6 +279,34 @@ def update_alumni_verification(
             }
         }
     )
+
+    if old_status != status:
+        if status == "approved":
+            try:
+                create_notification_once(
+                    user_id=target_uid,
+                    title="Alumni verification approved",
+                    message="Your alumni account has been verified. You can now access verified alumni features.",
+                    notification_type=NOTIFICATION_TYPES["alumni_verification"],
+                    entity_type="alumni",
+                    entity_id=target_uid,
+                    dedupe_key=f"alumni_verification:{target_uid}:approved",
+                )
+            except Exception:
+                pass
+        elif status == "rejected":
+            try:
+                create_notification_once(
+                    user_id=target_uid,
+                    title="Alumni verification rejected",
+                    message="Your alumni account verification was rejected. Please review your submitted information and contact the administrator if clarification is required.",
+                    notification_type=NOTIFICATION_TYPES["alumni_verification"],
+                    entity_type="alumni",
+                    entity_id=target_uid,
+                    dedupe_key=f"alumni_verification:{target_uid}:rejected",
+                )
+            except Exception:
+                pass
 
     return {
         "message": f"Alumni verification status updated to {status}.",
