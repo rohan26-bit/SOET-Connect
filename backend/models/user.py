@@ -43,6 +43,7 @@ def create_user_document(
         "role": role,
         "is_active": True,
         "is_verified": role == "student" or role == "admin",
+"verification_status": "approved" if role == "student" or role == "admin" else "pending",
         "created_at": now,
         "updated_at": now
     }

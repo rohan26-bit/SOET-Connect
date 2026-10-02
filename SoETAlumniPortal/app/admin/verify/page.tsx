@@ -151,7 +151,9 @@ export default function AdminVerifyPage() {
                       <span className="flex items-center gap-1 text-slate-400">
                         <Clock className="w-3.5 h-3.5" />
                         Registered{' '}
-                        {new Date(alum.created_at).toLocaleDateString()}
+                        {alum.created_at
+                          ? new Date(alum.created_at).toLocaleDateString()
+                          : '—'}
                       </span>
                     </div>
 
@@ -298,9 +300,9 @@ export default function AdminVerifyPage() {
                       Registration Date
                     </p>
                     <p className="text-sm font-bold text-slate-800 mt-1">
-                      {new Date(
-                        selectedAlumni.created_at
-                      ).toLocaleDateString()}
+                      {selectedAlumni.created_at
+                        ? new Date(selectedAlumni.created_at).toLocaleDateString()
+                        : 'Not provided'}
                     </p>
                   </div>
                 </div>

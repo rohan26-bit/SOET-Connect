@@ -3,7 +3,6 @@ import json
 import uuid
 from pathlib import Path
 
-from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -39,6 +38,7 @@ class EventCreateRequest(BaseModel):
     description: str
     event_type: str = ""
     location: str = ""
+    event_date: str = ""
     start_date: str = ""
     end_date: str = ""
     start_time: str = ""
@@ -53,6 +53,7 @@ class EventUpdateRequest(BaseModel):
     description: str | None = None
     event_type: str | None = None
     location: str | None = None
+    event_date: str | None = None
     start_date: str | None = None
     end_date: str | None = None
     start_time: str | None = None
@@ -70,9 +71,9 @@ class EventUpdateRequest(BaseModel):
 def load_events() -> list[dict]:
     try:
         if EVENTS_FILE.exists():
-            return json.loads(
-                EVENTS_FILE.read_text(encoding="utf-8")
-            )
+            data = EVENTS_FILE.read_text(encoding="utf-8").strip()
+            if data:
+                return json.loads(data)
     except Exception:
         pass
 
@@ -87,7 +88,6 @@ def save_events(events: list[dict]):
 
 
 def _find_event(event_id: str) -> dict | None:
-    """Return a single event dict by ID, or None."""
     for event in load_events():
         if str(event.get("id")) == str(event_id):
             return event
@@ -102,9 +102,9 @@ def _find_event(event_id: str) -> dict | None:
 def load_registrations() -> list[dict]:
     try:
         if REGISTRATIONS_FILE.exists():
-            return json.loads(
-                REGISTRATIONS_FILE.read_text(encoding="utf-8")
-            )
+            data = REGISTRATIONS_FILE.read_text(encoding="utf-8").strip()
+            if data:
+                return json.loads(data)
     except Exception:
         pass
 
@@ -119,34 +119,29 @@ def save_registrations(registrations: list[dict]):
 
 
 # ============================================================
-# HELPERS — user resolution
+# HELPERS — user resolution (string-safe)
 # ============================================================
 
-def _resolve_user(current_user: dict) -> dict | None:
-    """Look up the full user document from MongoDB."""
+def get_user_from_token(current_user: dict):
     user_id = current_user.get("user_id")
     role = current_user.get("role")
 
-    try:
-        user = users_collection.find_one({"_id": ObjectId(user_id)})
-        if user:
-            return user
-    except Exception:
-        pass
-
-    user = users_collection.find_one({"_id": user_id})
-    if user:
-        return user
+    user = users_collection.find_one({
+        "_id": user_id
+    })
 
     # Compatibility with MongoDB ObjectId/string IDs
-    if role:
-        users = users_collection.find({"role": role})
+    if not user:
+        users = users_collection.find({
+            "role": role
+        })
 
         for candidate in users:
             if str(candidate.get("_id")) == str(user_id):
-                return candidate
+                user = candidate
+                break
 
-    return None
+    return user
 
 
 # ============================================================
@@ -158,23 +153,44 @@ def get_events(
     current_user: dict = Depends(get_current_user),
 ):
     events = load_events()
+    registrations = load_registrations()
+
     role = current_user.get("role")
     user_id = str(current_user.get("user_id"))
 
-    if role == "admin":
-        # Admin sees everything
-        return events
+    # Compute registration stats
+    reg_counts = {}
+    user_registered = set()
 
-    # Non-admin users see approved events + their own events
-    return [
-        event for event in events
-        if event.get("status") == "approved"
-        or str(event.get("created_by")) == user_id
-    ]
+    for reg in registrations:
+        eid = str(reg.get("event_id"))
+        reg_counts[eid] = reg_counts.get(eid, 0) + 1
+        if str(reg.get("user_id")) == user_id:
+            user_registered.add(eid)
+
+    results = []
+
+    for event in events:
+        eid = str(event.get("id"))
+        status = event.get("status")
+        creator_id = str(event.get("created_by"))
+
+        # Visibility: Admin sees all; non-admin sees approved or own events
+        if role == "admin" or status == "approved" or creator_id == user_id:
+            ev_copy = dict(event)
+            # Ensure canonical event_date
+            if not ev_copy.get("event_date") and ev_copy.get("start_date"):
+                ev_copy["event_date"] = ev_copy["start_date"]
+
+            ev_copy["registration_count"] = reg_counts.get(eid, 0)
+            ev_copy["is_registered"] = eid in user_registered
+            results.append(ev_copy)
+
+    return results
 
 
 # ============================================================
-# POST /events  — Create event (verified alumni or admin)
+# POST /events  — Create or suggest event
 # ============================================================
 
 @router.post("")
@@ -184,14 +200,7 @@ def create_event(
 ):
     role = current_user.get("role")
 
-    # Only alumni and admin can create events
-    if role not in {"alumni", "admin"}:
-        raise HTTPException(
-            status_code=403,
-            detail="Only verified alumni and admin users can create events."
-        )
-
-    user = _resolve_user(current_user)
+    user = get_user_from_token(current_user)
 
     if not user:
         raise HTTPException(
@@ -205,6 +214,13 @@ def create_event(
             detail="This account has been deactivated."
         )
 
+    # Role permissions
+    if role not in {"admin", "alumni", "student"}:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to create events."
+        )
+
     # Alumni must be verified
     if role == "alumni":
         if not user.get("is_verified", False):
@@ -216,8 +232,13 @@ def create_event(
                 )
             )
 
+    # Status determination:
     # Admin-created events are approved immediately
+    # Alumni and Student created/suggested events start as pending
     initial_status = "approved" if role == "admin" else "pending"
+
+    # Canonical event_date
+    event_date = body.event_date or body.start_date
 
     event_document = {
         "id": str(uuid.uuid4()),
@@ -227,7 +248,8 @@ def create_event(
         "description": body.description,
         "event_type": body.event_type,
         "location": body.location,
-        "start_date": body.start_date,
+        "event_date": event_date,
+        "start_date": event_date,
         "end_date": body.end_date,
         "start_time": body.start_time,
         "end_time": body.end_time,
@@ -236,6 +258,7 @@ def create_event(
         "tags": body.tags,
         "status": initial_status,
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
     events = load_events()
@@ -246,6 +269,57 @@ def create_event(
         "message": "Event created successfully.",
         "event": event_document,
     }
+
+
+# ============================================================
+# GET /events/{event_id}  — View single event details
+# ============================================================
+
+@router.get("/{event_id}")
+def get_event_details(
+    event_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    event = _find_event(event_id)
+
+    if not event:
+        raise HTTPException(
+            status_code=404,
+            detail="Event not found."
+        )
+
+    role = current_user.get("role")
+    user_id = str(current_user.get("user_id"))
+
+    # Visibility check
+    if (
+        role != "admin"
+        and event.get("status") != "approved"
+        and str(event.get("created_by")) != user_id
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail="Event not found."
+        )
+
+    registrations = load_registrations()
+    reg_count = sum(
+        1 for r in registrations if str(r.get("event_id")) == str(event_id)
+    )
+    is_reg = any(
+        str(r.get("event_id")) == str(event_id)
+        and str(r.get("user_id")) == user_id
+        for r in registrations
+    )
+
+    ev_copy = dict(event)
+    if not ev_copy.get("event_date") and ev_copy.get("start_date"):
+        ev_copy["event_date"] = ev_copy["start_date"]
+
+    ev_copy["registration_count"] = reg_count
+    ev_copy["is_registered"] = is_reg
+
+    return ev_copy
 
 
 # ============================================================
@@ -296,6 +370,12 @@ def update_event(
             for key, value in update_data.items():
                 event[key] = value
 
+            # Keep event_date and start_date in sync
+            if "event_date" in update_data and update_data["event_date"]:
+                event["start_date"] = update_data["event_date"]
+            elif "start_date" in update_data and update_data["start_date"]:
+                event["event_date"] = update_data["start_date"]
+
             event["updated_at"] = datetime.now(timezone.utc).isoformat()
 
             save_events(events)
@@ -337,7 +417,7 @@ def delete_event(
             deleted_event = events.pop(index)
             save_events(events)
 
-            # Also remove any registrations for this event
+            # Cascade: also remove registrations for this event
             registrations = load_registrations()
             registrations = [
                 reg for reg in registrations
@@ -385,10 +465,7 @@ def register_for_event(
 
     if deadline_str:
         try:
-            # Support date-only ("2026-09-30") and full ISO strings
             deadline = datetime.fromisoformat(deadline_str)
-
-            # Make deadline timezone-aware if it isn't already
             if deadline.tzinfo is None:
                 deadline = deadline.replace(tzinfo=timezone.utc)
 
@@ -398,7 +475,7 @@ def register_for_event(
                     detail="Registration deadline has passed."
                 )
         except ValueError:
-            pass  # Unparseable deadline — skip enforcement
+            pass
 
     registrations = load_registrations()
     user_id = str(current_user.get("user_id"))
@@ -414,14 +491,17 @@ def register_for_event(
                 detail="You have already registered for this event."
             )
 
-    # Resolve user name from DB
-    user = _resolve_user(current_user)
+    # Resolve user details
+    user = get_user_from_token(current_user)
     if user and not user.get("is_active", True):
         raise HTTPException(
             status_code=403,
             detail="This account has been deactivated."
         )
+
     user_name = user.get("name", "User") if user else "User"
+    user_email = user.get("email", "") if user else ""
+    now_iso = datetime.now(timezone.utc).isoformat()
 
     registration = {
         "id": str(uuid.uuid4()),
@@ -429,8 +509,10 @@ def register_for_event(
         "event_title": event.get("title", ""),
         "user_id": user_id,
         "user_name": user_name,
+        "user_email": user_email,
         "user_role": current_user.get("role", ""),
-        "registered_at": datetime.now(timezone.utc).isoformat(),
+        "registered_at": now_iso,
+        "created_at": now_iso,
     }
 
     registrations.append(registration)
@@ -440,6 +522,37 @@ def register_for_event(
         "message": "Registration successful.",
         "registration": registration,
     }
+
+
+# ============================================================
+# DELETE /events/{event_id}/register  — Cancel own registration
+# ============================================================
+
+@router.delete("/{event_id}/register")
+def cancel_event_registration(
+    event_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user.get("user_id"))
+    registrations = load_registrations()
+
+    for index, reg in enumerate(registrations):
+        if (
+            str(reg.get("event_id")) == str(event_id)
+            and str(reg.get("user_id")) == user_id
+        ):
+            deleted_reg = registrations.pop(index)
+            save_registrations(registrations)
+
+            return {
+                "message": "Registration cancelled successfully.",
+                "registration": deleted_reg,
+            }
+
+    raise HTTPException(
+        status_code=404,
+        detail="Registration not found."
+    )
 
 
 # ============================================================
@@ -482,9 +595,9 @@ def get_event_registrations(
 
     # Admin can always view; event creator can view their own
     if role == "admin":
-        pass  # allowed
+        pass
     elif str(event.get("created_by")) == user_id:
-        pass  # event owner
+        pass
     else:
         raise HTTPException(
             status_code=403,
@@ -497,3 +610,4 @@ def get_event_registrations(
         reg for reg in registrations
         if str(reg.get("event_id")) == str(event_id)
     ]
+

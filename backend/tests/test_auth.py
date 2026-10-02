@@ -54,8 +54,10 @@ def test_register_duplicate_email_fails(client):
     assert "already exists" in res2.json().get("detail", "")
 
 
-def test_register_admin_disallowed(client):
-    """Attempting to self-register as admin returns 403."""
+def test_register_admin_disallowed(client, monkeypatch):
+    """Attempting to self-register as admin without valid secret returns 403."""
+    import routes.auth
+    monkeypatch.setattr(routes.auth, "ADMIN_REGISTRATION_SECRET", "test-admin-secret")
     payload = {
         "name": "Sneaky Admin",
         "email": "sneaky@example.com",
@@ -64,7 +66,7 @@ def test_register_admin_disallowed(client):
     }
     response = client.post("/auth/register", json=payload)
     assert response.status_code == 403
-    assert "Only students and alumni can register" in response.json().get("detail", "")
+    assert "Invalid admin registration secret" in response.json().get("detail", "")
 
 
 def test_login_success(client):

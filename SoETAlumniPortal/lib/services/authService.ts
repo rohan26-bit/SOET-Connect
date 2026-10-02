@@ -40,9 +40,7 @@ export interface UserProfile {
 
 const API_URL = 'http://127.0.0.1:8000';
 
-
 export const authService = {
-
   // ============================================================
   // LOGIN
   // ============================================================
@@ -52,21 +50,17 @@ export const authService = {
     password: string,
     selectedRole: 'student' | 'alumni' | 'admin'
   ) {
-
-    const response = await fetch(
-      `${API_URL}/auth/login`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email,
-          password,
-          role: selectedRole,
-        }),
-      }
-    );
+    const response = await fetch(`${API_URL}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email,
+        password,
+        role: selectedRole,
+      }),
+    });
 
     const data = await response.json();
 
@@ -100,21 +94,13 @@ export const authService = {
       full_name: data.user.name,
       is_verified: data.user.is_verified,
       is_active: true,
-      student_profile:
-        data.user.student_profile,
-      alumni_profile:
-        data.user.alumni_profile,
+      student_profile: data.user.student_profile,
+      alumni_profile: data.user.alumni_profile,
     };
 
     if (profile.role !== selectedRole) {
-
-      localStorage.removeItem(
-        'soet_access_token'
-      );
-
-      localStorage.removeItem(
-        'soet_user'
-      );
+      localStorage.removeItem('soet_access_token');
+      localStorage.removeItem('soet_user');
 
       throw new Error(
         `Access denied. Your account is registered as "${profile.role.toUpperCase()}", not "${selectedRole.toUpperCase()}". Please select the correct role.`
@@ -127,7 +113,6 @@ export const authService = {
       access_token: data.access_token,
     };
   },
-
 
   // ============================================================
   // REGISTER STUDENT
@@ -144,30 +129,25 @@ export const authService = {
     graduationYear?: string;
     phone?: string;
   }) {
+    const response = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
 
-    const response = await fetch(
-      `${API_URL}/auth/register`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-
-        body: JSON.stringify({
-          name: data.fullName,
-          email: data.email,
-          password: data.password,
-          role: 'student',
-          student_id: data.studentId,
-          department: data.department,
-          course: data.course,
-          academic_year: data.academicYear,
-          graduation_year:
-            data.graduationYear,
-          phone: data.phone,
-        }),
-      }
-    );
+      body: JSON.stringify({
+        name: data.fullName,
+        email: data.email,
+        password: data.password,
+        role: 'student',
+        student_id: data.studentId,
+        department: data.department,
+        course: data.course,
+        academic_year: data.academicYear,
+        graduation_year: data.graduationYear,
+        phone: data.phone,
+      }),
+    });
 
     const result = await response.json();
 
@@ -180,7 +160,6 @@ export const authService = {
 
     return result;
   },
-
 
   // ============================================================
   // REGISTER ALUMNI
@@ -204,56 +183,53 @@ export const authService = {
     website?: string;
     bio?: string;
   }) {
+    const response = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
 
-    const response = await fetch(
-      `${API_URL}/auth/register`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-
-        body: JSON.stringify({
-          name: data.fullName,
-          email: data.email,
-          password: data.password,
-          role: 'alumni',
-          alumni_id: data.alumniId,
-          department: data.department,
-          degree: data.degree,
-          graduation_year:
-            data.graduationYear,
-          company: data.company,
-          designation: data.designation,
-          industry: data.industry,
-          location: data.location,
-          skills: data.skills || [],
-          linkedin: data.linkedin,
-          github: data.github,
-          website: data.website,
-          bio: data.bio,
-        }),
-      }
-    );
+      body: JSON.stringify({
+        name: data.fullName,
+        email: data.email,
+        password: data.password,
+        role: 'alumni',
+        alumni_id: data.alumniId,
+        department: data.department,
+        degree: data.degree,
+        graduation_year: data.graduationYear,
+        company: data.company,
+        designation: data.designation,
+        industry: data.industry,
+        location: data.location,
+        skills: data.skills || [],
+        linkedin: data.linkedin,
+        github: data.github,
+        website: data.website,
+        bio: data.bio,
+      }),
+    });
 
     const result = await response.json();
 
     if (!response.ok) {
-  console.error('Alumni registration error:', result);
+      console.error(
+        'Alumni registration error:',
+        result
+      );
 
-  const detail =
-    typeof result.detail === 'string'
-      ? result.detail
-      : JSON.stringify(result.detail);
+      const detail =
+        typeof result.detail === 'string'
+          ? result.detail
+          : JSON.stringify(result.detail);
 
-  throw new Error(
-    detail || 'Alumni registration failed.'
-  );
-}
+      throw new Error(
+        detail || 'Alumni registration failed.'
+      );
+    }
 
     return result;
   },
-
 
   // ============================================================
   // REGISTER ADMIN
@@ -263,24 +239,22 @@ export const authService = {
     fullName: string;
     email: string;
     password: string;
+    adminSecret: string;
   }) {
+    const response = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
 
-    const response = await fetch(
-      `${API_URL}/auth/register`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-
-        body: JSON.stringify({
-          name: data.fullName,
-          email: data.email,
-          password: data.password,
-          role: 'admin',
-        }),
-      }
-    );
+      body: JSON.stringify({
+        name: data.fullName,
+        email: data.email,
+        password: data.password,
+        role: 'admin',
+        admin_secret: data.adminSecret,
+      }),
+    });
 
     const result = await response.json();
 
@@ -293,7 +267,6 @@ export const authService = {
 
     return result;
   },
-
 
   // ============================================================
   // LOGOUT
@@ -309,13 +282,11 @@ export const authService = {
     );
   },
 
-
   // ============================================================
   // CURRENT USER
   // ============================================================
 
   async getCurrentUserProfile(): Promise<UserProfile | null> {
-
     const storedUser =
       localStorage.getItem('soet_user');
 
@@ -324,26 +295,21 @@ export const authService = {
     }
 
     try {
-
-      const user =
-        JSON.parse(storedUser);
+      const user = JSON.parse(storedUser);
 
       return {
         id: user.id,
         email: user.email,
         role: user.role,
         full_name: user.name,
-        is_verified:
-          user.is_verified,
+        is_verified: user.is_verified,
         is_active: true,
         student_profile:
           user.student_profile,
         alumni_profile:
           user.alumni_profile,
       };
-
     } catch {
-
       localStorage.removeItem(
         'soet_user'
       );

@@ -7,9 +7,10 @@ import { useAuth } from '@/components/AuthProvider';
 import { jobService, JobItem } from '@/lib/services/jobService';
 import { eventService, EventItem } from '@/lib/services/eventService';
 import { announcementService, AnnouncementItem } from '@/lib/services/announcementService';
+import { alumniService, AlumniAciResponse } from '@/lib/services/alumniService';
 import { 
   Briefcase, Calendar, Megaphone, Plus, 
-  ShieldCheck, ShieldAlert, ArrowRight, Building, MapPin, Clock 
+  ShieldCheck, ShieldAlert, ArrowRight, Building, MapPin, Clock, Award, CheckCircle2
 } from 'lucide-react';
 
 export default function AlumniDashboard() {
@@ -17,6 +18,9 @@ export default function AlumniDashboard() {
   const [myJobs, setMyJobs] = useState<JobItem[]>([]);
   const [myEvents, setMyEvents] = useState<EventItem[]>([]);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
+  const [aciData, setAciData] = useState<AlumniAciResponse | null>(null);
+  const [aciLoading, setAciLoading] = useState(true);
+  const [aciError, setAciError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -35,6 +39,18 @@ export default function AlumniDashboard() {
         console.error('Error loading alumni dashboard data:', err);
       } finally {
         setLoading(false);
+      }
+
+      // Fetch ACI metrics dynamically from FastAPI
+      try {
+        const aci = await alumniService.getMyAci();
+        setAciData(aci);
+      } catch (err: any) {
+        // Handle unverified or network error gracefully
+        console.warn('ACI metrics unavailable:', err.message);
+        setAciError(err.message || 'Contribution metrics unavailable');
+      } finally {
+        setAciLoading(false);
       }
     }
     loadData();
@@ -98,6 +114,119 @@ export default function AlumniDashboard() {
             <Plus className="w-4 h-4" /> Host Event
           </Link>
         </div>
+      </div>
+
+      {/* Alumni Contribution Index (ACI) Card */}
+      <div className="bg-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl mb-8 border border-slate-800">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 pb-6 border-b border-slate-800">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[11px] uppercase tracking-wider font-extrabold text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20">
+                Official Recognition Index
+              </span>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center gap-2">
+              <Award className="w-6 h-6 text-amber-400 shrink-0" />
+              <span>Alumni Contribution Index</span>
+            </h2>
+            <p className="text-xs text-slate-400 mt-1 max-w-xl leading-relaxed">
+              Transparent institutional metric measuring active giving back through approved jobs posted, campus events hosted, and event attendance.
+            </p>
+          </div>
+
+          {/* Current Tier & Score Highlights */}
+          {aciLoading ? (
+            <div className="text-xs text-slate-400 animate-pulse bg-slate-800/60 px-5 py-4 rounded-2xl border border-slate-700/50">
+              Calculating ACI score...
+            </div>
+          ) : aciData ? (
+            <div className="flex items-center gap-4 bg-slate-800/80 px-6 py-4 rounded-2xl border border-slate-700/60 self-stretch sm:self-auto justify-between sm:justify-start">
+              <div className="text-4xl select-none" title={aciData.tier}>{aciData.badge}</div>
+              <div>
+                <div className="text-xs font-bold text-amber-300">{aciData.tier}</div>
+                <div className="flex items-baseline gap-1.5 mt-0.5">
+                  <span className="text-3xl font-black text-white">{aciData.score}</span>
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">ACI Points</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-slate-400 bg-slate-800/60 px-5 py-4 rounded-2xl border border-slate-700/50 max-w-xs">
+              {verificationStatus === 'pending'
+                ? 'Verification Pending — your ACI activates automatically upon administrator authorization.'
+                : (aciError || 'Contribution score unavailable.')}
+            </div>
+          )}
+        </div>
+
+        {/* Breakdown & Verified Activities */}
+        {aciData && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+            {/* Points Breakdown */}
+            <div className="bg-slate-950/60 rounded-2xl p-5 border border-slate-800/80">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-300 mb-3 flex items-center justify-between">
+                <span>Points Breakdown</span>
+                <span className="text-[11px] text-amber-300 font-extrabold">{aciData.score} Total Pts</span>
+              </div>
+              <div className="space-y-2.5 text-xs">
+                <div className="flex items-center justify-between py-1.5 border-b border-slate-800/60">
+                  <span className="flex items-center gap-2 text-slate-300">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Account Verification
+                  </span>
+                  <span className="font-bold text-emerald-400">+{aciData.breakdown.verification} pts</span>
+                </div>
+                <div className="flex items-center justify-between py-1.5 border-b border-slate-800/60">
+                  <span className="flex items-center gap-2 text-slate-300">
+                    <Briefcase className="w-3.5 h-3.5 text-blue-400" /> Approved Jobs (+50 each)
+                  </span>
+                  <span className="font-bold text-blue-400">+{aciData.breakdown.jobs} pts</span>
+                </div>
+                <div className="flex items-center justify-between py-1.5 border-b border-slate-800/60">
+                  <span className="flex items-center gap-2 text-slate-300">
+                    <Calendar className="w-3.5 h-3.5 text-purple-400" /> Campus Events Hosted (+40 each)
+                  </span>
+                  <span className="font-bold text-purple-400">+{aciData.breakdown.events} pts</span>
+                </div>
+                <div className="flex items-center justify-between py-1.5">
+                  <span className="flex items-center gap-2 text-slate-300">
+                    <Clock className="w-3.5 h-3.5 text-amber-400" /> Event Registrations (Capped at 100)
+                  </span>
+                  <span className="font-bold text-amber-400">+{aciData.breakdown.registrations} pts</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Verified Activity Counts */}
+            <div className="bg-slate-950/60 rounded-2xl p-5 border border-slate-800/80 flex flex-col justify-between">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-300 mb-3">
+                <span>Verified Activity Summary</span>
+              </div>
+              <div className="grid grid-cols-3 gap-3 text-center my-auto">
+                <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800">
+                  <div className="text-2xl font-black text-white">{aciData.activity_counts.approved_jobs}</div>
+                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Approved Jobs</div>
+                </div>
+                <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800">
+                  <div className="text-2xl font-black text-white">{aciData.activity_counts.approved_events}</div>
+                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Events Hosted</div>
+                </div>
+                <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800">
+                  <div className="text-2xl font-black text-white">{aciData.activity_counts.valid_registrations}</div>
+                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Registrations</div>
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-400 mt-3 pt-2.5 border-t border-slate-800/60 flex items-center justify-between">
+                <span>Tier Milestone:</span>
+                <span className="font-semibold text-slate-300">
+                  {aciData.score < 50 ? 'Next: Silver (50 pts)' :
+                   aciData.score < 150 ? 'Next: Gold (150 pts)' :
+                   aciData.score < 300 ? 'Next: Platinum (300 pts)' :
+                   'Top Tier: Platinum Achieved 💎'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Real Statistics Cards */}
