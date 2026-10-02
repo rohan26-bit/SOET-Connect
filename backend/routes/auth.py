@@ -1,3 +1,6 @@
+import os
+
+from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, status
 
 from database import users_collection
@@ -5,6 +8,11 @@ from models.user import create_user_document
 from schemas.auth import RegisterRequest, LoginRequest
 from pwdlib import PasswordHash
 from security.jwt import create_access_token
+
+
+load_dotenv()
+
+ADMIN_REGISTRATION_SECRET = os.getenv("ADMIN_REGISTRATION_SECRET")
 
 
 router = APIRouter(
@@ -22,12 +30,26 @@ password_hash = PasswordHash.recommended()
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register_user(user: RegisterRequest):
 
-    # Only students and alumni can register themselves.
-    if user.role not in {"student", "alumni"}:
+    # Students and alumni can register normally.
+    if user.role not in {"student", "alumni", "admin"}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only students and alumni can register."
+            detail="Invalid registration role."
         )
+
+    # Admin registration requires the server-side secret.
+    if user.role == "admin":
+        if not ADMIN_REGISTRATION_SECRET:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Admin registration is not configured."
+            )
+
+        if user.admin_secret != ADMIN_REGISTRATION_SECRET:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid admin registration secret."
+            )
 
     # Check whether email already exists.
     existing_user = users_collection.find_one(

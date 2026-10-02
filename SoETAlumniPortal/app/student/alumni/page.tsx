@@ -21,6 +21,7 @@ export default function AlumniDirectoryPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [department, setDepartment] = useState('All Departments');
+  const [sortBy, setSortBy] = useState('');
   const [selectedAlumni, setSelectedAlumni] = useState<AlumniDirectoryItem | null>(null);
 
   const fetchAlumni = async () => {
@@ -29,6 +30,7 @@ export default function AlumniDirectoryPage() {
       const data = await alumniService.getApprovedAlumni({
         search: search || undefined,
         department: department !== 'All Departments' ? department : undefined,
+        sort_by: sortBy || undefined,
       });
       setAlumni(data);
     } catch (err) {
@@ -40,7 +42,7 @@ export default function AlumniDirectoryPage() {
 
   useEffect(() => {
     fetchAlumni();
-  }, [department]);
+  }, [department, sortBy]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,7 +81,7 @@ export default function AlumniDirectoryPage() {
             />
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <select
               value={department}
               onChange={(e) => setDepartment(e.target.value)}
@@ -88,6 +90,15 @@ export default function AlumniDirectoryPage() {
               {DEPARTMENTS.map((d) => (
                 <option key={d} value={d}>{d}</option>
               ))}
+            </select>
+
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Default Order</option>
+              <option value="aci">Sort by ACI (Top Contributors)</option>
             </select>
 
             <button
@@ -169,6 +180,20 @@ export default function AlumniDirectoryPage() {
                     )}
                   </div>
                 )}
+
+                {/* ACI Recognition Badge & Score */}
+                {alum.aci_score !== undefined && (
+                  <div className="mt-3.5 py-2 px-3 bg-slate-50/90 rounded-xl border border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-base select-none">{alum.aci_badge || '🥉'}</span>
+                      <span className="text-xs font-bold text-slate-800">{alum.aci_tier || 'Bronze Contributor'}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ACI:</span>
+                      <span className="text-xs font-black text-blue-600">{alum.aci_score}</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
@@ -238,6 +263,22 @@ export default function AlumniDirectoryPage() {
                 <p className="text-xs text-slate-500 mt-1">{selectedAlumni.department} • Batch {selectedAlumni.graduation_year}</p>
               </div>
             </div>
+
+            {selectedAlumni.aci_score !== undefined && (
+              <div className="mb-4 p-3.5 bg-gradient-to-r from-blue-50 to-indigo-50/70 border border-blue-100 rounded-2xl flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-2xl select-none">{selectedAlumni.aci_badge || '🥉'}</span>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900">{selectedAlumni.aci_tier || 'Bronze Contributor'}</h4>
+                    <p className="text-[11px] text-slate-500">Alumni Contribution Index</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-base font-black text-blue-600">{selectedAlumni.aci_score} pts</div>
+                  <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Verified Score</div>
+                </div>
+              </div>
+            )}
 
             {selectedAlumni.bio && (
               <div className="mb-4">

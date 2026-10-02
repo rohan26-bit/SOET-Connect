@@ -1,4 +1,4 @@
-import { createClient } from '@/utils/supabase/client';
+const API_URL = 'http://127.0.0.1:8000';
 
 export interface AlumniDirectoryItem {
   id: string;
@@ -17,147 +17,157 @@ export interface AlumniDirectoryItem {
   github?: string;
   website?: string;
   bio?: string;
-  verification_status: string;
-  created_at: string;
+  verification_status?: string;
+  created_at?: string;
+  aci_score?: number;
+  aci_tier?: string;
+  aci_badge?: string;
+}
+
+export interface AlumniAciBreakdown {
+  verification: number;
+  jobs: number;
+  events: number;
+  registrations: number;
+}
+
+export interface AlumniAciActivityCounts {
+  approved_jobs: number;
+  approved_events: number;
+  valid_registrations: number;
+}
+
+export interface AlumniAciResponse {
+  score: number;
+  tier: string;
+  badge: string;
+  breakdown: AlumniAciBreakdown;
+  activity_counts: AlumniAciActivityCounts;
+}
+
+function getAuthHeaders(): Record<string, string> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('soet_access_token') : null;
+
+  if (!token) {
+    throw new Error('Please log in again.');
+  }
+
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  };
+}
+
+async function parseResponse<T>(response: Response): Promise<T> {
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const detail =
+      typeof data.detail === 'string'
+        ? data.detail
+        : JSON.stringify(data.detail || 'Request failed.');
+
+    throw new Error(detail);
+  }
+
+  return data as T;
 }
 
 export const alumniService = {
+  // ============================================================
+  // GET MY ACI (ALUMNI CONTRIBUTION INDEX)
+  // ============================================================
+  async getMyAci(): Promise<AlumniAciResponse> {
+    const response = await fetch(`${API_URL}/alumni/me/aci`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
+
+    return parseResponse<AlumniAciResponse>(response);
+  },
+
+  // ============================================================
+  // GET APPROVED ALUMNI DIRECTORY
+  // ============================================================
   async getApprovedAlumni(filters?: {
     search?: string;
     department?: string;
+    sort_by?: string;
     graduationYear?: string;
     company?: string;
     industry?: string;
     location?: string;
   }): Promise<AlumniDirectoryItem[]> {
-    const supabase = createClient();
-
-    let query = supabase
-      .from('alumni_profiles')
-      .select(`
-        *,
-        profiles!inner (
-          id,
-          full_name,
-          email,
-          avatar_url,
-          is_active
-        )
-      `)
-      .eq('verification_status', 'approved')
-      .eq('profiles.is_active', true);
-
-    if (filters?.department) {
-      query = query.ilike('department', `%${filters.department}%`);
-    }
-    if (filters?.graduationYear) {
-      query = query.eq('graduation_year', filters.graduationYear);
-    }
-    if (filters?.company) {
-      query = query.ilike('company', `%${filters.company}%`);
-    }
-    if (filters?.industry) {
-      query = query.ilike('industry', `%${filters.industry}%`);
-    }
-    if (filters?.location) {
-      query = query.ilike('location', `%${filters.location}%`);
-    }
-
-    const { data, error } = await query;
-    if (error) throw new Error(error.message);
-
-    let result = (data || []).map((item: any) => ({
-      id: item.profiles.id,
-      full_name: item.profiles.full_name,
-      email: item.profiles.email,
-      avatar_url: item.profiles.avatar_url,
-      department: item.department,
-      degree: item.degree,
-      graduation_year: item.graduation_year,
-      company: item.company,
-      designation: item.designation,
-      industry: item.industry,
-      location: item.location,
-      skills: item.skills,
-      linkedin: item.linkedin,
-      github: item.github,
-      website: item.website,
-      bio: item.bio,
-      verification_status: item.verification_status,
-      created_at: item.created_at,
-    }));
+    const queryParams = new URLSearchParams();
 
     if (filters?.search) {
-      const s = filters.search.toLowerCase();
-      result = result.filter(
-        (a) =>
-          a.full_name.toLowerCase().includes(s) ||
-          a.company?.toLowerCase().includes(s) ||
-          a.designation?.toLowerCase().includes(s) ||
-          a.skills?.some((sk: string) => sk.toLowerCase().includes(s))
-      );
+      queryParams.set('search', filters.search);
+    }
+    if (filters?.department && filters.department !== 'All Departments') {
+      queryParams.set('department', filters.department);
+    }
+    if (filters?.sort_by) {
+      queryParams.set('sort_by', filters.sort_by);
     }
 
-    return result;
-  },
+    const queryString = queryParams.toString();
+    const url = `${API_URL}/alumni/directory${queryString ? `?${queryString}` : ''}`;
 
-  async getPendingAlumni(): Promise<AlumniDirectoryItem[]> {
-    const supabase = createClient();
-
-    const { data, error } = await supabase
-      .from('alumni_profiles')
-      .select(`
-        *,
-        profiles!inner (
-          id,
-          full_name,
-          email,
-          avatar_url,
-          created_at
-        )
-      `)
-      .eq('verification_status', 'pending')
-      .order('created_at', { ascending: false });
-
-    if (error) throw new Error(error.message);
-
-    return (data || []).map((item: any) => ({
-      id: item.profiles.id,
-      full_name: item.profiles.full_name,
-      email: item.profiles.email,
-      avatar_url: item.profiles.avatar_url,
-      department: item.department,
-      degree: item.degree,
-      graduation_year: item.graduation_year,
-      company: item.company,
-      designation: item.designation,
-      industry: item.industry,
-      location: item.location,
-      skills: item.skills,
-      linkedin: item.linkedin,
-      github: item.github,
-      website: item.website,
-      bio: item.bio,
-      verification_status: item.verification_status,
-      created_at: item.profiles.created_at,
-    }));
-  },
-
-  async updateVerificationStatus(userId: string, status: 'approved' | 'rejected' | 'suspended') {
-    const supabase = createClient();
-    const { error } = await supabase
-      .from('alumni_profiles')
-      .update({ verification_status: status, updated_at: new Date().toISOString() })
-      .eq('id', userId);
-
-    if (error) throw new Error(error.message);
-
-    // Send notification to the user
-    await supabase.from('notifications').insert({
-      user_id: userId,
-      title: 'Alumni Verification Update',
-      message: `Your alumni verification status has been updated to: ${status.toUpperCase()}`,
-      type: 'system',
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: getAuthHeaders(),
     });
-  }
+
+    let results = await parseResponse<AlumniDirectoryItem[]>(response);
+
+    // Apply any additional client-side filters if provided
+    if (filters?.graduationYear) {
+      results = results.filter((a) => a.graduation_year === filters.graduationYear);
+    }
+    if (filters?.company) {
+      const c = filters.company.toLowerCase();
+      results = results.filter((a) => a.company?.toLowerCase().includes(c));
+    }
+    if (filters?.industry) {
+      const ind = filters.industry.toLowerCase();
+      results = results.filter((a) => a.industry?.toLowerCase().includes(ind));
+    }
+    if (filters?.location) {
+      const loc = filters.location.toLowerCase();
+      results = results.filter((a) => a.location?.toLowerCase().includes(loc));
+    }
+
+    return results;
+  },
+
+  // ============================================================
+  // GET PENDING ALUMNI (ADMIN)
+  // ============================================================
+  async getPendingAlumni(): Promise<AlumniDirectoryItem[]> {
+    const response = await fetch(`${API_URL}/alumni/pending`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
+
+    return parseResponse<AlumniDirectoryItem[]>(response);
+  },
+
+  // ============================================================
+  // UPDATE VERIFICATION STATUS (ADMIN)
+  // ============================================================
+  async updateVerificationStatus(
+    userId: string,
+    status: 'approved' | 'rejected' | 'suspended'
+  ): Promise<any> {
+    const response = await fetch(
+      `${API_URL}/alumni/verify/${userId}?status=${status}`,
+      {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
+      }
+    );
+
+    return parseResponse(response);
+  },
 };
+
