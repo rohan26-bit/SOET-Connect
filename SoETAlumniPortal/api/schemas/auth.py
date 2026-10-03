@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 class RegisterRequest(BaseModel):
@@ -18,6 +18,13 @@ class RegisterRequest(BaseModel):
         if len(trimmed) > 100:
             raise ValueError("Name cannot exceed 100 characters.")
         return trimmed
+
+    @model_validator(mode="after")
+    def validate_alumni_id_required(self) -> "RegisterRequest":
+        if self.role == "alumni":
+            if not self.alumni_id or not self.alumni_id.strip():
+                raise ValueError("Alumni ID / PRN is required.")
+        return self
 
     # Admin registration
     admin_secret: Optional[str] = None
