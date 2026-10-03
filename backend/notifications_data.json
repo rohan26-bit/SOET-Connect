@@ -1,1 +1,98 @@
-[]
+[
+  {
+    "id": "a0ec05dc-5bf4-4544-b964-fcc9714c7e3a",
+    "user_id": "6a815c79feca7c247c7a51d9",
+    "title": "Alumni verification rejected",
+    "message": "Your alumni account verification was rejected. Please review your submitted information and contact the administrator if clarification is required.",
+    "is_read": false,
+    "created_at": "2026-10-03T10:04:30.047918+00:00",
+    "type": "alumni_verification",
+    "entity_type": "alumni",
+    "entity_id": "6a815c79feca7c247c7a51d9",
+    "dedupe_key": "alumni_verification:6a815c79feca7c247c7a51d9:rejected"
+  },
+  {
+    "id": "28cf0d5a-370e-4cd9-a1cf-cb5a947a0a43",
+    "user_id": "6abd5e74897676fa05633e31",
+    "title": "Alumni verification rejected",
+    "message": "Your alumni account verification was rejected. Please review your submitted information and contact the administrator if clarification is required.",
+    "is_read": false,
+    "created_at": "2026-10-03T10:04:31.064045+00:00",
+    "type": "alumni_verification",
+    "entity_type": "alumni",
+    "entity_id": "6abd5e74897676fa05633e31",
+    "dedupe_key": "alumni_verification:6abd5e74897676fa05633e31:rejected"
+  },
+  {
+    "id": "2cd7560d-5717-4814-9b9d-e8e0c374f373",
+    "user_id": "6ac0d8a555d53a2d7d9af957",
+    "title": "Alumni verification approved",
+    "message": "Your alumni account has been verified. You can now access verified alumni features.",
+    "is_read": false,
+    "created_at": "2026-10-03T10:46:15.393176+00:00",
+    "type": "alumni_verification",
+    "entity_type": "alumni",
+    "entity_id": "6ac0d8a555d53a2d7d9af957",
+    "dedupe_key": "alumni_verification:6ac0d8a555d53a2d7d9af957:approved"
+  },
+  {
+    "id": "985e26a2-c604-4492-be9a-5169b0cc55bc",
+    "user_id": "6ac0d8a555d53a2d7d9af957",
+    "title": "Job submission received",
+    "message": "Your job posting \"Data analyst\" was submitted successfully and is pending administrator review.",
+    "is_read": false,
+    "created_at": "2026-10-03T10:48:21.473832+00:00",
+    "type": "job_submission",
+    "entity_type": "job",
+    "entity_id": "144d08a7-df03-499e-9e59-236b1c8ac85b",
+    "dedupe_key": "job_submission:144d08a7-df03-499e-9e59-236b1c8ac85b"
+  },
+  {
+    "id": "1148b57d-6618-440f-993c-81a6d5d7e588",
+    "user_id": "6ac0df2955d53a2d7d9af959",
+    "title": "Alumni verification approved",
+    "message": "Your alumni account has been verified. You can now access verified alumni features.",
+    "is_read": false,
+    "created_at": "2026-10-03T10:58:02.295468+00:00",
+    "type": "alumni_verification",
+    "entity_type": "alumni",
+    "entity_id": "6ac0df2955d53a2d7d9af959",
+    "dedupe_key": "alumni_verification:6ac0df2955d53a2d7d9af959:approved"
+  },
+  {
+    "id": "25c4a83a-7e9c-4eea-9c75-e7b236e321ce",
+    "user_id": "6ac0df2955d53a2d7d9af959",
+    "title": "Job submission received",
+    "message": "Your job posting \"Software Engineer\" was submitted successfully and is pending administrator review.",
+    "is_read": false,
+    "created_at": "2026-10-03T11:05:40.245668+00:00",
+    "type": "job_submission",
+    "entity_type": "job",
+    "entity_id": "1dd3b105-cbf0-44ee-b719-c119021fb8ef",
+    "dedupe_key": "job_submission:1dd3b105-cbf0-44ee-b719-c119021fb8ef"
+  },
+  {
+    "id": "228cde30-cded-4230-bacc-7aba0fd1b312",
+    "user_id": "6ac0df2955d53a2d7d9af959",
+    "title": "Job posting approved",
+    "message": "Your job posting \"Software Engineer\" has been approved and is now visible to users.",
+    "is_read": false,
+    "created_at": "2026-10-03T11:09:41.929971+00:00",
+    "type": "job_approval",
+    "entity_type": "job",
+    "entity_id": "1dd3b105-cbf0-44ee-b719-c119021fb8ef",
+    "dedupe_key": "job_approval:1dd3b105-cbf0-44ee-b719-c119021fb8ef"
+  },
+  {
+    "id": "47c1402f-8fbf-4099-a507-551b38199ed1",
+    "user_id": "6ac0d8a555d53a2d7d9af957",
+    "title": "Job posting rejected",
+    "message": "Your job posting \"Data analyst\" was not approved.",
+    "is_read": false,
+    "created_at": "2026-10-03T11:09:43.127453+00:00",
+    "type": "job_rejection",
+    "entity_type": "job",
+    "entity_id": "144d08a7-df03-499e-9e59-236b1c8ac85b",
+    "dedupe_key": "job_rejection:144d08a7-df03-499e-9e59-236b1c8ac85b"
+  }
+]

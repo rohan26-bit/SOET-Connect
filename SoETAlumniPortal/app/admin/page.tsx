@@ -41,16 +41,16 @@ export default function AdminDashboard() {
   return (
     <DashboardLayout>
       {/* Breadcrumbs */}
-      <div className="flex items-center text-xs font-semibold text-slate-400 mb-6 uppercase tracking-wider">
+      <div className="flex items-center text-xs font-semibold text-[#6B6B6B] mb-6 uppercase tracking-wider">
         <span>Administration</span>
-        <span className="mx-2 text-slate-300">/</span>
-        <span className="text-blue-600">Executive Overview</span>
+        <span className="mx-2 text-[#DDD7D2]">/</span>
+        <span className="text-[#F28C38]">Executive Overview</span>
       </div>
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">SOET Connect Admin Console</h1>
-          <p className="text-xs text-slate-500 mt-1">
+          <h1 className="text-2xl font-black text-[#4A3832] tracking-tight">SOET Connect Admin Console</h1>
+          <p className="text-xs text-[#6B6B6B] mt-1">
             Real-time platform metrics, verification queue, and moderations.
           </p>
         </div>
@@ -70,7 +70,7 @@ export default function AdminDashboard() {
           </div>
           <Link
             href="/admin/verify"
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow-md transition self-start sm:self-auto"
+            className="px-4 py-2 bg-[#F28C38] hover:bg-[#E07D2E] text-white text-xs font-bold rounded-xl shadow-md transition self-start sm:self-auto"
           >
             Review Queue →
           </Link>
@@ -81,29 +81,29 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         
         {/* Total Students */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col justify-between">
+        <div className="bg-white p-6 rounded-3xl border border-[#DDD7D2] shadow-sm flex flex-col justify-between">
           <div className="flex justify-between items-center mb-3">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Students</span>
-            <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
+            <span className="text-xs font-bold text-[#6B6B6B] uppercase tracking-wider">Students</span>
+            <div className="w-10 h-10 bg-[#F28C38]/10 text-[#F28C38] rounded-xl flex items-center justify-center">
               <GraduationCap className="w-5 h-5" />
             </div>
           </div>
           <div>
-            <div className="text-3xl font-black text-slate-900">{metrics.totalStudents}</div>
-            <p className="text-[11px] text-slate-500 mt-1">Enrolled & registered</p>
+            <div className="text-3xl font-black text-[#4A3832]">{metrics.totalStudents}</div>
+            <p className="text-[11px] text-[#6B6B6B] mt-1">Enrolled & registered</p>
           </div>
         </div>
 
         {/* Total Alumni */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col justify-between">
+        <div className="bg-white p-6 rounded-3xl border border-[#DDD7D2] shadow-sm flex flex-col justify-between">
           <div className="flex justify-between items-center mb-3">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Alumni</span>
-            <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
+            <span className="text-xs font-bold text-[#6B6B6B] uppercase tracking-wider">Total Alumni</span>
+            <div className="w-10 h-10 bg-[#4A3832]/10 text-[#4A3832] rounded-xl flex items-center justify-center">
               <Users className="w-5 h-5" />
             </div>
           </div>
           <div>
-            <div className="text-3xl font-black text-slate-900">{metrics.totalAlumni}</div>
+            <div className="text-3xl font-black text-[#4A3832]">{metrics.totalAlumni}</div>
             <p className="text-[11px] text-emerald-600 font-bold mt-1">
               {metrics.verifiedAlumni} Verified • {metrics.pendingAlumni} Pending
             </p>
@@ -111,16 +111,16 @@ export default function AdminDashboard() {
         </div>
 
         {/* Jobs Posted */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col justify-between">
+        <div className="bg-white p-6 rounded-3xl border border-[#DDD7D2] shadow-sm flex flex-col justify-between">
           <div className="flex justify-between items-center mb-3">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Jobs & Internships</span>
+            <span className="text-xs font-bold text-[#6B6B6B] uppercase tracking-wider">Jobs & Internships</span>
             <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
               <Briefcase className="w-5 h-5" />
             </div>
           </div>
           <div>
-            <div className="text-3xl font-black text-slate-900">{metrics.totalJobs}</div>
-            <p className="text-[11px] text-slate-500 mt-1">
+            <div className="text-3xl font-black text-[#4A3832]">{metrics.totalJobs}</div>
+            <p className="text-[11px] text-[#6B6B6B] mt-1">
               {metrics.pendingJobs > 0 ? (
                 <span className="text-amber-600 font-bold">{metrics.pendingJobs} Pending Approval</span>
               ) : (
@@ -131,16 +131,16 @@ export default function AdminDashboard() {
         </div>
 
         {/* Events */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col justify-between">
+        <div className="bg-white p-6 rounded-3xl border border-[#DDD7D2] shadow-sm flex flex-col justify-between">
           <div className="flex justify-between items-center mb-3">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Campus Events</span>
+            <span className="text-xs font-bold text-[#6B6B6B] uppercase tracking-wider">Campus Events</span>
             <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center">
               <Calendar className="w-5 h-5" />
             </div>
           </div>
           <div>
-            <div className="text-3xl font-black text-slate-900">{metrics.totalEvents}</div>
-            <p className="text-[11px] text-slate-500 mt-1">{metrics.totalRegistrations} total registrations</p>
+            <div className="text-3xl font-black text-[#4A3832]">{metrics.totalEvents}</div>
+            <p className="text-[11px] text-[#6B6B6B] mt-1">{metrics.totalRegistrations} total registrations</p>
           </div>
         </div>
 
@@ -151,54 +151,54 @@ export default function AdminDashboard() {
         
         <Link
           href="/admin/verify"
-          className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:border-blue-300 transition group flex flex-col justify-between"
+          className="bg-white p-6 rounded-3xl border border-[#DDD7D2] shadow-sm hover:shadow-md hover:border-[#F28C38]/40 transition group flex flex-col justify-between"
         >
           <div>
-            <div className="w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center mb-4">
+            <div className="w-10 h-10 bg-[#F28C38] text-white rounded-xl flex items-center justify-center mb-4 shadow-md shadow-[#F28C38]/20">
               <ShieldCheck className="w-5 h-5" />
             </div>
-            <h3 className="text-base font-bold text-slate-900">Alumni Verification</h3>
-            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+            <h3 className="text-base font-bold text-[#4A3832]">Alumni Verification</h3>
+            <p className="text-xs text-[#6B6B6B] mt-1 leading-relaxed">
               Verify credentials, batch graduation records, and authorize newly registered alumni.
             </p>
           </div>
-          <div className="mt-4 flex items-center text-xs font-bold text-blue-600 group-hover:translate-x-1 transition-transform">
+          <div className="mt-4 flex items-center text-xs font-bold text-[#F28C38] group-hover:translate-x-1 transition-transform">
             Open Queue →
           </div>
         </Link>
 
         <Link
           href="/admin/students"
-          className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:border-blue-300 transition group flex flex-col justify-between"
+          className="bg-white p-6 rounded-3xl border border-[#DDD7D2] shadow-sm hover:shadow-md hover:border-[#F28C38]/40 transition group flex flex-col justify-between"
         >
           <div>
-            <div className="w-10 h-10 bg-slate-900 text-white rounded-xl flex items-center justify-center mb-4">
+            <div className="w-10 h-10 bg-[#4A3832] text-white rounded-xl flex items-center justify-center mb-4 shadow-md shadow-[#4A3832]/20">
               <UserCheck className="w-5 h-5" />
             </div>
-            <h3 className="text-base font-bold text-slate-900">Students Management</h3>
-            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+            <h3 className="text-base font-bold text-[#4A3832]">Students Management</h3>
+            <p className="text-xs text-[#6B6B6B] mt-1 leading-relaxed">
               Browse student directory, check department enrollments, and manage account statuses.
             </p>
           </div>
-          <div className="mt-4 flex items-center text-xs font-bold text-blue-600 group-hover:translate-x-1 transition-transform">
+          <div className="mt-4 flex items-center text-xs font-bold text-[#F28C38] group-hover:translate-x-1 transition-transform">
             View Students →
           </div>
         </Link>
 
         <Link
           href="/admin/jobs"
-          className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:border-blue-300 transition group flex flex-col justify-between"
+          className="bg-white p-6 rounded-3xl border border-[#DDD7D2] shadow-sm hover:shadow-md hover:border-[#F28C38]/40 transition group flex flex-col justify-between"
         >
           <div>
-            <div className="w-10 h-10 bg-emerald-600 text-white rounded-xl flex items-center justify-center mb-4">
+            <div className="w-10 h-10 bg-emerald-600 text-white rounded-xl flex items-center justify-center mb-4 shadow-md shadow-emerald-600/20">
               <FileCheck className="w-5 h-5" />
             </div>
-            <h3 className="text-base font-bold text-slate-900">Job Approvals</h3>
-            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+            <h3 className="text-base font-bold text-[#4A3832]">Job Approvals</h3>
+            <p className="text-xs text-[#6B6B6B] mt-1 leading-relaxed">
               Moderate and approve career opportunities posted by alumni before they go live.
             </p>
           </div>
-          <div className="mt-4 flex items-center text-xs font-bold text-blue-600 group-hover:translate-x-1 transition-transform">
+          <div className="mt-4 flex items-center text-xs font-bold text-[#F28C38] group-hover:translate-x-1 transition-transform">
             Review Jobs →
           </div>
         </Link>

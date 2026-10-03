@@ -1,109 +1,167 @@
 import os
-import certifi
+import uuid
+
 from dotenv import load_dotenv
+from pymongo import MongoClient
+import certifi
+from pwdlib import PasswordHash
+
 
 load_dotenv()
 
-DATABASE_MODE = os.getenv("DATABASE_MODE", "atlas").lower()
+MONGODB_URL = os.getenv("MONGODB_URL")
+DATABASE_NAME = os.getenv("DATABASE_NAME")
+
+password_hash = PasswordHash.recommended()
 
 
-def get_database_config():
-    """Resolve and validate MongoDB configuration from environment variables.
+# ============================================================
+# LOCAL DEVELOPMENT FALLBACK
+# ============================================================
 
-    Returns:
-        dict with keys:
-            - 'mode': 'mock' or 'atlas'
-            - 'mongodb_url': connection URI string (or None in mock mode)
-            - 'database_name': database name string
-            - 'timeout_ms': serverSelectionTimeoutMS integer
-    """
-    mode = os.getenv("DATABASE_MODE", "atlas").lower()
+class LocalInsertResult:
+    def __init__(self, inserted_id):
+        self.inserted_id = inserted_id
 
-    if mode == "mock":
-        db_name = (
-            os.getenv("DATABASE_NAME", "").strip()
-            or os.getenv("MONGODB_DATABASE", "").strip()
-            or "soet_connect_test"
-        )
-        return {
-            "mode": "mock",
-            "mongodb_url": None,
-            "database_name": db_name,
-            "timeout_ms": 0,
-        }
 
-    # Normal / MongoDB Atlas production mode
-    mongodb_url = (
-        os.getenv("MONGODB_URL", "").strip()
-        or os.getenv("MONGODB_URI", "").strip()
+class LocalUsersCollection:
+    def __init__(self):
+        self.users = []
+
+        # Demo student account
+        self.users.append({
+            "_id": "demo-student-id",
+            "name": "Demo Student",
+            "email": "test@student.com",
+            "password_hash": password_hash.hash("Test@12345"),
+            "role": "student",
+            "is_active": True,
+            "is_verified": True,
+        })
+
+        # Demo alumni account
+        self.users.append({
+            "_id": "demo-alumni-id",
+            "name": "Demo Alumni",
+            "email": "test@alumni.com",
+            "password_hash": password_hash.hash("Test@12345"),
+            "role": "alumni",
+            "is_active": True,
+            "is_verified": True,
+            "verification_status": "approved",
+        })
+
+        # Demo admin account
+        self.users.append({
+            "_id": "demo-admin-id",
+            "name": "Demo Admin",
+            "email": "test@admin.com",
+            "password_hash": password_hash.hash("Test@12345"),
+            "role": "admin",
+            "is_active": True,
+            "is_verified": True,
+        })
+
+    def find_one(self, query):
+        for user in self.users:
+            if all(
+                user.get(key) == value
+                for key, value in query.items()
+            ):
+                return user
+
+        return None
+
+    def find(self, query):
+        results = []
+
+        for user in self.users:
+            matches = True
+
+            for key, value in query.items():
+                if user.get(key) != value:
+                    matches = False
+                    break
+
+            if matches:
+                results.append(user)
+
+        return results
+
+    def insert_one(self, document):
+        document["_id"] = str(uuid.uuid4())
+        self.users.append(document)
+
+        return LocalInsertResult(document["_id"])
+
+    def update_one(self, query, update):
+        for user in self.users:
+            matches = all(
+                user.get(key) == value
+                for key, value in query.items()
+            )
+
+            if matches:
+                if "$set" in update:
+                    for key, value in update["$set"].items():
+                        user[key] = value
+
+                return True
+
+        return False
+
+
+# ============================================================
+# MONGODB CONNECTION
+# ============================================================
+
+mongo_available = False
+client = None
+database = None
+
+try:
+    if not MONGODB_URL:
+        raise ValueError("MONGODB_URL is not set in .env")
+
+    if not DATABASE_NAME:
+        raise ValueError("DATABASE_NAME is not set in .env")
+
+    client = MongoClient(
+        MONGODB_URL,
+        tls=True,
+        tlsCAFile=certifi.where(),
+        serverSelectionTimeoutMS=3000,
+        connectTimeoutMS=3000,
+        socketTimeoutMS=3000,
     )
-    database_name = (
-        os.getenv("DATABASE_NAME", "").strip()
-        or os.getenv("MONGODB_DATABASE", "").strip()
-    )
 
-    if not mongodb_url or mongodb_url == "YOUR_MONGODB_CONNECTION_STRING":
-        raise ValueError(
-            "MongoDB connection URI is not configured. Set MONGODB_URL (or MONGODB_URI) in your .env file."
-        )
+    client.admin.command("ping")
 
-    if not database_name or database_name == "YOUR_DATABASE_NAME":
-        raise ValueError(
-            "MongoDB database name is not configured. Set DATABASE_NAME (or MONGODB_DATABASE) in your .env file."
-        )
-
-    try:
-        timeout_ms = int(os.getenv("MONGODB_TIMEOUT_MS", "5000"))
-    except ValueError:
-        timeout_ms = 5000
-
-    return {
-        "mode": "atlas",
-        "mongodb_url": mongodb_url,
-        "database_name": database_name,
-        "timeout_ms": timeout_ms,
-    }
-
-
-_config = get_database_config()
-
-if _config["mode"] == "mock":
-    # ---- Mock mode: use mongomock (no real MongoDB needed) ----
-    import mongomock
-
-    client = mongomock.MongoClient()
-    DATABASE_NAME = _config["database_name"]
     database = client[DATABASE_NAME]
-else:
-    # ---- Production mode: real MongoDB Atlas ----
-    from pymongo import MongoClient
+    users_collection = database["users"]
 
-    MONGODB_URL = _config["mongodb_url"]
-    DATABASE_NAME = _config["database_name"]
-    timeout_ms = _config["timeout_ms"]
+    mongo_available = True
 
-    client_kwargs = {
-        "serverSelectionTimeoutMS": timeout_ms,
-        "tlsCAFile": certifi.where(),
-    }
+    print("MongoDB: CONNECTED")
 
-    if (
-        MONGODB_URL.startswith("mongodb+srv://")
-        or "tls=true" in MONGODB_URL.lower()
-        or "ssl=true" in MONGODB_URL.lower()
-    ):
-        client_kwargs["tls"] = True
+except Exception as e:
+    print("MongoDB unavailable - using LOCAL DEVELOPMENT DATABASE")
+    print("MongoDB error:", e)
 
-    client = MongoClient(MONGODB_URL, **client_kwargs)
-    database = client[DATABASE_NAME]
+    users_collection = LocalUsersCollection()
 
-users_collection = database["users"]
 
+# ============================================================
+# DATABASE HEALTH CHECK
+# ============================================================
 
 def test_database_connection():
-    try:
-        client.admin.command("ping")
-        return True
-    except Exception as e:
-        print(f"MONGODB CONNECTION ERROR: {type(e).__name__} - {e}")
-        return False
+    if mongo_available:
+        try:
+            client.admin.command("ping")
+            return True
+        except Exception as e:
+            print("MONGODB ERROR:", e)
+            return False
+
+    return False

@@ -91,7 +91,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-500 font-medium">
+      <div className="min-h-screen flex items-center justify-center bg-[#F7F4EF] text-[#6B5147] font-medium">
         Loading SOET Portal...
       </div>
     );
@@ -108,7 +108,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const renderNavLinks = (onItemClick?: () => void) => (
     <div className="flex-1 overflow-y-auto px-4 py-6 dark-scrollbar">
-      <p className="text-xs font-semibold text-gray-500 mb-4 px-2 tracking-wider uppercase">Main Menu</p>
+      <p className="text-xs font-semibold text-[#DDD7D2]/60 mb-4 px-2 tracking-wider uppercase">Main Menu</p>
       <nav className="space-y-1">
         {navItems.map((item) => {
           const isActive = pathname === item.href;
@@ -118,17 +118,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               href={item.href}
               onClick={onItemClick}
               className={`flex items-center px-3 py-2.5 rounded-xl transition-all duration-150 ${
-                isActive ? 'bg-blue-600 text-white font-semibold shadow-md shadow-blue-600/20' : 'hover:bg-gray-800 hover:text-white text-gray-300'
+                isActive ? 'bg-[#F28C38] text-white font-semibold shadow-md shadow-[#F28C38]/20' : 'hover:bg-[#5A453D] hover:text-white text-gray-200'
               }`}
             >
-              <item.icon className={`w-5 h-5 mr-3 ${isActive ? 'text-white' : 'text-gray-400'}`} />
+              <item.icon className={`w-5 h-5 mr-3 ${isActive ? 'text-white' : 'text-[#DDD7D2]'}`} />
               {item.name}
             </Link>
           );
         })}
       </nav>
 
-      <p className="text-xs font-semibold text-gray-500 mt-8 mb-4 px-2 tracking-wider uppercase">Preferences</p>
+      <p className="text-xs font-semibold text-[#DDD7D2]/60 mt-8 mb-4 px-2 tracking-wider uppercase">Preferences</p>
       <nav className="space-y-1">
         {moreItems.map((item) => {
           const isActive = pathname === item.href;
@@ -138,10 +138,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               href={item.href}
               onClick={onItemClick}
               className={`flex items-center px-3 py-2.5 rounded-xl transition-all duration-150 ${
-                isActive ? 'bg-blue-600 text-white font-semibold shadow-md shadow-blue-600/20' : 'hover:bg-gray-800 hover:text-white text-gray-300'
+                isActive ? 'bg-[#F28C38] text-white font-semibold shadow-md shadow-[#F28C38]/20' : 'hover:bg-[#5A453D] hover:text-white text-gray-200'
               }`}
             >
-              <item.icon className={`w-5 h-5 mr-3 ${isActive ? 'text-white' : 'text-gray-400'}`} />
+              <item.icon className={`w-5 h-5 mr-3 ${isActive ? 'text-white' : 'text-[#DDD7D2]'}`} />
               {item.name}
             </Link>
           );
@@ -151,18 +151,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 
   const renderUserProfile = (onSignOutClick?: () => void) => (
-    <div className="p-4 bg-[#080F1E] border-t border-gray-800 shrink-0">
+    <div className="p-4 bg-[#3D2E28] border-t border-[#6B5147] shrink-0">
       <div className="flex items-center mb-3">
         {user?.avatar_url ? (
-          <img src={user.avatar_url} alt={userName} className="w-10 h-10 rounded-full object-cover mr-3 border border-gray-700" />
+          <img src={user.avatar_url} alt={userName} className="w-10 h-10 rounded-full object-cover mr-3 border border-[#6B5147]" />
         ) : (
-          <div className="w-10 h-10 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold mr-3 shadow">
+          <div className="w-10 h-10 bg-gradient-to-tr from-[#F28C38] to-[#F6A15A] rounded-full flex items-center justify-center text-white font-bold mr-3 shadow">
             {userInitials}
           </div>
         )}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-white leading-tight truncate">{userName}</p>
-          <p className="text-xs text-gray-400 truncate">{userEmail}</p>
+          <p className="text-xs text-[#DDD7D2]/70 truncate">{userEmail}</p>
         </div>
       </div>
       <button
@@ -179,7 +179,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
+    <div className="flex h-screen bg-[#F7F4EF] overflow-hidden font-sans">
       {/* Mobile Navigation Drawer & Backdrop */}
       {isMobileNavOpen && (
         <div
@@ -196,22 +196,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           />
 
           {/* Drawer */}
-          <div className="relative w-72 max-w-[85vw] bg-[#0B1528] text-gray-300 flex flex-col h-full shadow-2xl z-10">
+          <div className="relative w-72 max-w-[85vw] bg-[#4A3832] text-gray-200 flex flex-col h-full shadow-2xl z-10">
             {/* Header / Logo + Close Button */}
-            <div className="h-16 flex items-center justify-between px-6 border-b border-gray-800 shrink-0">
+            <div className="h-16 flex items-center justify-between px-6 border-b border-[#6B5147] shrink-0">
               <div className="flex items-center">
-                <div className="w-8 h-8 bg-blue-600 rounded-md flex items-center justify-center text-white font-bold mr-3 shadow-md shadow-blue-600/30">
-                  SOET
+                <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center p-1 mr-3 shadow-md shrink-0">
+                  <img
+                    src="/mgm-university-logo.svg"
+                    alt="MGM University Logo"
+                    className="w-full h-full object-contain"
+                  />
                 </div>
                 <div>
                   <h1 className="text-white font-bold leading-tight tracking-wide">Alumni Portal</h1>
-                  <p className="text-xs text-blue-400 font-medium uppercase tracking-wider">{user?.role || 'Student'}</p>
+                  <p className="text-xs text-[#F6A15A] font-medium uppercase tracking-wider">{user?.role || 'Student'}</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsMobileNavOpen(false)}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="p-1.5 rounded-lg text-gray-300 hover:text-white hover:bg-[#5A453D] focus:outline-none focus:ring-2 focus:ring-[#F28C38]"
                 aria-label="Close navigation"
               >
                 <X className="w-5 h-5" />
@@ -228,15 +232,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       )}
 
       {/* Desktop Sidebar */}
-      <aside className="w-64 bg-[#0B1528] text-gray-300 flex-col hidden md:flex shrink-0 h-full">
+      <aside className="w-64 bg-[#4A3832] text-gray-200 flex-col hidden md:flex shrink-0 h-full">
         {/* Logo */}
-        <div className="h-16 flex items-center px-6 border-b border-gray-800 shrink-0">
-          <div className="w-8 h-8 bg-blue-600 rounded-md flex items-center justify-center text-white font-bold mr-3 shadow-md shadow-blue-600/30">
-            SOET
+        <div className="h-16 flex items-center px-6 border-b border-[#6B5147] shrink-0">
+          <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center p-1 mr-3 shadow-md shrink-0">
+            <img
+              src="/mgm-university-logo.svg"
+              alt="MGM University Logo"
+              className="w-full h-full object-contain"
+            />
           </div>
           <div>
             <h1 className="text-white font-bold leading-tight tracking-wide">Alumni Portal</h1>
-            <p className="text-xs text-blue-400 font-medium uppercase tracking-wider">{user?.role || 'Student'}</p>
+            <p className="text-xs text-[#F6A15A] font-medium uppercase tracking-wider">{user?.role || 'Student'}</p>
           </div>
         </div>
 
@@ -250,38 +258,38 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* Top Header */}
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-8 shrink-0">
+        <header className="h-16 bg-white border-b border-[#DDD7D2] flex items-center justify-between px-4 sm:px-8 shrink-0">
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
-              className="md:hidden p-2 -ml-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="md:hidden p-2 -ml-2 rounded-lg text-[#4A3832] hover:text-[#222222] hover:bg-[#F7F4EF] focus:outline-none focus:ring-2 focus:ring-[#F28C38]"
               aria-label={isMobileNavOpen ? "Close navigation" : "Open navigation"}
               aria-expanded={isMobileNavOpen}
             >
               {isMobileNavOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
-            <span className="font-semibold text-gray-800 text-sm">SOET Connect</span>
+            <span className="font-semibold text-[#4A3832] text-sm">SOET Connect</span>
           </div>
           <div className="flex items-center space-x-4 sm:space-x-6">
-            <Link href="/student/notifications" className="text-gray-500 hover:text-gray-700 relative p-1" aria-label="Notifications">
+            <Link href="/student/notifications" className="text-[#6B6B6B] hover:text-[#4A3832] relative p-1" aria-label="Notifications">
               <Bell className="w-5 h-5" />
             </Link>
-            <div className="flex items-center space-x-2 border-l border-gray-200 pl-4 sm:pl-6">
+            <div className="flex items-center space-x-2 border-l border-[#DDD7D2] pl-4 sm:pl-6">
               {user?.avatar_url ? (
-                <img src={user.avatar_url} alt={userName} className="w-8 h-8 rounded-full object-cover border border-gray-200" />
+                <img src={user.avatar_url} alt={userName} className="w-8 h-8 rounded-full object-cover border border-[#DDD7D2]" />
               ) : (
-                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-sm">
+                <div className="w-8 h-8 bg-[#F28C38] rounded-full flex items-center justify-center text-white font-bold text-xs shadow-sm">
                   {userInitials}
                 </div>
               )}
-              <span className="text-sm font-semibold text-gray-800">{firstName}</span>
+              <span className="text-sm font-semibold text-[#4A3832]">{firstName}</span>
             </div>
           </div>
         </header>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-8 light-scrollbar bg-[#F8FAFC]">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-8 light-scrollbar bg-[#F7F4EF]">
           {children}
         </div>
       </main>
