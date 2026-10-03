@@ -183,7 +183,7 @@ export const authService = {
     fullName: string;
     email: string;
     password: string;
-    alumniId?: string;
+    alumniId: string;
     department: string;
     degree?: string;
     graduationYear: string;
