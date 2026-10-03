@@ -1,19 +1,17 @@
 from datetime import datetime, timezone
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from database import supabase
 from security.dependencies import get_current_user
-import services.notifications
 from services.notifications import (
-    NOTIFICATION_TYPES,
-    NOTIFICATIONS_FILE,
+    load_notifications,
     create_notification,
     create_notification_once,
     create_notifications_for_users,
-    load_notifications,
-    save_notifications,
+    NOTIFICATION_TYPES,
 )
+
 
 router = APIRouter(
     prefix="/notifications",
@@ -60,17 +58,20 @@ def mark_notification_read(
 
     for n in notifications:
         if str(n.get("id")) == str(notification_id):
-            # Ownership check — users can only touch their own
             if str(n.get("user_id")) != user_id:
                 raise HTTPException(
                     status_code=403,
                     detail="You can only modify your own notifications."
                 )
 
-            n["is_read"] = True
-            n["read_at"] = datetime.now(timezone.utc).isoformat()
+            now_iso = datetime.now(timezone.utc).isoformat()
+            supabase.table("notifications").update({
+                "is_read": True,
+                "read_at": now_iso
+            }).eq("id", str(notification_id)).execute()
 
-            save_notifications(notifications)
+            n["is_read"] = True
+            n["read_at"] = now_iso
 
             return {
                 "message": "Notification marked as read.",
@@ -94,18 +95,20 @@ def mark_all_notifications_read(
     user_id = str(current_user.get("user_id"))
     notifications = load_notifications()
 
-    updated_count = 0
-    now = datetime.now(timezone.utc).isoformat()
+    user_notifs = [n for n in notifications if str(n.get("user_id")) == user_id and not n.get("is_read")]
+    now_iso = datetime.now(timezone.utc).isoformat()
 
-    for n in notifications:
-        if str(n.get("user_id")) == user_id and not n.get("is_read"):
-            n["is_read"] = True
-            n["read_at"] = now
-            updated_count += 1
+    if user_notifs:
+        supabase.table("notifications").update({
+            "is_read": True,
+            "read_at": now_iso
+        }).eq("user_id", user_id).execute()
 
-    save_notifications(notifications)
+    for n in user_notifs:
+        n["is_read"] = True
+        n["read_at"] = now_iso
 
     return {
-        "message": f"{updated_count} notification(s) marked as read.",
-        "updated_count": updated_count,
+        "message": f"Marked {len(user_notifs)} notifications as read.",
+        "updated_count": len(user_notifs),
     }

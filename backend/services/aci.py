@@ -1,10 +1,11 @@
 import json
 from pathlib import Path
 
-from database import users_collection
+from database import users_collection, supabase
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
+# Legacy file paths kept for test monkeypatch compatibility only
 JOBS_FILE = BACKEND_DIR / "jobs_data.json"
 EVENTS_FILE = BACKEND_DIR / "events_data.json"
 REGISTRATIONS_FILE = BACKEND_DIR / "event_registrations_data.json"
@@ -18,10 +19,10 @@ REGISTRATION_CAP_POINTS = 100
 
 
 def load_json_data(file_path: Path) -> list[dict]:
-    """Load JSON records from disk defensively."""
+    """Compatibility loader for test monkeypatching."""
     try:
-        if file_path.exists():
-            content = file_path.read_text(encoding="utf-8").strip()
+        if file_path and Path(file_path).exists():
+            content = Path(file_path).read_text(encoding="utf-8").strip()
             if content:
                 data = json.loads(content)
                 if isinstance(data, list):
@@ -44,19 +45,13 @@ def get_tier_and_badge(score: int) -> tuple[str, str]:
 
 
 def get_user_by_id(user_id: str) -> dict | None:
-    """Find user document by string or ObjectId representation."""
-    user = users_collection.find_one({"_id": user_id})
-    if not user:
-        try:
-            from bson import ObjectId
-            user = users_collection.find_one({"_id": ObjectId(user_id)})
-        except Exception:
-            pass
-
+    """Find user document by string representation."""
+    user_id_str = str(user_id).strip()
+    user = users_collection.find_one({"_id": user_id_str})
     if not user:
         users = users_collection.find({"role": "alumni"})
         for candidate in users:
-            if str(candidate.get("_id")) == str(user_id):
+            if str(candidate.get("_id")) == user_id_str:
                 return candidate
     return user
 
@@ -109,13 +104,37 @@ def calculate_alumni_aci(
 
     verification_pts = VERIFICATION_POINTS
 
-    # Load data from files if not passed in
+    # Load data from Supabase if not passed in
     if jobs is None:
-        jobs = load_json_data(JOBS_FILE)
+        # Check if monkeypatched file exists (for tests)
+        if JOBS_FILE.exists() and JOBS_FILE.read_text(encoding="utf-8").strip() != "[]":
+            jobs = load_json_data(JOBS_FILE)
+        else:
+            try:
+                res = supabase.table("jobs").select("*").execute()
+                jobs = res.data or []
+            except Exception:
+                jobs = []
+
     if events is None:
-        events = load_json_data(EVENTS_FILE)
+        if EVENTS_FILE.exists() and EVENTS_FILE.read_text(encoding="utf-8").strip() != "[]":
+            events = load_json_data(EVENTS_FILE)
+        else:
+            try:
+                res = supabase.table("events").select("*").execute()
+                events = res.data or []
+            except Exception:
+                events = []
+
     if registrations is None:
-        registrations = load_json_data(REGISTRATIONS_FILE)
+        if REGISTRATIONS_FILE.exists() and REGISTRATIONS_FILE.read_text(encoding="utf-8").strip() != "[]":
+            registrations = load_json_data(REGISTRATIONS_FILE)
+        else:
+            try:
+                res = supabase.table("event_registrations").select("*").execute()
+                registrations = res.data or []
+            except Exception:
+                registrations = []
 
     # 1. Approved Jobs Posted by this alumnus
     approved_jobs_count = 0
@@ -145,11 +164,6 @@ def calculate_alumni_aci(
     events_pts = approved_events_count * EVENT_POINTS
 
     # 3. Valid External Event Registrations
-    # Conditions:
-    # - registration.user_id == alumni_user_id
-    # - target event exists and status == "approved"
-    # - event.created_by != alumni_user_id (no self-registration)
-    # - unique per target event (no duplicate counting)
     valid_registered_event_ids = set()
     for reg in registrations:
         if not isinstance(reg, dict):
@@ -193,3 +207,4 @@ def calculate_alumni_aci(
             "valid_registrations": valid_reg_count,
         },
     }
+

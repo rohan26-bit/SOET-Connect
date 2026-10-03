@@ -1,11 +1,3 @@
-try:
-    from bson import ObjectId
-except ImportError:
-    class ObjectId:
-        @staticmethod
-        def is_valid(val):
-            return False
-
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -17,20 +9,11 @@ security = HTTPBearer(auto_error=False)
 
 
 def get_user_by_id(user_id: str) -> dict | None:
-    """Find a user by BSON ObjectId or string _id using indexed lookups."""
+    """Find a user by ID string in Supabase PostgreSQL."""
     if not user_id:
         return None
 
     user_id_str = str(user_id).strip()
-
-    if ObjectId.is_valid(user_id_str):
-        try:
-            user = users_collection.find_one({"_id": ObjectId(user_id_str)})
-            if user:
-                return user
-        except Exception:
-            pass
-
     try:
         return users_collection.find_one({"_id": user_id_str})
     except Exception:
@@ -67,3 +50,4 @@ def get_current_user(
         "user_id": str(user["_id"]),
         "role": user.get("role", payload.get("role")),
     }
+

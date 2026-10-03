@@ -1,13 +1,10 @@
-import os
 from datetime import datetime, timezone
-import json
 import uuid
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from database import users_collection
+from database import users_collection, supabase
 from security.dependencies import get_current_user
 from services.notifications import NOTIFICATION_TYPES, create_notification_once
 
@@ -15,11 +12,6 @@ from services.notifications import NOTIFICATION_TYPES, create_notification_once
 router = APIRouter(
     prefix="/announcements",
     tags=["Announcements"]
-)
-
-
-ANNOUNCEMENTS_FILE = (
-    Path(__file__).resolve().parent.parent / "announcements_data.json"
 )
 
 
@@ -51,31 +43,13 @@ class AnnouncementUpdateRequest(BaseModel):
 # ============================================================
 
 def load_announcements() -> list[dict]:
-    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
-        try:
-            from database_supabase import supabase
-            res = supabase.table("announcements").select("*").order("created_at", desc=True).execute()
-            return res.data or []
-        except Exception as e:
-            print("Error loading announcements from Supabase:", e)
-            return []
-
+    """Load announcements directly from Supabase PostgreSQL."""
     try:
-        if ANNOUNCEMENTS_FILE.exists():
-            return json.loads(
-                ANNOUNCEMENTS_FILE.read_text(encoding="utf-8")
-            )
-    except Exception:
-        pass
-
-    return []
-
-
-def save_announcements(announcements: list[dict]):
-    ANNOUNCEMENTS_FILE.write_text(
-        json.dumps(announcements, indent=2),
-        encoding="utf-8"
-    )
+        res = supabase.table("announcements").select("*").order("created_at", desc=True).execute()
+        return res.data or []
+    except Exception as e:
+        print("Error loading announcements from Supabase:", e)
+        return []
 
 
 def _audience_visible_to_role(target_audience: str, role: str) -> bool:
@@ -89,7 +63,6 @@ def _audience_visible_to_role(target_audience: str, role: str) -> bool:
     if target_audience == "alumni" and role == "alumni":
         return True
 
-    # Admin sees everything
     if role == "admin":
         return True
 
@@ -107,11 +80,9 @@ def get_announcements(
     role = current_user.get("role")
     announcements = load_announcements()
 
-    # Admin sees all announcements
     if role == "admin":
         return announcements
 
-    # Other users see only announcements targeting their role or "all"
     return [
         ann for ann in announcements
         if _audience_visible_to_role(ann.get("target_audience", "all"), role)
@@ -142,31 +113,26 @@ def create_announcement(
             )
         )
 
-    announcement = {
-        "id": str(uuid.uuid4()),
+    ann_id = str(uuid.uuid4())
+    author_id = str(current_user.get("user_id"))
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    ann_row = {
+        "id": ann_id,
+        "author_id": author_id,
         "title": body.title,
         "content": body.content,
         "target_audience": body.target_audience,
-        "created_by": str(current_user.get("user_id")),
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": now_iso,
+        "updated_at": now_iso,
     }
 
-    announcements = load_announcements()
-    announcements.append(announcement)
-    save_announcements(announcements)
+    supabase.table("announcements").insert(ann_row).execute()
 
-    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
-        try:
-            from database_supabase import supabase
-            supabase.table("announcements").insert({
-                "id": str(announcement["id"]),
-                "author_id": str(announcement["created_by"]) if announcement.get("created_by") else None,
-                "title": announcement["title"],
-                "content": announcement["content"],
-                "target_audience": announcement.get("target_audience", "all"),
-            }).execute()
-        except Exception as e:
-            print("Error persisting announcement to Supabase:", e)
+    announcement = {
+        **ann_row,
+        "created_by": author_id,
+    }
 
     # Broadcast notifications to eligible active users
     try:
@@ -224,57 +190,42 @@ def update_announcement(
             detail="Only admin users can update announcements."
         )
 
-    # Validate target_audience if provided
-    if body.target_audience is not None:
-        if body.target_audience not in VALID_AUDIENCES:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"Invalid target audience. Must be one of: "
-                    f"{', '.join(sorted(VALID_AUDIENCES))}."
-                )
+    if body.target_audience is not None and body.target_audience not in VALID_AUDIENCES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid target audience. Must be one of: "
+                f"{', '.join(sorted(VALID_AUDIENCES))}."
             )
+        )
 
-    announcements = load_announcements()
+    res = supabase.table("announcements").select("*").eq("id", str(announcement_id)).limit(1).execute()
+    if not res.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Announcement not found."
+        )
 
-    for ann in announcements:
-        if str(ann.get("id")) == str(announcement_id):
-            update_data = body.model_dump(exclude_none=True)
+    ann = res.data[0]
+    update_data = body.model_dump(exclude_none=True)
+    if not update_data:
+        raise HTTPException(
+            status_code=400,
+            detail="No changes were provided."
+        )
 
-            if not update_data:
-                raise HTTPException(
-                    status_code=400,
-                    detail="No changes were provided."
-                )
+    now_iso = datetime.now(timezone.utc).isoformat()
+    db_updates = {**update_data, "updated_at": now_iso}
 
-            for key, value in update_data.items():
-                ann[key] = value
+    supabase.table("announcements").update(db_updates).eq("id", str(announcement_id)).execute()
 
-            ann["updated_at"] = datetime.now(timezone.utc).isoformat()
+    ann.update(db_updates)
+    ann["created_by"] = str(ann.get("author_id", ""))
 
-            save_announcements(announcements)
-
-            if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
-                try:
-                    from database_supabase import supabase
-                    supabase.table("announcements").update({
-                        "title": ann["title"],
-                        "content": ann["content"],
-                        "target_audience": ann["target_audience"],
-                        "updated_at": datetime.now(timezone.utc).isoformat(),
-                    }).eq("id", str(announcement_id)).execute()
-                except Exception as e:
-                    print("Error updating announcement in Supabase:", e)
-
-            return {
-                "message": "Announcement updated successfully.",
-                "announcement": ann,
-            }
-
-    raise HTTPException(
-        status_code=404,
-        detail="Announcement not found."
-    )
+    return {
+        "message": "Announcement updated successfully.",
+        "announcement": ann,
+    }
 
 
 # ============================================================
@@ -292,26 +243,18 @@ def delete_announcement(
             detail="Only admin users can delete announcements."
         )
 
-    announcements = load_announcements()
+    res = supabase.table("announcements").select("*").eq("id", str(announcement_id)).limit(1).execute()
+    if not res.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Announcement not found."
+        )
 
-    for index, ann in enumerate(announcements):
-        if str(ann.get("id")) == str(announcement_id):
-            deleted = announcements.pop(index)
-            save_announcements(announcements)
+    deleted = res.data[0]
+    supabase.table("announcements").delete().eq("id", str(announcement_id)).execute()
 
-            if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
-                try:
-                    from database_supabase import supabase
-                    supabase.table("announcements").delete().eq("id", str(announcement_id)).execute()
-                except Exception as e:
-                    print("Error deleting announcement from Supabase:", e)
+    return {
+        "message": "Announcement deleted successfully.",
+        "announcement": deleted,
+    }
 
-            return {
-                "message": "Announcement deleted successfully.",
-                "announcement": deleted,
-            }
-
-    raise HTTPException(
-        status_code=404,
-        detail="Announcement not found."
-    )

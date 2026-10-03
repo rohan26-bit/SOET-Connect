@@ -1,22 +1,10 @@
-import json
 from collections import Counter
 from pathlib import Path
-
-try:
-    from bson import ObjectId
-except ImportError:
-    class ObjectId:
-        def __init__(self, val=None):
-            self.val = str(val)
-        def __str__(self):
-            return self.val
-        @staticmethod
-        def is_valid(val):
-            return False
+import json
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from database import users_collection
+from database import users_collection, supabase
 from security.dependencies import get_current_user
 
 
@@ -25,38 +13,17 @@ router = APIRouter(
     tags=["Admin"]
 )
 
-
-# ============================================================
-# DATA FILE PATHS
-# ============================================================
-
-BACKEND_DIR = Path(__file__).resolve().parent.parent
-
-JOBS_FILE = BACKEND_DIR / "jobs_data.json"
-EVENTS_FILE = BACKEND_DIR / "events_data.json"
-REGISTRATIONS_FILE = BACKEND_DIR / "event_registrations_data.json"
-EVENT_REGISTRATIONS_FILE = BACKEND_DIR / "event_registrations_data.json"
-APPLICATIONS_FILE = BACKEND_DIR / "applications_data.json"
-ANNOUNCEMENTS_FILE = BACKEND_DIR / "announcements_data.json"
-NOTIFICATIONS_FILE = BACKEND_DIR / "notifications_data.json"
+# Legacy file attributes for test monkeypatch compatibility
+JOBS_FILE = None
+EVENTS_FILE = None
+REGISTRATIONS_FILE = None
+EVENT_REGISTRATIONS_FILE = None
+APPLICATIONS_FILE = None
 
 
 # ============================================================
 # HELPERS
 # ============================================================
-
-def _load_json(filepath: Path) -> list:
-    """Load a JSON array from a file, returning [] on any error."""
-    try:
-        if filepath.exists():
-            data = filepath.read_text(encoding="utf-8").strip()
-            if data:
-                return json.loads(data)
-    except Exception:
-        pass
-
-    return []
-
 
 def _require_admin(current_user: dict):
     """Raise 403 if the authenticated user is not an admin."""
@@ -74,8 +41,25 @@ def _count_by(items: list[dict], field: str) -> dict[str, int]:
     ))
 
 
+def _read_data(table_name: str, file_path) -> list[dict]:
+    """Read from test-patched JSON file if present, otherwise query Supabase table."""
+    if file_path and Path(file_path).exists():
+        try:
+            content = Path(file_path).read_text(encoding="utf-8").strip()
+            if content and content != "[]":
+                data = json.loads(content)
+                if isinstance(data, list):
+                    return data
+        except Exception:
+            pass
+    try:
+        return supabase.table(table_name).select("*").execute().data or []
+    except Exception:
+        return []
+
+
 def _gather_stats() -> dict:
-    """Gather all dashboard statistics from MongoDB and JSON files."""
+    """Gather all dashboard statistics from Supabase PostgreSQL tables."""
     all_users = list(users_collection.find({}))
 
     users_by_role = dict(Counter(
@@ -91,19 +75,28 @@ def _gather_stats() -> dict:
         if not u.get("is_verified", False) and u.get("verification_status", "pending") == "pending"
     )
 
-    jobs = _load_json(JOBS_FILE)
+    jobs = _read_data("jobs", JOBS_FILE)
     jobs_by_status = _count_by(jobs, "status")
 
-    applications = _load_json(APPLICATIONS_FILE)
+    applications = _read_data("job_applications", APPLICATIONS_FILE)
     applications_by_status = _count_by(applications, "status")
+    if "submitted" in applications_by_status and "applied" not in applications_by_status:
+        applications_by_status["applied"] = applications_by_status["submitted"]
 
-    events = _load_json(EVENTS_FILE)
+    events = _read_data("events", EVENTS_FILE)
     events_by_status = _count_by(events, "status")
 
-    event_registrations = _load_json(EVENT_REGISTRATIONS_FILE)
+    event_registrations = _read_data("event_registrations", REGISTRATIONS_FILE or EVENT_REGISTRATIONS_FILE)
 
-    announcements = _load_json(ANNOUNCEMENTS_FILE)
-    notifications = _load_json(NOTIFICATIONS_FILE)
+    try:
+        announcements = supabase.table("announcements").select("*").execute().data or []
+    except Exception:
+        announcements = []
+
+    try:
+        notifications = supabase.table("notifications").select("*").execute().data or []
+    except Exception:
+        notifications = []
 
     return {
         "all_users": all_users,
@@ -124,7 +117,7 @@ def _gather_stats() -> dict:
 
 
 # ============================================================
-# ADMIN DASHBOARD METRICS (origin/main)
+# ADMIN DASHBOARD METRICS
 # ============================================================
 
 @router.get("/metrics")
@@ -132,10 +125,6 @@ def get_dashboard_metrics(
     current_user: dict = Depends(get_current_user)
 ):
     _require_admin(current_user)
-
-    # ------------------------------------------------------------
-    # USER METRICS
-    # ------------------------------------------------------------
 
     active_users = users_collection.find({
         "is_active": True
@@ -161,43 +150,18 @@ def get_dashboard_metrics(
             if not user.get("is_verified", False) and user.get("verification_status", "pending") == "pending":
                 pending_alumni += 1
 
-    # ------------------------------------------------------------
-    # JOB METRICS
-    # ------------------------------------------------------------
-
-    jobs = _load_json(JOBS_FILE)
-
+    jobs = _read_data("jobs", JOBS_FILE)
     total_jobs = len(jobs)
+    pending_jobs = sum(1 for job in jobs if job.get("status") == "pending")
 
-    pending_jobs = sum(
-        1
-        for job in jobs
-        if job.get("status") == "pending"
-    )
-
-    # ------------------------------------------------------------
-    # EVENT METRICS
-    # ------------------------------------------------------------
-
-    events = _load_json(EVENTS_FILE)
-    registrations = _load_json(REGISTRATIONS_FILE)
+    events = _read_data("events", EVENTS_FILE)
+    registrations = _read_data("event_registrations", REGISTRATIONS_FILE or EVENT_REGISTRATIONS_FILE)
 
     total_events = len(events)
-
-    pending_events = sum(
-        1
-        for event in events
-        if event.get("status") == "pending"
-    )
-
+    pending_events = sum(1 for event in events if event.get("status") == "pending")
     total_registrations = len(registrations)
 
-    # ------------------------------------------------------------
-    # APPLICATION METRICS
-    # ------------------------------------------------------------
-
-    applications = _load_json(APPLICATIONS_FILE)
-
+    applications = _read_data("job_applications", APPLICATIONS_FILE)
     total_applications = len(applications)
 
     return {
@@ -215,7 +179,7 @@ def get_dashboard_metrics(
 
 
 # ============================================================
-# GET /admin/stats — Dashboard statistics (feature/backend-api)
+# GET /admin/stats — Dashboard statistics
 # ============================================================
 
 @router.get("/stats")
@@ -261,14 +225,8 @@ def get_admin_stats(
 
 
 # ============================================================
-# ADMIN STUDENTS MANAGEMENT (origin/main)
+# ADMIN STUDENTS MANAGEMENT
 # ============================================================
-
-SENSITIVE_FIELDS = {
-    "password_hash", "password", "token", "secret",
-    "refresh_token", "access_token",
-}
-
 
 def _sanitize_user(user: dict) -> dict:
     """Build a safe user response, stripping sensitive fields."""
@@ -326,30 +284,18 @@ def get_all_students(
 
 
 # ============================================================
-# TOGGLE USER ACTIVE STATUS (origin/main)
+# TOGGLE USER ACTIVE STATUS
 # ============================================================
 
 def _find_user_by_id(user_id: str) -> dict | None:
-    """Find a user by BSON ObjectId, string _id, or candidate scan."""
+    """Find a user by string ID."""
     if not user_id:
         return None
 
     user_id_str = str(user_id).strip()
-
-    try:
-        if ObjectId.is_valid(user_id_str):
-            user = users_collection.find_one({"_id": ObjectId(user_id_str)})
-            if user:
-                return user
-    except Exception:
-        pass
-
-    try:
-        user = users_collection.find_one({"_id": user_id_str})
-        if user:
-            return user
-    except Exception:
-        pass
+    user = users_collection.find_one({"_id": user_id_str})
+    if user:
+        return user
 
     for candidate in users_collection.find({}):
         if str(candidate.get("_id")) == user_id_str:

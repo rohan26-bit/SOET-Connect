@@ -1,25 +1,10 @@
-import os
 from datetime import datetime, timezone
-import json
 import uuid
-from pathlib import Path
-
-try:
-    from bson import ObjectId
-except ImportError:
-    class ObjectId:
-        def __init__(self, val=None):
-            self.val = str(val)
-        def __str__(self):
-            return self.val
-        @staticmethod
-        def is_valid(val):
-            return False
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from database import users_collection
+from database import users_collection, supabase
 from security.dependencies import get_current_user
 from services.notifications import NOTIFICATION_TYPES, create_notification_once
 
@@ -29,8 +14,8 @@ router = APIRouter(
     tags=["Jobs"]
 )
 
-
-JOBS_FILE = Path(__file__).resolve().parent.parent / "jobs_data.json"
+# Legacy file attribute for test monkeypatch compatibility
+JOBS_FILE = None
 
 
 # ============================================================
@@ -59,59 +44,36 @@ class JobStatusRequest(BaseModel):
 # ============================================================
 
 def load_jobs() -> list[dict]:
-    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
-        try:
-            from database_supabase import supabase
-            res = supabase.table("jobs").select("*").order("created_at", desc=True).execute()
-            jobs = []
-            for row in res.data or []:
-                j = dict(row)
-                j["employment_type"] = row.get("job_type", "")
-                j["experience"] = row.get("experience_level", "")
-                j["salary"] = row.get("salary_range", "")
-                jobs.append(j)
-            return jobs
-        except Exception as e:
-            print("Error loading jobs from Supabase:", e)
-            return []
-
+    """Load jobs directly from Supabase PostgreSQL jobs table."""
     try:
-        if JOBS_FILE.exists():
-            return json.loads(
-                JOBS_FILE.read_text(encoding="utf-8")
-            )
-    except Exception:
-        pass
-
-    return []
-
-
-def save_jobs(jobs):
-    JOBS_FILE.write_text(
-        json.dumps(jobs, indent=2),
-        encoding="utf-8"
-    )
+        res = supabase.table("jobs").select("*").order("created_at", desc=True).execute()
+        jobs = []
+        for row in res.data or []:
+            j = dict(row)
+            j["employment_type"] = row.get("job_type", "")
+            j["experience"] = row.get("experience_level", "")
+            j["salary"] = row.get("salary_range", "")
+            if not j.get("poster_name") and j.get("posted_by"):
+                u = users_collection.find_one({"_id": str(j["posted_by"])})
+                if u:
+                    j["poster_name"] = u.get("name", "Alumni")
+            jobs.append(j)
+        return jobs
+    except Exception as e:
+        print("Error loading jobs from Supabase:", e)
+        return []
 
 
 def get_user_from_token(current_user: dict):
     user_id = current_user.get("user_id")
     role = current_user.get("role")
 
-    try:
-        user = users_collection.find_one({"_id": ObjectId(user_id)})
-        if user:
-            return user
-    except Exception:
-        pass
-
-    user = users_collection.find_one({"_id": user_id})
+    user = users_collection.find_one({"_id": str(user_id)})
     if user:
         return user
 
-    # Compatibility with MongoDB ObjectId/string IDs
     if role:
         users = users_collection.find({"role": role})
-
         for candidate in users:
             if str(candidate.get("_id")) == str(user_id):
                 return candidate
@@ -164,58 +126,50 @@ def create_job(
         else "pending"
     )
 
-    job_document = {
-        "id": str(uuid.uuid4()),
-        "posted_by": str(current_user.get("user_id")),
-        "poster_name": user.get("name", "Alumni"),
+    job_id = str(uuid.uuid4())
+    user_id = str(current_user.get("user_id"))
+    poster_name = user.get("name", "Alumni")
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    job_row = {
+        "id": job_id,
+        "posted_by": user_id,
         "title": job.title,
         "company": job.company,
-        "description": job.description,
         "location": job.location,
+        "job_type": job.employment_type,
+        "experience_level": job.experience,
+        "salary_range": job.salary,
+        "description": job.description,
+        "requirements": "",
+        "skills": job.skills or [],
+        "status": initial_status,
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+
+    supabase.table("jobs").insert(job_row).execute()
+
+    job_document = {
+        **job_row,
+        "poster_name": poster_name,
         "employment_type": job.employment_type,
         "experience": job.experience,
         "salary": job.salary,
-        "skills": job.skills,
         "application_url": job.application_url,
         "deadline": job.deadline,
-        "status": initial_status,
-        "created_at": datetime.now(timezone.utc).isoformat()
     }
-
-    jobs = load_jobs()
-    jobs.append(job_document)
-    save_jobs(jobs)
-
-    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
-        try:
-            from database_supabase import supabase
-            supabase.table("jobs").insert({
-                "id": str(job_document["id"]),
-                "posted_by": str(job_document["posted_by"]) if job_document.get("posted_by") else None,
-                "title": job_document.get("title", ""),
-                "company": job_document.get("company", ""),
-                "location": job_document.get("location", ""),
-                "job_type": job_document.get("employment_type", ""),
-                "experience_level": job_document.get("experience", ""),
-                "salary_range": job_document.get("salary", ""),
-                "description": job_document.get("description", ""),
-                "requirements": "",
-                "skills": job_document.get("skills", []),
-                "status": job_document.get("status", "pending"),
-            }).execute()
-        except Exception as e:
-            print("Error persisting job to Supabase:", e)
 
     if initial_status == "pending":
         try:
             create_notification_once(
-                user_id=str(job_document["posted_by"]),
+                user_id=user_id,
                 title="Job submission received",
                 message=f'Your job posting "{job.title}" was submitted successfully and is pending administrator review.',
                 notification_type=NOTIFICATION_TYPES["job_submission"],
                 entity_type="job",
-                entity_id=str(job_document["id"]),
-                dedupe_key=f"job_submission:{job_document['id']}",
+                entity_id=job_id,
+                dedupe_key=f"job_submission:{job_id}",
             )
         except Exception:
             pass
@@ -255,7 +209,6 @@ def get_my_jobs(
     current_user: dict = Depends(get_current_user)
 ):
     user_id = str(current_user.get("user_id"))
-
     jobs = load_jobs()
 
     return [
@@ -282,6 +235,28 @@ def get_all_jobs_for_admin(
 
 
 # ============================================================
+# GET JOB DETAILS
+# ============================================================
+
+@router.get("/{job_id}")
+def get_job_details(
+    job_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    res = supabase.table("jobs").select("*").eq("id", str(job_id)).limit(1).execute()
+    if not res.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Job not found."
+        )
+    job = res.data[0]
+    job["employment_type"] = job.get("job_type", "")
+    job["experience"] = job.get("experience_level", "")
+    job["salary"] = job.get("salary_range", "")
+    return job
+
+
+# ============================================================
 # ADMIN - UPDATE JOB STATUS
 # ============================================================
 
@@ -297,73 +272,68 @@ def update_job_status(
             detail="Admin access required."
         )
 
-    if request.status not in {"pending", "approved", "rejected"}:
+    if request.status not in {"pending", "approved", "rejected", "closed"}:
         raise HTTPException(
             status_code=400,
             detail="Invalid job status."
         )
 
-    jobs = load_jobs()
+    res = supabase.table("jobs").select("*").eq("id", str(job_id)).limit(1).execute()
+    if not res.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Job not found."
+        )
 
-    for job in jobs:
-        if str(job.get("id")) == str(job_id):
-            old_status = job.get("status")
-            job["status"] = request.status
-            job["updated_at"] = datetime.now(
-                timezone.utc
-            ).isoformat()
+    job = res.data[0]
+    old_status = job.get("status")
+    now_iso = datetime.now(timezone.utc).isoformat()
 
-            save_jobs(jobs)
+    supabase.table("jobs").update({
+        "status": request.status,
+        "updated_at": now_iso
+    }).eq("id", str(job_id)).execute()
 
-            if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
-                try:
-                    from database_supabase import supabase
-                    supabase.table("jobs").update({
-                        "status": request.status,
-                        "updated_at": datetime.now(timezone.utc).isoformat()
-                    }).eq("id", str(job_id)).execute()
-                except Exception as e:
-                    print("Error updating job status in Supabase:", e)
+    job["status"] = request.status
+    job["updated_at"] = now_iso
+    job["employment_type"] = job.get("job_type", "")
+    job["experience"] = job.get("experience_level", "")
+    job["salary"] = job.get("salary_range", "")
 
-            if old_status != request.status:
-                owner_id = str(job.get("posted_by"))
-                job_title = job.get("title", "")
-                if request.status == "approved":
-                    try:
-                        create_notification_once(
-                            user_id=owner_id,
-                            title="Job posting approved",
-                            message=f'Your job posting "{job_title}" has been approved and is now visible to users.',
-                            notification_type=NOTIFICATION_TYPES["job_approval"],
-                            entity_type="job",
-                            entity_id=str(job_id),
-                            dedupe_key=f"job_approval:{job_id}",
-                        )
-                    except Exception:
-                        pass
-                elif request.status == "rejected":
-                    try:
-                        create_notification_once(
-                            user_id=owner_id,
-                            title="Job posting rejected",
-                            message=f'Your job posting "{job_title}" was not approved.',
-                            notification_type=NOTIFICATION_TYPES["job_rejection"],
-                            entity_type="job",
-                            entity_id=str(job_id),
-                            dedupe_key=f"job_rejection:{job_id}",
-                        )
-                    except Exception:
-                        pass
+    if old_status != request.status:
+        owner_id = str(job.get("posted_by"))
+        job_title = job.get("title", "")
+        if request.status == "approved":
+            try:
+                create_notification_once(
+                    user_id=owner_id,
+                    title="Job posting approved",
+                    message=f'Your job posting "{job_title}" has been approved and is now visible to users.',
+                    notification_type=NOTIFICATION_TYPES["job_approval"],
+                    entity_type="job",
+                    entity_id=str(job_id),
+                    dedupe_key=f"job_approval:{job_id}",
+                )
+            except Exception:
+                pass
+        elif request.status == "rejected":
+            try:
+                create_notification_once(
+                    user_id=owner_id,
+                    title="Job posting rejected",
+                    message=f'Your job posting "{job_title}" was not approved.',
+                    notification_type=NOTIFICATION_TYPES["job_rejection"],
+                    entity_type="job",
+                    entity_id=str(job_id),
+                    dedupe_key=f"job_rejection:{job_id}",
+                )
+            except Exception:
+                pass
 
-            return {
-                "message": f"Job {request.status} successfully.",
-                "job": job
-            }
-
-    raise HTTPException(
-        status_code=404,
-        detail="Job not found."
-    )
+    return {
+        "message": f"Job {request.status} successfully.",
+        "job": job
+    }
 
 
 # ============================================================
@@ -378,33 +348,27 @@ def delete_job(
     user_id = str(current_user.get("user_id"))
     role = current_user.get("role")
 
-    jobs = load_jobs()
+    res = supabase.table("jobs").select("*").eq("id", str(job_id)).limit(1).execute()
+    if not res.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Job not found."
+        )
 
-    for index, job in enumerate(jobs):
-        if str(job.get("id")) == str(job_id):
+    target_job = res.data[0]
+    if role != "admin" and str(target_job.get("posted_by")) != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only delete your own jobs."
+        )
 
-            if role != "admin" and str(job.get("posted_by")) != user_id:
-                raise HTTPException(
-                    status_code=403,
-                    detail="You can only delete your own jobs."
-                )
+    supabase.table("jobs").delete().eq("id", str(job_id)).execute()
 
-            deleted_job = jobs.pop(index)
-            save_jobs(jobs)
+    target_job["employment_type"] = target_job.get("job_type", "")
+    target_job["experience"] = target_job.get("experience_level", "")
+    target_job["salary"] = target_job.get("salary_range", "")
 
-            if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
-                try:
-                    from database_supabase import supabase
-                    supabase.table("jobs").delete().eq("id", str(job_id)).execute()
-                except Exception as e:
-                    print("Error deleting job from Supabase:", e)
-
-            return {
-                "message": "Job deleted successfully.",
-                "job": deleted_job
-            }
-
-    raise HTTPException(
-        status_code=404,
-        detail="Job not found."
-    )
+    return {
+        "message": "Job deleted successfully.",
+        "job": target_job
+    }

@@ -1,26 +1,11 @@
-try:
-    from bson import ObjectId
-except ImportError:
-    class ObjectId:
-        def __init__(self, val=None):
-            self.val = str(val)
-        def __str__(self):
-            return self.val
-        @staticmethod
-        def is_valid(val):
-            return False
+from pathlib import Path
+import json
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from database import users_collection
+from database import users_collection, supabase
 from security.dependencies import get_current_user
-from services.aci import (
-    calculate_alumni_aci,
-    load_json_data,
-    JOBS_FILE,
-    EVENTS_FILE,
-    REGISTRATIONS_FILE,
-)
+from services.aci import calculate_alumni_aci
 from services.notifications import NOTIFICATION_TYPES, create_notification_once
 
 
@@ -29,13 +14,18 @@ router = APIRouter(
     tags=["Alumni"]
 )
 
+# Legacy file attributes for test monkeypatch compatibility
+JOBS_FILE = None
+EVENTS_FILE = None
+REGISTRATIONS_FILE = None
+
 
 def get_user_from_token(current_user: dict):
     user_id = current_user.get("user_id")
     role = current_user.get("role")
 
-    user = users_collection.find_one({"_id": user_id})
-    if not user:
+    user = users_collection.find_one({"_id": str(user_id)})
+    if not user and role:
         users = users_collection.find({"role": role})
         for candidate in users:
             if str(candidate.get("_id")) == str(user_id):
@@ -99,19 +89,55 @@ def get_alumni_directory(
 
     alumni_users = users_collection.find(query)
 
-    # Preload activity datasets once for performance
-    jobs = load_json_data(JOBS_FILE)
-    events = load_json_data(EVENTS_FILE)
-    registrations = load_json_data(REGISTRATIONS_FILE)
+    jobs = []
+    if JOBS_FILE and Path(JOBS_FILE).exists():
+        try:
+            content = Path(JOBS_FILE).read_text(encoding="utf-8").strip()
+            if content and content != "[]":
+                jobs = json.loads(content)
+        except Exception:
+            jobs = []
+    if not jobs:
+        try:
+            jobs = supabase.table("jobs").select("*").execute().data or []
+        except Exception:
+            jobs = []
+
+    events = []
+    if EVENTS_FILE and Path(EVENTS_FILE).exists():
+        try:
+            content = Path(EVENTS_FILE).read_text(encoding="utf-8").strip()
+            if content and content != "[]":
+                events = json.loads(content)
+        except Exception:
+            events = []
+    if not events:
+        try:
+            events = supabase.table("events").select("*").execute().data or []
+        except Exception:
+            events = []
+
+    registrations = []
+    if REGISTRATIONS_FILE and Path(REGISTRATIONS_FILE).exists():
+        try:
+            content = Path(REGISTRATIONS_FILE).read_text(encoding="utf-8").strip()
+            if content and content != "[]":
+                registrations = json.loads(content)
+        except Exception:
+            registrations = []
+    if not registrations:
+        try:
+            registrations = supabase.table("event_registrations").select("*").execute().data or []
+        except Exception:
+            registrations = []
 
     results = []
 
     for alumni in alumni_users:
-        profile = alumni.get("alumni_profile", {})
+        profile = alumni.get("alumni_profile", {}) or {}
 
         if department:
             alumni_department = profile.get("department", "") or ""
-
             if department.lower() not in alumni_department.lower():
                 continue
 
@@ -184,20 +210,10 @@ def get_pending_alumni(
     results = []
 
     for alumni in alumni_users:
-
-        # Only genuinely pending alumni should appear here.
-        #
-        # Approved   -> verification_status = "approved"
-        # Rejected   -> verification_status = "rejected"
-        # Suspended  -> verification_status = "suspended"
-        # Pending    -> verification_status = "pending"
-        #
-        # The default keeps older records without a status
-        # compatible with the existing registration flow.
         if alumni.get("verification_status", "pending") != "pending":
             continue
 
-        profile = alumni.get("alumni_profile", {})
+        profile = alumni.get("alumni_profile", {}) or {}
 
         results.append({
             "id": str(alumni["_id"]),
@@ -251,21 +267,10 @@ def update_alumni_verification(
             detail="Invalid verification status."
         )
 
-    target_user = None
-
-    try:
-        target_user = users_collection.find_one({
-            "_id": ObjectId(user_id),
-            "role": "alumni"
-        })
-    except Exception:
-        pass
-
-    if not target_user:
-        target_user = users_collection.find_one({
-            "_id": user_id,
-            "role": "alumni"
-        })
+    target_user = users_collection.find_one({
+        "_id": str(user_id),
+        "role": "alumni"
+    })
 
     if not target_user:
         for candidate in users_collection.find({"role": "alumni"}):

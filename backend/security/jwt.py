@@ -26,11 +26,14 @@ def get_jwt_secret_key() -> str:
     if database_mode == "mock":
         return "soet-connect-test-only-mock-jwt-secret-do-not-use-in-production"
 
-    return "soet-connect-jwt-secret-key-production-32chars"
+    raise ValueError("JWT_SECRET_KEY is not set or empty. A secure secret key is required in production.")
 
 
-# Validate secret on module load
-SECRET_KEY = get_jwt_secret_key()
+# Validate secret on module load if available
+try:
+    SECRET_KEY = get_jwt_secret_key()
+except ValueError:
+    SECRET_KEY = ""
 
 
 def create_access_token(user_id: str, role: str):

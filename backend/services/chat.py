@@ -1,73 +1,20 @@
-import os
 from datetime import datetime, timezone
 from typing import Optional, Union
 
-try:
-    from bson import ObjectId
-except ImportError:
-    class ObjectId:
-        def __init__(self, val=None):
-            self.val = str(val)
-        def __str__(self):
-            return self.val
-        @staticmethod
-        def is_valid(val):
-            return False
-
 from fastapi import Depends, HTTPException, status
-from database import database, users_collection
+from database import users_collection, conversations_collection, messages_collection
 from security.dependencies import get_current_user
-
-if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
-    from database_supabase import (
-        supabase_conversations_collection,
-        supabase_messages_collection,
-    )
-    conversations_collection = supabase_conversations_collection
-    messages_collection = supabase_messages_collection
-else:
-    if database is not None and hasattr(database, "__getitem__"):
-        conversations_collection = database["conversations"]
-        messages_collection = database["messages"]
-
-        def init_chat_indexes():
-            try:
-                conversations_collection.create_index("canonical_key", unique=True)
-            except Exception:
-                pass
-            try:
-                messages_collection.create_index([("conversation_id", 1), ("created_at", 1)])
-            except Exception:
-                pass
-
-        init_chat_indexes()
-    else:
-        conversations_collection = None
-        messages_collection = None
-
 
 
 def get_user_by_id(user_id: str):
-    """Safely resolve user document from string or ObjectId representation."""
+    """Safely resolve user document from string ID representation."""
     if not user_id:
         return None
 
     user_id_str = str(user_id).strip()
-
-    try:
-        if ObjectId.is_valid(user_id_str):
-            user = users_collection.find_one({"_id": ObjectId(user_id_str)})
-            if user:
-                return user
-    except Exception:
-        pass
-
-    try:
-        user = users_collection.find_one({"_id": user_id_str})
-        if user:
-            return user
-    except Exception:
-        pass
+    user = users_collection.find_one({"_id": user_id_str})
+    if user:
+        return user
 
     for candidate in users_collection.find({}):
         if str(candidate.get("_id")) == user_id_str:
@@ -109,33 +56,18 @@ def get_active_chat_user(
     }
 
 
-def parse_object_id(id_val: str, error_detail: str = "Resource not found.") -> Union[str, ObjectId]:
-    """Safely validate and convert string to ObjectId (or string in Supabase mode)."""
-    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
-        if not id_val or not str(id_val).strip():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_detail
-            )
-        return str(id_val).strip()
-
-    if not id_val or not ObjectId.is_valid(str(id_val)):
+def parse_object_id(id_val: str, error_detail: str = "Resource not found.") -> str:
+    """Safely validate and return ID string."""
+    if not id_val or not str(id_val).strip():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=error_detail
         )
-    try:
-        return ObjectId(str(id_val))
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=error_detail
-        )
-
+    return str(id_val).strip()
 
 
 def serialize_message(msg_doc: dict) -> dict:
-    """Format MongoDB message document to API response dict."""
+    """Format message document to API response dict."""
     return {
         "id": str(msg_doc["_id"]),
         "conversation_id": str(msg_doc.get("conversation_id")),
@@ -152,7 +84,7 @@ def serialize_conversation(
     current_user_id: str,
     is_new: Optional[bool] = None
 ) -> dict:
-    """Format MongoDB conversation document to API response dict with metadata."""
+    """Format conversation document to API response dict with metadata."""
     participant_ids = [str(uid) for uid in conv_doc.get("participant_ids", [])]
 
     participants = []
@@ -176,7 +108,7 @@ def serialize_conversation(
     conv_id_str = str(conv_doc["_id"])
 
     all_msgs = list(messages_collection.find({"conversation_id": conv_id_str}))
-    all_msgs.sort(key=lambda m: m.get("created_at") or datetime.min.replace(tzinfo=timezone.utc))
+    all_msgs.sort(key=lambda m: str(m.get("created_at") or ""))
 
     last_msg = None
     if all_msgs:
@@ -259,7 +191,7 @@ def create_or_get_conversation(current_user: dict, target_user_id: str) -> tuple
 
     try:
         res = conversations_collection.insert_one(new_conv)
-        new_conv["_id"] = res.inserted_id
+        new_conv["_id"] = str(res.inserted_id)
         return new_conv, True
     except Exception:
         existing_conv = conversations_collection.find_one({"canonical_key": canonical_key})
@@ -289,11 +221,11 @@ def list_user_conversations(current_user_id: str) -> list[dict]:
             active_convs.append(conv)
 
     def sort_key(c):
-        return (
+        return str(
             c.get("last_message_at")
             or c.get("updated_at")
             or c.get("created_at")
-            or datetime.min.replace(tzinfo=timezone.utc)
+            or ""
         )
 
     active_convs.sort(key=sort_key, reverse=True)
@@ -302,8 +234,8 @@ def list_user_conversations(current_user_id: str) -> list[dict]:
 
 def get_user_conversation(conversation_id: str, current_user_id: str) -> dict:
     """Retrieve a single conversation if the user is an authorized participant."""
-    conv_oid = parse_object_id(conversation_id, "Conversation not found.")
-    conv = conversations_collection.find_one({"_id": conv_oid})
+    conv_id = parse_object_id(conversation_id, "Conversation not found.")
+    conv = conversations_collection.find_one({"_id": conv_id})
     if not conv:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -329,8 +261,8 @@ def get_user_conversation(conversation_id: str, current_user_id: str) -> dict:
 
 def archive_user_conversation(conversation_id: str, current_user_id: str) -> dict:
     """Archive/hide a conversation for the authenticated participant without affecting others."""
-    conv_oid = parse_object_id(conversation_id, "Conversation not found.")
-    conv = conversations_collection.find_one({"_id": conv_oid})
+    conv_id = parse_object_id(conversation_id, "Conversation not found.")
+    conv = conversations_collection.find_one({"_id": conv_id})
     if not conv:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -345,7 +277,7 @@ def archive_user_conversation(conversation_id: str, current_user_id: str) -> dic
         )
 
     conversations_collection.update_one(
-        {"_id": conv_oid},
+        {"_id": conv_id},
         {
             "$addToSet": {"deleted_for": current_user_id},
             "$set": {"updated_at": datetime.now(timezone.utc)}
@@ -360,8 +292,8 @@ def archive_user_conversation(conversation_id: str, current_user_id: str) -> dic
 
 def get_conversation_messages(conversation_id: str, current_user_id: str) -> list[dict]:
     """Retrieve messages in stable oldest-to-newest order for conversation participants."""
-    conv_oid = parse_object_id(conversation_id, "Conversation not found.")
-    conv = conversations_collection.find_one({"_id": conv_oid})
+    conv_id = parse_object_id(conversation_id, "Conversation not found.")
+    conv = conversations_collection.find_one({"_id": conv_id})
     if not conv:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -375,16 +307,16 @@ def get_conversation_messages(conversation_id: str, current_user_id: str) -> lis
             detail="You do not have access to this conversation."
         )
 
-    msgs = list(messages_collection.find({"conversation_id": str(conv_oid)}))
-    msgs.sort(key=lambda m: m.get("created_at") or datetime.min.replace(tzinfo=timezone.utc))
+    msgs = list(messages_collection.find({"conversation_id": str(conv_id)}))
+    msgs.sort(key=lambda m: str(m.get("created_at") or ""))
 
     return [serialize_message(m) for m in msgs]
 
 
 def send_conversation_message(conversation_id: str, sender_id: str, content: str) -> dict:
     """Send a message to a conversation. Sender identity is always derived from authenticated token."""
-    conv_oid = parse_object_id(conversation_id, "Conversation not found.")
-    conv = conversations_collection.find_one({"_id": conv_oid})
+    conv_id = parse_object_id(conversation_id, "Conversation not found.")
+    conv = conversations_collection.find_one({"_id": conv_id})
     if not conv:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -412,24 +344,23 @@ def send_conversation_message(conversation_id: str, sender_id: str, content: str
 
     now = datetime.now(timezone.utc)
     msg_doc = {
-        "conversation_id": str(conv_oid),
+        "conversation_id": str(conv_id),
         "sender_id": sender_id,
         "content": trimmed,
-        "created_at": now,
+        "created_at": now.isoformat(),
         "read_by": [sender_id],
-        "read_at": now,
+        "read_at": now.isoformat(),
     }
 
     res = messages_collection.insert_one(msg_doc)
-    msg_doc["_id"] = res.inserted_id
+    msg_doc["_id"] = str(res.inserted_id)
 
-    # Update conversation timestamps and restore for any participant who had archived it
     conversations_collection.update_one(
-        {"_id": conv_oid},
+        {"_id": conv_id},
         {
             "$set": {
-                "last_message_at": now,
-                "updated_at": now,
+                "last_message_at": now.isoformat(),
+                "updated_at": now.isoformat(),
                 "deleted_for": [],
             }
         }
@@ -440,20 +371,16 @@ def send_conversation_message(conversation_id: str, sender_id: str, content: str
 
 def mark_message_as_read(message_id: str, current_user_id: str) -> dict:
     """Mark a message as read idempotently for an authorized participant."""
-    msg_oid = parse_object_id(message_id, "Message not found.")
-    msg = messages_collection.find_one({"_id": msg_oid})
+    msg_id = parse_object_id(message_id, "Message not found.")
+    msg = messages_collection.find_one({"_id": msg_id})
     if not msg:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Message not found."
         )
 
-    conv_id = msg.get("conversation_id")
-    conv = None
-    if conv_id and ObjectId.is_valid(str(conv_id)):
-        conv = conversations_collection.find_one({"_id": ObjectId(str(conv_id))})
-    if not conv and conv_id:
-        conv = conversations_collection.find_one({"_id": str(conv_id)})
+    conv_id = str(msg.get("conversation_id", "")).strip()
+    conv = conversations_collection.find_one({"_id": conv_id})
 
     if not conv:
         raise HTTPException(
@@ -472,7 +399,7 @@ def mark_message_as_read(message_id: str, current_user_id: str) -> dict:
     if current_user_id not in read_by:
         now = datetime.now(timezone.utc)
         messages_collection.update_one(
-            {"_id": msg_oid},
+            {"_id": msg_id},
             {
                 "$addToSet": {"read_by": current_user_id},
                 "$set": {"read_at": now},
@@ -485,3 +412,4 @@ def mark_message_as_read(message_id: str, current_user_id: str) -> dict:
         "message_id": str(msg["_id"]),
         "read_by": read_by,
     }
+

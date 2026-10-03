@@ -1,13 +1,11 @@
 import os
-from datetime import datetime, timezone
-import json
 import uuid
-from pathlib import Path
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from database import users_collection
+from database import users_collection, supabase
 from security.dependencies import get_current_user
 from services.notifications import NOTIFICATION_TYPES, create_notification_once
 
@@ -18,17 +16,11 @@ router = APIRouter(
 )
 
 
-EVENTS_FILE = Path(__file__).resolve().parent.parent / "events_data.json"
-REGISTRATIONS_FILE = (
-    Path(__file__).resolve().parent.parent / "event_registrations_data.json"
-)
+# Legacy file attributes for test monkeypatch compatibility
+EVENTS_FILE = None
+REGISTRATIONS_FILE = None
 
-
-# ============================================================
-# VALID EVENT STATUSES
-# ============================================================
-
-VALID_EVENT_STATUSES = {"pending", "approved", "rejected", "cancelled"}
+VALID_EVENT_STATUSES = {"pending", "approved", "rejected", "cancelled", "completed"}
 
 
 # ============================================================
@@ -71,45 +63,32 @@ class EventUpdateRequest(BaseModel):
 # ============================================================
 
 def load_events() -> list[dict]:
-    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
-        try:
-            from database_supabase import supabase
-            res = supabase.table("events").select("*").order("date", desc=True).execute()
-            events = []
-            for row in res.data or []:
-                e = dict(row)
-                e["event_date"] = str(row.get("date", ""))
-                e["start_date"] = str(row.get("date", ""))
-                e["start_time"] = str(row.get("time", ""))
-                events.append(e)
-            return events
-        except Exception as e:
-            print("Error loading events from Supabase:", e)
-            return []
-
+    """Load events directly from Supabase PostgreSQL events table."""
     try:
-        if EVENTS_FILE.exists():
-            data = EVENTS_FILE.read_text(encoding="utf-8").strip()
-            if data:
-                return json.loads(data)
-    except Exception:
-        pass
-
-    return []
-
-
-def save_events(events: list[dict]):
-    EVENTS_FILE.write_text(
-        json.dumps(events, indent=2),
-        encoding="utf-8"
-    )
+        res = supabase.table("events").select("*").order("date", desc=True).execute()
+        events = []
+        for row in res.data or []:
+            e = dict(row)
+            date_val = str(row.get("date", ""))
+            e["event_date"] = date_val
+            e["start_date"] = date_val
+            e["start_time"] = str(row.get("time", ""))
+            e["registration_deadline"] = row.get("registration_deadline")
+            if not e.get("creator_name") and e.get("created_by"):
+                u = users_collection.find_one({"_id": str(e["created_by"])})
+                if u:
+                    e["creator_name"] = u.get("name", "User")
+            events.append(e)
+        return events
+    except Exception as e:
+        print("Error loading events from Supabase:", e)
+        return []
 
 
 def _find_event(event_id: str) -> dict | None:
     for event in load_events():
         if str(event.get("id")) == str(event_id):
             return event
-
     return None
 
 
@@ -118,85 +97,68 @@ def _find_event(event_id: str) -> dict | None:
 # ============================================================
 
 def load_registrations() -> list[dict]:
-    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
-        try:
-            from database_supabase import supabase
-            res = supabase.table("event_registrations").select("*").execute()
-            regs = []
-            for row in res.data or []:
-                r = dict(row)
-                regs.append(r)
-            return regs
-        except Exception as e:
-            print("Error loading registrations from Supabase:", e)
-            return []
-
+    """Load registrations directly from Supabase PostgreSQL event_registrations table."""
     try:
-        if REGISTRATIONS_FILE.exists():
-            data = REGISTRATIONS_FILE.read_text(encoding="utf-8").strip()
-            if data:
-                return json.loads(data)
-    except Exception:
-        pass
+        res = supabase.table("event_registrations").select("*").execute()
+        regs = []
+        for row in res.data or []:
+            r = dict(row)
+            if not r.get("created_at") and r.get("registered_at"):
+                r["created_at"] = r["registered_at"]
+            if not r.get("user_name") and r.get("user_id"):
+                u = users_collection.find_one({"_id": str(r["user_id"])})
+                if u:
+                    r["user_name"] = u.get("name", "User")
+                    r["name"] = u.get("name", "User")
+                    r["user_email"] = u.get("email", "")
+                    r["email"] = u.get("email", "")
+                    r["user_role"] = u.get("role", "")
+            regs.append(r)
+        return regs
+    except Exception as e:
+        print("Error loading registrations from Supabase:", e)
+        return []
 
-    return []
-
-
-def save_registrations(registrations: list[dict]):
-    REGISTRATIONS_FILE.write_text(
-        json.dumps(registrations, indent=2),
-        encoding="utf-8"
-    )
-
-
-# ============================================================
-# HELPERS — user resolution (string-safe)
-# ============================================================
 
 def get_user_from_token(current_user: dict):
     user_id = current_user.get("user_id")
     role = current_user.get("role")
 
-    user = users_collection.find_one({
-        "_id": user_id
-    })
+    user = users_collection.find_one({"_id": str(user_id)})
+    if user:
+        return user
 
-    # Compatibility with MongoDB ObjectId/string IDs
-    if not user:
-        users = users_collection.find({
-            "role": role
-        })
-
+    if role:
+        users = users_collection.find({"role": role})
         for candidate in users:
             if str(candidate.get("_id")) == str(user_id):
-                user = candidate
-                break
+                return candidate
 
-    return user
+    return None
 
 
 # ============================================================
-# GET /events  — List events
+# GET /events  — List events with role-based visibility
 # ============================================================
 
 @router.get("")
 def get_events(
     current_user: dict = Depends(get_current_user),
 ):
-    events = load_events()
-    registrations = load_registrations()
-
     role = current_user.get("role")
     user_id = str(current_user.get("user_id"))
 
-    # Compute registration stats
+    events = load_events()
+    registrations = load_registrations()
+
+    # Pre-calculate registration counts per event
     reg_counts = {}
     user_registered = set()
 
-    for reg in registrations:
-        eid = str(reg.get("event_id"))
+    for r in registrations:
+        eid = str(r.get("event_id"))
         reg_counts[eid] = reg_counts.get(eid, 0) + 1
-        if str(reg.get("user_id")) == user_id:
+        if str(r.get("user_id")) == user_id:
             user_registered.add(eid)
 
     results = []
@@ -209,7 +171,6 @@ def get_events(
         # Visibility: Admin sees all; non-admin sees approved or own events
         if role == "admin" or status == "approved" or creator_id == user_id:
             ev_copy = dict(event)
-            # Ensure canonical event_date
             if not ev_copy.get("event_date") and ev_copy.get("start_date"):
                 ev_copy["event_date"] = ev_copy["start_date"]
 
@@ -245,40 +206,49 @@ def create_event(
             detail="This account has been deactivated."
         )
 
-    # Role permissions
     if role not in {"admin", "alumni", "student"}:
         raise HTTPException(
             status_code=403,
             detail="You do not have permission to create events."
         )
 
-    # Alumni must be verified
     if role == "alumni":
         if not user.get("is_verified", False):
             raise HTTPException(
                 status_code=403,
-                detail=(
-                    "Your alumni account must be verified by an "
-                    "administrator before creating events."
-                )
+                detail="Your alumni account must be verified by an administrator before creating events."
             )
 
-    # Status determination:
-    # Admin-created events are approved immediately
-    # Alumni and Student created/suggested events start as pending
     initial_status = "approved" if role == "admin" else "pending"
+    event_date = body.event_date or body.start_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-    # Canonical event_date
-    event_date = body.event_date or body.start_date
+    event_id = str(uuid.uuid4())
+    user_id = str(current_user.get("user_id"))
+    now_iso = datetime.now(timezone.utc).isoformat()
 
-    event_document = {
-        "id": str(uuid.uuid4()),
-        "created_by": str(current_user.get("user_id")),
-        "creator_name": user.get("name", "User"),
+    event_row = {
+        "id": event_id,
+        "created_by": user_id,
         "title": body.title,
         "description": body.description,
-        "event_type": body.event_type,
-        "location": body.location,
+        "event_type": body.event_type or "general",
+        "date": event_date,
+        "time": body.start_time or "00:00",
+        "location": body.location or "TBD",
+        "virtual_link": body.image_url or "",
+        "capacity": 100,
+        "status": initial_status,
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+    if os.getenv("DATABASE_MODE", "").lower() == "mock" and body.registration_deadline:
+        event_row["registration_deadline"] = body.registration_deadline
+
+    supabase.table("events").insert(event_row).execute()
+
+    event_document = {
+        **event_row,
+        "creator_name": user.get("name", "User"),
         "event_date": event_date,
         "start_date": event_date,
         "end_date": body.end_date,
@@ -287,46 +257,18 @@ def create_event(
         "registration_deadline": body.registration_deadline,
         "image_url": body.image_url,
         "tags": body.tags,
-        "status": initial_status,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    events = load_events()
-    events.append(event_document)
-    save_events(events)
-
-    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
-        try:
-            from database_supabase import supabase
-            event_date = event_document.get("event_date") or event_document.get("start_date") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            supabase.table("events").insert({
-                "id": str(event_document["id"]),
-                "created_by": str(event_document["created_by"]) if event_document.get("created_by") else None,
-                "title": event_document.get("title", ""),
-                "description": event_document.get("description", ""),
-                "event_type": event_document.get("event_type", "general"),
-                "date": event_date,
-                "time": event_document.get("start_time", "00:00"),
-                "location": event_document.get("location", "TBD"),
-                "virtual_link": event_document.get("image_url", ""),
-                "capacity": 100,
-                "status": initial_status,
-            }).execute()
-        except Exception as e:
-            print("Error inserting event into Supabase:", e)
-
     if initial_status == "pending":
-        creator_id = str(event_document["created_by"])
         try:
             create_notification_once(
-                user_id=creator_id,
+                user_id=user_id,
                 title="Event submitted for review",
-                message=f'Your event "{event_document["title"]}" was submitted and is pending administrator review.',
+                message=f'Your event "{body.title}" was submitted and is pending administrator review.',
                 notification_type=NOTIFICATION_TYPES["event_submission"],
                 entity_type="event",
-                entity_id=str(event_document["id"]),
-                dedupe_key=f"event_submission:{event_document['id']}",
+                entity_id=event_id,
+                dedupe_key=f"event_submission:{event_id}",
             )
         except Exception:
             pass
@@ -357,7 +299,6 @@ def get_event_details(
     role = current_user.get("role")
     user_id = str(current_user.get("user_id"))
 
-    # Visibility check
     if (
         role != "admin"
         and event.get("status") != "approved"
@@ -401,128 +342,115 @@ def update_event(
     role = current_user.get("role")
     user_id = str(current_user.get("user_id"))
 
-    events = load_events()
+    res = supabase.table("events").select("*").eq("id", str(event_id)).limit(1).execute()
+    if not res.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Event not found."
+        )
 
-    for event in events:
-        if str(event.get("id")) == str(event_id):
-            # Authorization: admin or event creator
-            if role != "admin" and str(event.get("created_by")) != user_id:
-                raise HTTPException(
-                    status_code=403,
-                    detail="You can only edit your own events."
+    event = res.data[0]
+
+    if role != "admin" and str(event.get("created_by")) != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only edit your own events."
+        )
+
+    if body.status is not None and role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Only admin can change event status."
+        )
+
+    if body.status is not None and body.status not in VALID_EVENT_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid event status. Must be one of: {', '.join(sorted(VALID_EVENT_STATUSES))}."
+        )
+
+    old_status = event.get("status")
+    update_data = body.model_dump(exclude_none=True)
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    db_updates = {"updated_at": now_iso}
+    if "status" in update_data:
+        db_updates["status"] = update_data["status"]
+    if "title" in update_data:
+        db_updates["title"] = update_data["title"]
+    if "description" in update_data:
+        db_updates["description"] = update_data["description"]
+    if "location" in update_data:
+        db_updates["location"] = update_data["location"]
+    if "event_type" in update_data:
+        db_updates["event_type"] = update_data["event_type"]
+    if "event_date" in update_data:
+        db_updates["date"] = update_data["event_date"]
+    elif "start_date" in update_data:
+        db_updates["date"] = update_data["start_date"]
+    if "start_time" in update_data:
+        db_updates["time"] = update_data["start_time"]
+
+    supabase.table("events").update(db_updates).eq("id", str(event_id)).execute()
+
+    for k, v in update_data.items():
+        event[k] = v
+    event["updated_at"] = now_iso
+
+    new_status = update_data.get("status")
+    if new_status is not None and old_status != new_status:
+        creator_id = str(event.get("created_by"))
+        event_title = event.get("title", "")
+        if new_status == "approved":
+            try:
+                create_notification_once(
+                    user_id=creator_id,
+                    title="Event approved",
+                    message=f'Your event "{event_title}" has been approved.',
+                    notification_type=NOTIFICATION_TYPES["event_approval"],
+                    entity_type="event",
+                    entity_id=str(event_id),
+                    dedupe_key=f"event_approval:{event_id}",
                 )
-
-            # Non-admin users may not change the status field
-            if body.status is not None and role != "admin":
-                raise HTTPException(
-                    status_code=403,
-                    detail="Only admin can change event status."
+            except Exception:
+                pass
+        elif new_status == "rejected":
+            try:
+                create_notification_once(
+                    user_id=creator_id,
+                    title="Event rejected",
+                    message=f'Your event "{event_title}" was not approved.',
+                    notification_type=NOTIFICATION_TYPES["event_rejection"],
+                    entity_type="event",
+                    entity_id=str(event_id),
+                    dedupe_key=f"event_rejection:{event_id}",
                 )
-
-            # Validate status if provided
-            if body.status is not None:
-                if body.status not in VALID_EVENT_STATUSES:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=(
-                            f"Invalid event status. Must be one of: "
-                            f"{', '.join(sorted(VALID_EVENT_STATUSES))}."
-                        )
-                    )
-
-            old_status = event.get("status")
-            update_data = body.model_dump(exclude_none=True)
-
-            for key, value in update_data.items():
-                event[key] = value
-
-            # Keep event_date and start_date in sync
-            if "event_date" in update_data and update_data["event_date"]:
-                event["start_date"] = update_data["event_date"]
-            elif "start_date" in update_data and update_data["start_date"]:
-                event["event_date"] = update_data["start_date"]
-
-            event["updated_at"] = datetime.now(timezone.utc).isoformat()
-
-            save_events(events)
-
-            if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
-                try:
-                    from database_supabase import supabase
-                    update_dict = {
-                        "updated_at": datetime.now(timezone.utc).isoformat()
-                    }
-                    if "status" in update_data:
-                        update_dict["status"] = update_data["status"]
-                    if "title" in update_data:
-                        update_dict["title"] = update_data["title"]
-                    if "description" in update_data:
-                        update_dict["description"] = update_data["description"]
-                    if "location" in update_data:
-                        update_dict["location"] = update_data["location"]
-                    supabase.table("events").update(update_dict).eq("id", str(event_id)).execute()
-                except Exception as e:
-                    print("Error updating event in Supabase:", e)
-
-            new_status = update_data.get("status")
-            if new_status is not None and old_status != new_status:
-                creator_id = str(event.get("created_by"))
-                event_title = event.get("title", "")
-                if new_status == "approved":
-                    try:
-                        create_notification_once(
-                            user_id=creator_id,
-                            title="Event approved",
-                            message=f'Your event "{event_title}" has been approved.',
-                            notification_type=NOTIFICATION_TYPES["event_approval"],
-                            entity_type="event",
-                            entity_id=str(event_id),
-                            dedupe_key=f"event_approval:{event_id}",
-                        )
-                    except Exception:
-                        pass
-                elif new_status == "rejected":
-                    try:
-                        create_notification_once(
-                            user_id=creator_id,
-                            title="Event rejected",
-                            message=f'Your event "{event_title}" was not approved.',
-                            notification_type=NOTIFICATION_TYPES["event_rejection"],
-                            entity_type="event",
-                            entity_id=str(event_id),
-                            dedupe_key=f"event_rejection:{event_id}",
-                        )
-                    except Exception:
-                        pass
-                elif new_status == "cancelled":
-                    registrations = load_registrations()
-                    reg_user_ids = {
-                        str(r.get("user_id")) for r in registrations
-                        if str(r.get("event_id")) == str(event_id) and r.get("user_id")
-                    }
-                    for uid in reg_user_ids:
-                        try:
-                            create_notification_once(
-                                user_id=uid,
-                                title="Event cancelled",
-                                message=f'The event "{event_title}" has been cancelled.',
-                                notification_type=NOTIFICATION_TYPES["event_cancellation"],
-                                entity_type="event",
-                                entity_id=str(event_id),
-                                dedupe_key=f"event_cancellation:{event_id}:{uid}",
-                            )
-                        except Exception:
-                            pass
-
-            return {
-                "message": "Event updated successfully.",
-                "event": event,
+            except Exception:
+                pass
+        elif new_status == "cancelled":
+            registrations = load_registrations()
+            reg_user_ids = {
+                str(r.get("user_id")) for r in registrations
+                if str(r.get("event_id")) == str(event_id) and r.get("user_id")
             }
+            for uid in reg_user_ids:
+                try:
+                    create_notification_once(
+                        user_id=uid,
+                        title="Event cancelled",
+                        message=f'The event "{event_title}" has been cancelled.',
+                        notification_type=NOTIFICATION_TYPES["event_cancellation"],
+                        entity_type="event",
+                        entity_id=str(event_id),
+                        dedupe_key=f"event_cancellation:{event_id}:{uid}",
+                    )
+                except Exception:
+                    pass
 
-    raise HTTPException(
-        status_code=404,
-        detail="Event not found."
-    )
+    return {
+        "message": "Event updated successfully.",
+        "event": event,
+    }
 
 
 # ============================================================
@@ -537,44 +465,27 @@ def delete_event(
     role = current_user.get("role")
     user_id = str(current_user.get("user_id"))
 
-    events = load_events()
+    res = supabase.table("events").select("*").eq("id", str(event_id)).limit(1).execute()
+    if not res.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Event not found."
+        )
 
-    for index, event in enumerate(events):
-        if str(event.get("id")) == str(event_id):
-            # Authorization: admin or event creator
-            if role != "admin" and str(event.get("created_by")) != user_id:
-                raise HTTPException(
-                    status_code=403,
-                    detail="You can only delete your own events."
-                )
+    target_event = res.data[0]
+    if role != "admin" and str(target_event.get("created_by")) != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only delete your own events."
+        )
 
-            deleted_event = events.pop(index)
-            save_events(events)
+    supabase.table("events").delete().eq("id", str(event_id)).execute()
+    supabase.table("event_registrations").delete().eq("event_id", str(event_id)).execute()
 
-            if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
-                try:
-                    from database_supabase import supabase
-                    supabase.table("events").delete().eq("id", str(event_id)).execute()
-                except Exception as e:
-                    print("Error deleting event from Supabase:", e)
-
-            # Cascade: also remove registrations for this event
-            registrations = load_registrations()
-            registrations = [
-                reg for reg in registrations
-                if str(reg.get("event_id")) != str(event_id)
-            ]
-            save_registrations(registrations)
-
-            return {
-                "message": "Event deleted successfully.",
-                "event": deleted_event,
-            }
-
-    raise HTTPException(
-        status_code=404,
-        detail="Event not found."
-    )
+    return {
+        "message": "Event deleted successfully.",
+        "event": target_event,
+    }
 
 
 # ============================================================
@@ -594,16 +505,13 @@ def register_for_event(
             detail="Event not found."
         )
 
-    # Only approved events accept registrations
     if event.get("status") != "approved":
         raise HTTPException(
             status_code=400,
             detail="Registrations are only accepted for approved events."
         )
 
-    # Enforce registration deadline when present
     deadline_str = event.get("registration_deadline")
-
     if deadline_str:
         try:
             deadline = datetime.fromisoformat(deadline_str)
@@ -618,10 +526,9 @@ def register_for_event(
         except ValueError:
             pass
 
-    registrations = load_registrations()
     user_id = str(current_user.get("user_id"))
+    registrations = load_registrations()
 
-    # Prevent duplicate registrations for same user + event
     for reg in registrations:
         if (
             str(reg.get("user_id")) == user_id
@@ -632,7 +539,6 @@ def register_for_event(
                 detail="You have already registered for this event."
             )
 
-    # Resolve user details
     user = get_user_from_token(current_user)
     if not user:
         raise HTTPException(
@@ -646,36 +552,28 @@ def register_for_event(
             detail="This account has been deactivated."
         )
 
-    user_name = user.get("name", "User")
-    user_email = user.get("email", "")
+    reg_id = str(uuid.uuid4())
     now_iso = datetime.now(timezone.utc).isoformat()
 
+    supabase.table("event_registrations").insert({
+        "id": reg_id,
+        "event_id": str(event_id),
+        "user_id": user_id,
+        "status": "registered",
+        "registered_at": now_iso,
+    }).execute()
+
     registration = {
-        "id": str(uuid.uuid4()),
+        "id": reg_id,
         "event_id": str(event_id),
         "event_title": event.get("title", ""),
         "user_id": user_id,
-        "user_name": user_name,
-        "user_email": user_email,
+        "user_name": user.get("name", "User"),
+        "user_email": user.get("email", ""),
         "user_role": current_user.get("role", ""),
         "registered_at": now_iso,
         "created_at": now_iso,
     }
-
-    registrations.append(registration)
-    save_registrations(registrations)
-
-    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
-        try:
-            from database_supabase import supabase
-            supabase.table("event_registrations").insert({
-                "id": str(registration.get("id") or uuid.uuid4()),
-                "event_id": str(event_id),
-                "user_id": str(user_id),
-                "status": "registered",
-            }).execute()
-        except Exception as e:
-            print("Error saving registration to Supabase:", e)
 
     try:
         create_notification_once(
@@ -708,24 +606,16 @@ def cancel_event_registration(
     user_id = str(current_user.get("user_id"))
     registrations = load_registrations()
 
-    for index, reg in enumerate(registrations):
+    for reg in registrations:
         if (
             str(reg.get("event_id")) == str(event_id)
             and str(reg.get("user_id")) == user_id
         ):
-            deleted_reg = registrations.pop(index)
-            save_registrations(registrations)
-
-            if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
-                try:
-                    from database_supabase import supabase
-                    supabase.table("event_registrations").delete().eq("event_id", str(event_id)).eq("user_id", str(user_id)).execute()
-                except Exception as e:
-                    print("Error cancelling registration in Supabase:", e)
+            supabase.table("event_registrations").delete().eq("event_id", str(event_id)).eq("user_id", user_id).execute()
 
             return {
                 "message": "Registration cancelled successfully.",
-                "registration": deleted_reg,
+                "registration": reg,
             }
 
     raise HTTPException(
@@ -753,7 +643,6 @@ def get_my_registrations(
 
 # ============================================================
 # GET /events/{event_id}/registrations
-#   — Event owner or admin views registrations for an event
 # ============================================================
 
 @router.get("/{event_id}/registrations")
@@ -765,28 +654,20 @@ def get_event_registrations(
     user_id = str(current_user.get("user_id"))
 
     event = _find_event(event_id)
-
     if not event:
         raise HTTPException(
             status_code=404,
             detail="Event not found."
         )
 
-    # Admin can always view; event creator can view their own
-    if role == "admin":
-        pass
-    elif str(event.get("created_by")) == user_id:
-        pass
-    else:
+    if role != "admin" and str(event.get("created_by")) != user_id:
         raise HTTPException(
             status_code=403,
             detail="You do not have permission to view registrations for this event."
         )
 
     registrations = load_registrations()
-
     return [
         reg for reg in registrations
         if str(reg.get("event_id")) == str(event_id)
     ]
-
