@@ -2,7 +2,18 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from bson import ObjectId
+try:
+    from bson import ObjectId
+except ImportError:
+    class ObjectId:
+        def __init__(self, val=None):
+            self.val = str(val)
+        def __str__(self):
+            return self.val
+        @staticmethod
+        def is_valid(val):
+            return False
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from database import users_collection

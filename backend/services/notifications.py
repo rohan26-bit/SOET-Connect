@@ -1,7 +1,9 @@
+import os
 from datetime import datetime, timezone
 import json
 from pathlib import Path
 import uuid
+
 
 NOTIFICATIONS_FILE = (
     Path(__file__).resolve().parent.parent / "notifications_data.json"
@@ -43,7 +45,16 @@ def get_notifications_file() -> Path:
 
 
 def load_notifications() -> list[dict]:
-    """Load notifications safely from the resolved JSON data file."""
+    """Load notifications safely from Supabase or the resolved JSON data file."""
+    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+        try:
+            from database_supabase import supabase
+            res = supabase.table("notifications").select("*").order("created_at", desc=True).execute()
+            return res.data or []
+        except Exception as e:
+            print("Error loading notifications from Supabase:", e)
+            return []
+
     fpath = get_notifications_file()
     try:
         if fpath.exists():
@@ -54,6 +65,7 @@ def load_notifications() -> list[dict]:
         pass
 
     return []
+
 
 
 def save_notifications(notifications: list[dict]):
@@ -107,7 +119,31 @@ def create_notification(
     notifications.append(notification)
     save_notifications(notifications)
 
+    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+        try:
+            from database_supabase import supabase
+            # Check dedupe_key in Supabase if provided
+            if dedupe_key:
+                existing = supabase.table("notifications").select("*").eq("dedupe_key", dedupe_key).execute()
+                if existing.data:
+                    return existing.data[0]
+
+            supabase.table("notifications").insert({
+                "id": str(notification["id"]),
+                "user_id": str(user_id),
+                "title": title,
+                "message": message,
+                "type": notification_type,
+                "entity_type": entity_type,
+                "entity_id": str(entity_id) if entity_id else None,
+                "dedupe_key": dedupe_key,
+                "is_read": False,
+            }).execute()
+        except Exception as e:
+            print("Error saving notification to Supabase:", e)
+
     return notification
+
 
 
 def create_notification_once(

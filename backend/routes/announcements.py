@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timezone
 import json
 import uuid
@@ -50,6 +51,15 @@ class AnnouncementUpdateRequest(BaseModel):
 # ============================================================
 
 def load_announcements() -> list[dict]:
+    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+        try:
+            from database_supabase import supabase
+            res = supabase.table("announcements").select("*").order("created_at", desc=True).execute()
+            return res.data or []
+        except Exception as e:
+            print("Error loading announcements from Supabase:", e)
+            return []
+
     try:
         if ANNOUNCEMENTS_FILE.exists():
             return json.loads(
@@ -145,6 +155,19 @@ def create_announcement(
     announcements.append(announcement)
     save_announcements(announcements)
 
+    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+        try:
+            from database_supabase import supabase
+            supabase.table("announcements").insert({
+                "id": str(announcement["id"]),
+                "author_id": str(announcement["created_by"]) if announcement.get("created_by") else None,
+                "title": announcement["title"],
+                "content": announcement["content"],
+                "target_audience": announcement.get("target_audience", "all"),
+            }).execute()
+        except Exception as e:
+            print("Error persisting announcement to Supabase:", e)
+
     # Broadcast notifications to eligible active users
     try:
         query = {"is_active": True}
@@ -231,6 +254,18 @@ def update_announcement(
 
             save_announcements(announcements)
 
+            if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+                try:
+                    from database_supabase import supabase
+                    supabase.table("announcements").update({
+                        "title": ann["title"],
+                        "content": ann["content"],
+                        "target_audience": ann["target_audience"],
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }).eq("id", str(announcement_id)).execute()
+                except Exception as e:
+                    print("Error updating announcement in Supabase:", e)
+
             return {
                 "message": "Announcement updated successfully.",
                 "announcement": ann,
@@ -263,6 +298,13 @@ def delete_announcement(
         if str(ann.get("id")) == str(announcement_id):
             deleted = announcements.pop(index)
             save_announcements(announcements)
+
+            if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+                try:
+                    from database_supabase import supabase
+                    supabase.table("announcements").delete().eq("id", str(announcement_id)).execute()
+                except Exception as e:
+                    print("Error deleting announcement from Supabase:", e)
 
             return {
                 "message": "Announcement deleted successfully.",

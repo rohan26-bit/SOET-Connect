@@ -1,29 +1,50 @@
+import os
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Union
 
-from bson import ObjectId
+try:
+    from bson import ObjectId
+except ImportError:
+    class ObjectId:
+        def __init__(self, val=None):
+            self.val = str(val)
+        def __str__(self):
+            return self.val
+        @staticmethod
+        def is_valid(val):
+            return False
+
 from fastapi import Depends, HTTPException, status
-
 from database import database, users_collection
 from security.dependencies import get_current_user
 
-conversations_collection = database["conversations"]
-messages_collection = database["messages"]
+if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+    from database_supabase import (
+        supabase_conversations_collection,
+        supabase_messages_collection,
+    )
+    conversations_collection = supabase_conversations_collection
+    messages_collection = supabase_messages_collection
+else:
+    if database is not None and hasattr(database, "__getitem__"):
+        conversations_collection = database["conversations"]
+        messages_collection = database["messages"]
 
+        def init_chat_indexes():
+            try:
+                conversations_collection.create_index("canonical_key", unique=True)
+            except Exception:
+                pass
+            try:
+                messages_collection.create_index([("conversation_id", 1), ("created_at", 1)])
+            except Exception:
+                pass
 
-def init_chat_indexes():
-    """Create indexes for chat collections if compatible with current driver."""
-    try:
-        conversations_collection.create_index("canonical_key", unique=True)
-    except Exception:
-        pass
-    try:
-        messages_collection.create_index([("conversation_id", 1), ("created_at", 1)])
-    except Exception:
-        pass
+        init_chat_indexes()
+    else:
+        conversations_collection = None
+        messages_collection = None
 
-
-init_chat_indexes()
 
 
 def get_user_by_id(user_id: str):
@@ -88,8 +109,16 @@ def get_active_chat_user(
     }
 
 
-def parse_object_id(id_val: str, error_detail: str = "Resource not found.") -> ObjectId:
-    """Safely validate and convert string to ObjectId, raising 404 on malformed IDs."""
+def parse_object_id(id_val: str, error_detail: str = "Resource not found.") -> Union[str, ObjectId]:
+    """Safely validate and convert string to ObjectId (or string in Supabase mode)."""
+    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+        if not id_val or not str(id_val).strip():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_detail
+            )
+        return str(id_val).strip()
+
     if not id_val or not ObjectId.is_valid(str(id_val)):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -102,6 +131,7 @@ def parse_object_id(id_val: str, error_detail: str = "Resource not found.") -> O
             status_code=status.HTTP_404_NOT_FOUND,
             detail=error_detail
         )
+
 
 
 def serialize_message(msg_doc: dict) -> dict:

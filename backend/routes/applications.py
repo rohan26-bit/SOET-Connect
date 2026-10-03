@@ -1,9 +1,21 @@
+import os
 from datetime import datetime, timezone
 import json
 import uuid
 from pathlib import Path
 
-from bson import ObjectId
+try:
+    from bson import ObjectId
+except ImportError:
+    class ObjectId:
+        def __init__(self, val=None):
+            self.val = str(val)
+        def __str__(self):
+            return self.val
+        @staticmethod
+        def is_valid(val):
+            return False
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -68,6 +80,21 @@ class ApplicationStatusUpdateRequest(BaseModel):
 # ============================================================
 
 def load_applications() -> list[dict]:
+    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+        try:
+            from database_supabase import supabase
+            res = supabase.table("job_applications").select("*").order("applied_at", desc=True).execute()
+            apps = []
+            for row in res.data or []:
+                a = dict(row)
+                a["student_id"] = str(row.get("applicant_id", ""))
+                a["created_at"] = row.get("applied_at", "")
+                apps.append(a)
+            return apps
+        except Exception as e:
+            print("Error loading applications from Supabase:", e)
+            return []
+
     try:
         if APPLICATIONS_FILE.exists():
             return json.loads(
@@ -87,6 +114,22 @@ def save_applications(applications: list[dict]):
 
 
 def load_jobs() -> list[dict]:
+    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+        try:
+            from database_supabase import supabase
+            res = supabase.table("jobs").select("*").order("created_at", desc=True).execute()
+            jobs = []
+            for row in res.data or []:
+                j = dict(row)
+                j["employment_type"] = row.get("job_type", "")
+                j["experience"] = row.get("experience_level", "")
+                j["salary"] = row.get("salary_range", "")
+                jobs.append(j)
+            return jobs
+        except Exception as e:
+            print("Error loading jobs from Supabase:", e)
+            return []
+
     try:
         if JOBS_FILE.exists():
             return json.loads(
@@ -96,6 +139,7 @@ def load_jobs() -> list[dict]:
         pass
 
     return []
+
 
 
 def _load_jobs() -> list[dict]:
@@ -210,6 +254,20 @@ def apply_for_job(
 
     applications.append(app_document)
     save_applications(applications)
+
+    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+        try:
+            from database_supabase import supabase
+            supabase.table("job_applications").insert({
+                "id": str(app_document["id"]),
+                "job_id": str(app_document["job_id"]),
+                "applicant_id": str(app_document["student_id"]),
+                "status": "submitted",
+                "resume_url": app_document.get("resume_url", ""),
+                "cover_letter": app_document.get("cover_letter", ""),
+            }).execute()
+        except Exception as e:
+            print("Error saving application to Supabase:", e)
 
     poster_id = str(target_job.get("posted_by"))
     job_title = target_job.get("title", "")
@@ -409,6 +467,16 @@ def update_application_status(
 
             save_applications(applications)
 
+            if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+                try:
+                    from database_supabase import supabase
+                    supabase.table("job_applications").update({
+                        "status": request.status,
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    }).eq("id", str(application_id)).execute()
+                except Exception as e:
+                    print("Error updating application in Supabase:", e)
+
             if old_status != request.status:
                 student_id = str(app.get("student_id"))
                 job_title = job.get("title", "") if job else ""
@@ -460,6 +528,14 @@ def withdraw_application(
 
             deleted_app = applications.pop(index)
             save_applications(applications)
+
+            if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+                try:
+                    from database_supabase import supabase
+                    supabase.table("job_applications").delete().eq("id", str(application_id)).execute()
+                except Exception as e:
+                    print("Error deleting application from Supabase:", e)
+
 
             return {
                 "message": "Application withdrawn successfully.",
@@ -544,6 +620,20 @@ def apply_to_job_compatibility(
 
     applications.append(application)
     save_applications(applications)
+
+    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+        try:
+            from database_supabase import supabase
+            supabase.table("job_applications").insert({
+                "id": str(application["id"]),
+                "job_id": str(application["job_id"]),
+                "applicant_id": str(application["student_id"]),
+                "status": "submitted",
+                "resume_url": application.get("resume_url", ""),
+                "cover_letter": application.get("cover_letter", ""),
+            }).execute()
+        except Exception as e:
+            print("Error saving application to Supabase:", e)
 
     poster_id = str(job.get("posted_by"))
     job_title = job.get("title", "")
@@ -649,6 +739,16 @@ def update_application_status_compatibility(
             app["updated_at"] = datetime.now(timezone.utc).isoformat()
 
             save_applications(applications)
+
+            if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+                try:
+                    from database_supabase import supabase
+                    supabase.table("job_applications").update({
+                        "status": body.status,
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    }).eq("id", str(application_id)).execute()
+                except Exception as e:
+                    print("Error updating application in Supabase:", e)
 
             if old_status != body.status:
                 student_id = str(app.get("student_id"))
