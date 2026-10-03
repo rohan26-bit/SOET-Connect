@@ -1,4 +1,11 @@
-from bson import ObjectId
+try:
+    from bson import ObjectId
+except ImportError:
+    class ObjectId:
+        @staticmethod
+        def is_valid(val):
+            return False
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 

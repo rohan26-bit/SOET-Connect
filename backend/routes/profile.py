@@ -1,6 +1,17 @@
 from datetime import datetime, timezone
 from typing import Optional, List
-from bson import ObjectId
+try:
+    from bson import ObjectId
+except ImportError:
+    class ObjectId:
+        def __init__(self, val=None):
+            self.val = str(val)
+        def __str__(self):
+            return self.val
+        @staticmethod
+        def is_valid(val):
+            return False
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from urllib.parse import urlparse
 from pydantic import BaseModel, Field, field_validator

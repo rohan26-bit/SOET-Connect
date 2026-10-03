@@ -1,9 +1,21 @@
+import os
 from datetime import datetime, timezone
 import json
 import uuid
 from pathlib import Path
 
-from bson import ObjectId
+try:
+    from bson import ObjectId
+except ImportError:
+    class ObjectId:
+        def __init__(self, val=None):
+            self.val = str(val)
+        def __str__(self):
+            return self.val
+        @staticmethod
+        def is_valid(val):
+            return False
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -46,7 +58,23 @@ class JobStatusRequest(BaseModel):
 # HELPERS
 # ============================================================
 
-def load_jobs():
+def load_jobs() -> list[dict]:
+    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+        try:
+            from database_supabase import supabase
+            res = supabase.table("jobs").select("*").order("created_at", desc=True).execute()
+            jobs = []
+            for row in res.data or []:
+                j = dict(row)
+                j["employment_type"] = row.get("job_type", "")
+                j["experience"] = row.get("experience_level", "")
+                j["salary"] = row.get("salary_range", "")
+                jobs.append(j)
+            return jobs
+        except Exception as e:
+            print("Error loading jobs from Supabase:", e)
+            return []
+
     try:
         if JOBS_FILE.exists():
             return json.loads(
@@ -158,6 +186,26 @@ def create_job(
     jobs.append(job_document)
     save_jobs(jobs)
 
+    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+        try:
+            from database_supabase import supabase
+            supabase.table("jobs").insert({
+                "id": str(job_document["id"]),
+                "posted_by": str(job_document["posted_by"]) if job_document.get("posted_by") else None,
+                "title": job_document.get("title", ""),
+                "company": job_document.get("company", ""),
+                "location": job_document.get("location", ""),
+                "job_type": job_document.get("employment_type", ""),
+                "experience_level": job_document.get("experience", ""),
+                "salary_range": job_document.get("salary", ""),
+                "description": job_document.get("description", ""),
+                "requirements": "",
+                "skills": job_document.get("skills", []),
+                "status": job_document.get("status", "pending"),
+            }).execute()
+        except Exception as e:
+            print("Error persisting job to Supabase:", e)
+
     if initial_status == "pending":
         try:
             create_notification_once(
@@ -267,6 +315,16 @@ def update_job_status(
 
             save_jobs(jobs)
 
+            if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+                try:
+                    from database_supabase import supabase
+                    supabase.table("jobs").update({
+                        "status": request.status,
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    }).eq("id", str(job_id)).execute()
+                except Exception as e:
+                    print("Error updating job status in Supabase:", e)
+
             if old_status != request.status:
                 owner_id = str(job.get("posted_by"))
                 job_title = job.get("title", "")
@@ -333,6 +391,13 @@ def delete_job(
 
             deleted_job = jobs.pop(index)
             save_jobs(jobs)
+
+            if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+                try:
+                    from database_supabase import supabase
+                    supabase.table("jobs").delete().eq("id", str(job_id)).execute()
+                except Exception as e:
+                    print("Error deleting job from Supabase:", e)
 
             return {
                 "message": "Job deleted successfully.",

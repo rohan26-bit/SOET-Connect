@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timezone
 import json
 import uuid
@@ -70,6 +71,22 @@ class EventUpdateRequest(BaseModel):
 # ============================================================
 
 def load_events() -> list[dict]:
+    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+        try:
+            from database_supabase import supabase
+            res = supabase.table("events").select("*").order("date", desc=True).execute()
+            events = []
+            for row in res.data or []:
+                e = dict(row)
+                e["event_date"] = str(row.get("date", ""))
+                e["start_date"] = str(row.get("date", ""))
+                e["start_time"] = str(row.get("time", ""))
+                events.append(e)
+            return events
+        except Exception as e:
+            print("Error loading events from Supabase:", e)
+            return []
+
     try:
         if EVENTS_FILE.exists():
             data = EVENTS_FILE.read_text(encoding="utf-8").strip()
@@ -101,6 +118,19 @@ def _find_event(event_id: str) -> dict | None:
 # ============================================================
 
 def load_registrations() -> list[dict]:
+    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+        try:
+            from database_supabase import supabase
+            res = supabase.table("event_registrations").select("*").execute()
+            regs = []
+            for row in res.data or []:
+                r = dict(row)
+                regs.append(r)
+            return regs
+        except Exception as e:
+            print("Error loading registrations from Supabase:", e)
+            return []
+
     try:
         if REGISTRATIONS_FILE.exists():
             data = REGISTRATIONS_FILE.read_text(encoding="utf-8").strip()
@@ -266,6 +296,26 @@ def create_event(
     events.append(event_document)
     save_events(events)
 
+    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+        try:
+            from database_supabase import supabase
+            event_date = event_document.get("event_date") or event_document.get("start_date") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            supabase.table("events").insert({
+                "id": str(event_document["id"]),
+                "created_by": str(event_document["created_by"]) if event_document.get("created_by") else None,
+                "title": event_document.get("title", ""),
+                "description": event_document.get("description", ""),
+                "event_type": event_document.get("event_type", "general"),
+                "date": event_date,
+                "time": event_document.get("start_time", "00:00"),
+                "location": event_document.get("location", "TBD"),
+                "virtual_link": event_document.get("image_url", ""),
+                "capacity": 100,
+                "status": initial_status,
+            }).execute()
+        except Exception as e:
+            print("Error inserting event into Supabase:", e)
+
     if initial_status == "pending":
         creator_id = str(event_document["created_by"])
         try:
@@ -396,6 +446,24 @@ def update_event(
 
             save_events(events)
 
+            if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+                try:
+                    from database_supabase import supabase
+                    update_dict = {
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    }
+                    if "status" in update_data:
+                        update_dict["status"] = update_data["status"]
+                    if "title" in update_data:
+                        update_dict["title"] = update_data["title"]
+                    if "description" in update_data:
+                        update_dict["description"] = update_data["description"]
+                    if "location" in update_data:
+                        update_dict["location"] = update_data["location"]
+                    supabase.table("events").update(update_dict).eq("id", str(event_id)).execute()
+                except Exception as e:
+                    print("Error updating event in Supabase:", e)
+
             new_status = update_data.get("status")
             if new_status is not None and old_status != new_status:
                 creator_id = str(event.get("created_by"))
@@ -482,6 +550,13 @@ def delete_event(
 
             deleted_event = events.pop(index)
             save_events(events)
+
+            if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+                try:
+                    from database_supabase import supabase
+                    supabase.table("events").delete().eq("id", str(event_id)).execute()
+                except Exception as e:
+                    print("Error deleting event from Supabase:", e)
 
             # Cascade: also remove registrations for this event
             registrations = load_registrations()
@@ -590,6 +665,18 @@ def register_for_event(
     registrations.append(registration)
     save_registrations(registrations)
 
+    if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+        try:
+            from database_supabase import supabase
+            supabase.table("event_registrations").insert({
+                "id": str(registration.get("id") or uuid.uuid4()),
+                "event_id": str(event_id),
+                "user_id": str(user_id),
+                "status": "registered",
+            }).execute()
+        except Exception as e:
+            print("Error saving registration to Supabase:", e)
+
     try:
         create_notification_once(
             user_id=user_id,
@@ -628,6 +715,13 @@ def cancel_event_registration(
         ):
             deleted_reg = registrations.pop(index)
             save_registrations(registrations)
+
+            if os.getenv("DATABASE_BACKEND", "mongodb").lower() == "supabase":
+                try:
+                    from database_supabase import supabase
+                    supabase.table("event_registrations").delete().eq("event_id", str(event_id)).eq("user_id", str(user_id)).execute()
+                except Exception as e:
+                    print("Error cancelling registration in Supabase:", e)
 
             return {
                 "message": "Registration cancelled successfully.",
