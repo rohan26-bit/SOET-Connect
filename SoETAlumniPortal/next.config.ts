@@ -2,15 +2,23 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   async rewrites() {
-    if (process.env.NODE_ENV === "development") {
-      return [
-        {
-          source: "/api/:path*",
-          destination: "http://127.0.0.1:8000/:path*",
-        },
-      ];
+    const isDev = process.env.NODE_ENV === "development";
+    const backendUrl = isDev
+      ? (process.env.BACKEND_URL || "http://127.0.0.1:8000")
+      : process.env.BACKEND_URL;
+
+    if (!backendUrl) {
+      return [];
     }
-    return [];
+
+    const normalizedBackendUrl = backendUrl.replace(/\/+$/, "");
+
+    return [
+      {
+        source: "/api/:path*",
+        destination: `${normalizedBackendUrl}/api/:path*`,
+      },
+    ];
   },
 };
 
