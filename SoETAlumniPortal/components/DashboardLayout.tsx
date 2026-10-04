@@ -8,7 +8,7 @@ import {
   Home, Users, Briefcase, Calendar, 
   Bell, User, Settings, Info, 
   LogOut, Shield, BarChart3, Megaphone,
-  Menu, X, ShieldCheck
+  Menu, X, ShieldCheck, GraduationCap
 } from 'lucide-react';
 
 const mainNavItems = [
@@ -43,6 +43,7 @@ const adminNavItems = [
   { name: 'Dashboard', icon: Home, href: '/admin' },
   { name: 'Alumni Verification', icon: Shield, href: '/admin/verify' },
   { name: 'Student Verification', icon: ShieldCheck, href: '/admin/students' },
+  { name: 'Student Management', icon: GraduationCap, href: '/admin/student-management' },
   { name: 'Alumni Management', icon: Users, href: '/admin/alumni' },
   { name: 'Job Approvals', icon: Briefcase, href: '/admin/jobs' },
   { name: 'Events', icon: Calendar, href: '/admin/events' },
