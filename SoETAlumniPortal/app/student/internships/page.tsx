@@ -5,6 +5,7 @@ import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import { jobService, JobItem } from '@/lib/services/jobService';
 import { Briefcase, Building, MapPin, ArrowRight } from 'lucide-react';
+import { DocumentAttachmentView } from '@/components/DocumentAttachment';
 
 export default function InternshipsPage() {
   const [internships, setInternships] = useState<JobItem[]>([]);
@@ -71,6 +72,8 @@ export default function InternshipsPage() {
                   <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {job.location}</span>
                   {job.salary && <span>• Stipend: {job.salary}</span>}
                 </div>
+                {/* Details Document (Optional) */}
+                <DocumentAttachmentView attachment={job.attachment} label="Internship Details" />
               </div>
 
               <Link

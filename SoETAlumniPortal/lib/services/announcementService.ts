@@ -23,6 +23,8 @@ async function parseResponse(response: Response) {
   return data;
 }
 
+import { DocumentAttachmentData } from '@/components/DocumentAttachment';
+
 export interface AnnouncementItem {
   id: string;
   title: string;
@@ -33,6 +35,7 @@ export interface AnnouncementItem {
   is_published?: boolean;
   creator_name?: string;
   updated_at?: string;
+  attachment?: DocumentAttachmentData;
 }
 
 export const announcementService = {
@@ -63,6 +66,7 @@ export const announcementService = {
     target_audience: 'all' | 'students' | 'alumni';
     created_by?: string;
     is_published?: boolean;
+    attachment?: DocumentAttachmentData;
   }) {
     const response = await fetch(`${API_URL}/announcements`, {
       method: 'POST',
@@ -90,6 +94,7 @@ export const announcementService = {
       title?: string;
       content?: string;
       target_audience?: 'all' | 'students' | 'alumni';
+      attachment?: DocumentAttachmentData;
     }
   ) {
     const response = await fetch(

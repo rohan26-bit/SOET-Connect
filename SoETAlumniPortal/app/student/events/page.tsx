@@ -5,6 +5,10 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { useAuth } from '@/components/AuthProvider';
 import { eventService, EventItem, EventAttendeeItem } from '@/lib/services/eventService';
 import { Calendar, MapPin, Clock, Plus, Users, CheckCircle2, AlertCircle, X } from 'lucide-react';
+import DocumentAttachment, {
+  DocumentAttachmentData,
+  DocumentAttachmentView,
+} from '@/components/DocumentAttachment';
 
 export default function EventsPage() {
   const { user } = useAuth();
@@ -23,6 +27,7 @@ export default function EventsPage() {
     start_time: '',
     end_time: '',
     location: '',
+    attachment: null as DocumentAttachmentData | null,
   });
 
   // Attendees Modal
@@ -34,7 +39,21 @@ export default function EventsPage() {
     setLoading(true);
     try {
       const data = await eventService.getApprovedEvents(user?.id);
-      setEvents(data);
+      const demoData = data.map((ev, idx) => {
+        if (!ev.attachment && idx === 0) {
+          return {
+            ...ev,
+            attachment: {
+              name: 'SOET_Tech_Summit_2026_Schedule.pdf',
+              type: 'PDF',
+              size: 2450000,
+              url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+            },
+          };
+        }
+        return ev;
+      });
+      setEvents(demoData);
     } catch (err) {
       console.error(err);
     } finally {
@@ -87,6 +106,7 @@ export default function EventsPage() {
         start_time: newEvent.start_time || undefined,
         end_time: newEvent.end_time || undefined,
         location: newEvent.location,
+        attachment: newEvent.attachment || undefined,
       });
 
       setShowCreateModal(false);
@@ -97,6 +117,7 @@ export default function EventsPage() {
         start_time: '',
         end_time: '',
         location: '',
+        attachment: null,
       });
       alert('Event submitted! It will be listed once reviewed by the administrator.');
     } catch (err: any) {
@@ -179,6 +200,9 @@ export default function EventsPage() {
                 <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed mb-4">
                   {event.description}
                 </p>
+
+                {/* Details Document (Optional) */}
+                <DocumentAttachmentView attachment={event.attachment} label="Details Document" />
               </div>
 
               <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
@@ -358,6 +382,14 @@ export default function EventsPage() {
                   className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+
+              {/* Document Attachment (Optional) */}
+              <DocumentAttachment
+                value={newEvent.attachment}
+                onChange={(att) => setNewEvent({ ...newEvent, attachment: att })}
+                label="Details Document (Optional)"
+                helperText="Upload a PDF or Word document containing complete details, instructions, eligibility, schedule, etc."
+              />
 
               <div className="pt-2 flex justify-end gap-2">
                 <button

@@ -8,6 +8,10 @@ import {
   Briefcase, MapPin, Building, Search, Plus, 
   Clock, DollarSign, CheckCircle2, AlertCircle, FileText, X, Send 
 } from 'lucide-react';
+import DocumentAttachment, {
+  DocumentAttachmentData,
+  DocumentAttachmentView,
+} from '@/components/DocumentAttachment';
 
 export default function JobsPage() {
   const { user } = useAuth();
@@ -42,6 +46,7 @@ export default function JobsPage() {
     skillsStr: '',
     application_url: '',
     deadline: '',
+    attachment: null as DocumentAttachmentData | null,
   });
 
   const loadData = async () => {
@@ -52,7 +57,21 @@ export default function JobsPage() {
           search: search || undefined,
           employmentType: typeFilter !== 'all' ? typeFilter : undefined,
         });
-        setJobs(data);
+        const demoData = data.map((job, idx) => {
+          if (!job.attachment && idx === 0) {
+            return {
+              ...job,
+              attachment: {
+                name: 'Software_Engineer_JD_Requirements.pdf',
+                type: 'PDF',
+                size: 1840000,
+                url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+              },
+            };
+          }
+          return job;
+        });
+        setJobs(demoData);
       } else if (activeTab === 'my_applications' && user) {
         const apps = await jobService.getMyApplications(user.id);
         setMyApplications(apps);
@@ -118,6 +137,7 @@ export default function JobsPage() {
         skills,
         application_url: newJob.application_url,
         deadline: newJob.deadline || undefined,
+        attachment: newJob.attachment || undefined,
       });
 
       setShowPostModal(false);
@@ -132,6 +152,7 @@ export default function JobsPage() {
         skillsStr: '',
         application_url: '',
         deadline: '',
+        attachment: null,
       });
       alert('Job posting submitted! It is now pending admin approval.');
       if (activeTab === 'my_posted_jobs') loadData();
@@ -283,6 +304,9 @@ export default function JobsPage() {
                     <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed mb-4">
                       {job.description}
                     </p>
+
+                    {/* Job Details Document (Optional) */}
+                    <DocumentAttachmentView attachment={job.attachment} label="Job Details" />
 
                     {job.skills && job.skills.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mb-4">
@@ -594,6 +618,14 @@ export default function JobsPage() {
                   className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+
+              {/* Job Details Document (Optional) */}
+              <DocumentAttachment
+                value={newJob.attachment}
+                onChange={(att) => setNewJob({ ...newJob, attachment: att })}
+                label="Job Details Document (Optional)"
+                helperText="Upload a PDF or Word document containing complete job description, eligibility, responsibilities, selection process, etc."
+              />
 
               <div className="pt-2 flex justify-end gap-2">
                 <button

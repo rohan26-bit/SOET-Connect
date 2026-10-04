@@ -1,3 +1,5 @@
+import { DocumentAttachmentData } from '@/components/DocumentAttachment';
+
 export interface EventItem {
   id: string;
   created_by: string;
@@ -18,6 +20,7 @@ export interface EventItem {
   creator_avatar?: string;
   registration_count?: number;
   is_registered?: boolean;
+  attachment?: DocumentAttachmentData;
 }
 
 export interface EventAttendeeItem {
@@ -82,6 +85,7 @@ export const eventService = {
         creator_name: e.creator_name,
         registration_count: e.registration_count || 0,
         is_registered: !!e.is_registered,
+        attachment: e.attachment,
       }));
   },
 
@@ -118,6 +122,7 @@ export const eventService = {
       creator_name: e.creator_name,
       registration_count: e.registration_count || 0,
       is_registered: !!e.is_registered,
+      attachment: e.attachment,
     }));
   },
 
@@ -156,6 +161,7 @@ export const eventService = {
         creator_name: e.creator_name,
         registration_count: e.registration_count || 0,
         is_registered: !!e.is_registered,
+        attachment: e.attachment,
       }));
   },
 
@@ -175,6 +181,7 @@ export const eventService = {
     registration_deadline?: string;
     event_type?: string;
     tags?: string[];
+    attachment?: DocumentAttachmentData;
   }) {
     // Note on image upload: FastAPI events API accepts image_url string directly.
     // Preserving image_url string if provided.

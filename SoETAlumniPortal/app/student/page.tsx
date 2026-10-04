@@ -8,6 +8,7 @@ import { jobService, JobItem } from '@/lib/services/jobService';
 import { eventService, EventItem } from '@/lib/services/eventService';
 import { announcementService, AnnouncementItem } from '@/lib/services/announcementService';
 import { Briefcase, Calendar, Megaphone, ArrowRight, MapPin, Building, Clock } from 'lucide-react';
+import { DocumentAttachmentView } from '@/components/DocumentAttachment';
 
 export default function StudentDashboard() {
   const { user } = useAuth();
@@ -157,6 +158,8 @@ export default function StudentDashboard() {
                   <div key={a.id} className="p-4 bg-[#FBFAF8] rounded-2xl border border-[#DDD7D2]/80">
                     <h3 className="font-bold text-[#4A3832] text-sm">{a.title}</h3>
                     <p className="text-xs text-[#6B6B6B] mt-1 leading-relaxed">{a.content}</p>
+                    {/* Supporting Document (Optional) */}
+                    <DocumentAttachmentView attachment={a.attachment} label="Attached Document" />
                     <span className="text-[10px] text-[#888888] mt-2 block font-medium">
                       Posted by {a.creator_name || 'Admin'} • {new Date(a.created_at).toLocaleDateString()}
                     </span>

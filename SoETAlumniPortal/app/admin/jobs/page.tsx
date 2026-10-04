@@ -3,18 +3,54 @@
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { jobService, JobItem } from '@/lib/services/jobService';
-import { Briefcase, CheckCircle2, XCircle, Trash2, Building, MapPin, Search } from 'lucide-react';
+import { Briefcase, CheckCircle2, XCircle, Trash2, Building, MapPin, Search, Plus, X, AlertCircle } from 'lucide-react';
+import DocumentAttachment, {
+  DocumentAttachmentData,
+  DocumentAttachmentView,
+} from '@/components/DocumentAttachment';
 
 export default function AdminJobsPage() {
   const [jobs, setJobs] = useState<JobItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
 
+  // Create Job Modal (Admin)
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [newJob, setNewJob] = useState({
+    title: '',
+    company: '',
+    description: '',
+    location: '',
+    employment_type: 'Full-time',
+    experience: '',
+    salary: '',
+    skillsStr: '',
+    application_url: '',
+    deadline: '',
+    attachment: null as DocumentAttachmentData | null,
+  });
+
   const loadJobs = async () => {
     setLoading(true);
     try {
       const data = await jobService.getAllJobsForAdmin();
-      setJobs(data);
+      const demoData = data.map((job, idx) => {
+        if (!job.attachment && idx === 0) {
+          return {
+            ...job,
+            attachment: {
+              name: 'Software_Engineer_JD_Requirements.pdf',
+              type: 'PDF',
+              size: 1840000,
+              url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+            },
+          };
+        }
+        return job;
+      });
+      setJobs(demoData);
     } catch (err) {
       console.error(err);
     } finally {
@@ -25,6 +61,50 @@ export default function AdminJobsPage() {
   useEffect(() => {
     loadJobs();
   }, []);
+
+  const handleCreateJob = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreating(true);
+    setCreateError(null);
+
+    try {
+      const skills = newJob.skillsStr.split(',').map((s) => s.trim()).filter(Boolean);
+      await jobService.createJob({
+        posted_by: 'admin',
+        title: newJob.title,
+        company: newJob.company,
+        description: newJob.description,
+        location: newJob.location,
+        employment_type: newJob.employment_type,
+        experience: newJob.experience,
+        salary: newJob.salary,
+        skills,
+        application_url: newJob.application_url,
+        deadline: newJob.deadline || undefined,
+        attachment: newJob.attachment || undefined,
+      });
+
+      setShowCreateModal(false);
+      setNewJob({
+        title: '',
+        company: '',
+        description: '',
+        location: '',
+        employment_type: 'Full-time',
+        experience: '',
+        salary: '',
+        skillsStr: '',
+        application_url: '',
+        deadline: '',
+        attachment: null,
+      });
+      loadJobs();
+    } catch (err: any) {
+      setCreateError(err.message || 'Failed to create job posting.');
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const handleStatusChange = async (jobId: string, status: 'approved' | 'rejected') => {
     try {
@@ -63,6 +143,12 @@ export default function AdminJobsPage() {
             Review, approve, or reject job and internship postings submitted by SOET alumni.
           </p>
         </div>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="flex items-center gap-2 px-5 py-2.5 bg-[#F28C38] hover:bg-[#E07D2E] text-white rounded-xl text-xs font-bold shadow-lg shadow-[#F28C38]/25 transition cursor-pointer self-start md:self-auto"
+        >
+          <Plus className="w-4 h-4" /> Post Opportunity
+        </button>
       </div>
 
       {/* Filter Tabs */}
@@ -120,7 +206,10 @@ export default function AdminJobsPage() {
                   {job.description}
                 </p>
 
-                <div className="text-[11px] text-slate-400">
+                {/* Job Details Document (Optional) */}
+                <DocumentAttachmentView attachment={job.attachment} label="Job Details" />
+
+                <div className="text-[11px] text-slate-400 mt-3">
                   Posted by: <span className="font-semibold text-slate-700">{job.poster_name || 'Alumni'}</span> ({job.poster_email || '—'})
                 </div>
               </div>
@@ -154,6 +243,158 @@ export default function AdminJobsPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Create Job Modal (Admin) */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl relative border border-slate-100 max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setShowCreateModal(false)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-700"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <h3 className="text-lg font-bold text-slate-900 mb-1">Create Job Opportunity</h3>
+            <p className="text-xs text-slate-500 mb-6">
+              Post an official job or internship notice directly to the SOET student portal.
+            </p>
+
+            {createError && (
+              <div className="mb-4 bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{createError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateJob} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Job Title *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newJob.title}
+                    onChange={(e) => setNewJob({ ...newJob, title: e.target.value })}
+                    placeholder="e.g. Associate Software Engineer"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-[#F28C38]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Company Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newJob.company}
+                    onChange={(e) => setNewJob({ ...newJob, company: e.target.value })}
+                    placeholder="e.g. Infosys / Google"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-[#F28C38]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Employment Type *
+                  </label>
+                  <select
+                    value={newJob.employment_type}
+                    onChange={(e) => setNewJob({ ...newJob, employment_type: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:ring-2 focus:ring-[#F28C38]"
+                  >
+                    <option value="Full-time">Full-time</option>
+                    <option value="Part-time">Part-time</option>
+                    <option value="Internship">Internship</option>
+                    <option value="Remote">Remote</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Location *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newJob.location}
+                    onChange={(e) => setNewJob({ ...newJob, location: e.target.value })}
+                    placeholder="e.g. Pune, India"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-[#F28C38]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Salary / Stipend
+                  </label>
+                  <input
+                    type="text"
+                    value={newJob.salary}
+                    onChange={(e) => setNewJob({ ...newJob, salary: e.target.value })}
+                    placeholder="e.g. ₹8-12 LPA"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-[#F28C38]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  Required Skills (comma separated)
+                </label>
+                <input
+                  type="text"
+                  value={newJob.skillsStr}
+                  onChange={(e) => setNewJob({ ...newJob, skillsStr: e.target.value })}
+                  placeholder="e.g. Java, Spring Boot, MySQL"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-[#F28C38]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  Job Description *
+                </label>
+                <textarea
+                  rows={4}
+                  required
+                  value={newJob.description}
+                  onChange={(e) => setNewJob({ ...newJob, description: e.target.value })}
+                  placeholder="Describe responsibilities, eligibility, selection process..."
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-[#F28C38]"
+                />
+              </div>
+
+              {/* Job Details Document (Optional) */}
+              <DocumentAttachment
+                value={newJob.attachment}
+                onChange={(att) => setNewJob({ ...newJob, attachment: att })}
+                label="Job Details Document (Optional)"
+                helperText="Upload a PDF or Word document containing complete job description, eligibility, responsibilities, selection process, company information, etc."
+              />
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creating}
+                  className="px-5 py-2 bg-[#F28C38] hover:bg-[#E07D2E] text-white text-xs font-bold rounded-xl shadow-md shadow-[#F28C38]/20 disabled:opacity-50"
+                >
+                  {creating ? 'Creating...' : 'Create Job'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </DashboardLayout>

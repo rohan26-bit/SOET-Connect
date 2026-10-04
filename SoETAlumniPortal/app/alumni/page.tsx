@@ -12,6 +12,7 @@ import {
   Briefcase, Calendar, Megaphone, Plus, 
   ShieldCheck, ShieldAlert, ArrowRight, Building, MapPin, Clock, Award, CheckCircle2
 } from 'lucide-react';
+import { DocumentAttachmentView } from '@/components/DocumentAttachment';
 
 export default function AlumniDashboard() {
   const { user } = useAuth();
@@ -320,6 +321,8 @@ export default function AlumniDashboard() {
                 <div key={a.id} className="p-4 bg-[#FBFAF8] rounded-2xl border border-[#DDD7D2]/80">
                   <h3 className="text-xs font-bold text-[#4A3832]">{a.title}</h3>
                   <p className="text-xs text-[#6B6B6B] mt-1 leading-relaxed">{a.content}</p>
+                  {/* Supporting Document (Optional) */}
+                  <DocumentAttachmentView attachment={a.attachment} label="Attached Document" />
                   <span className="text-[10px] text-[#888888] mt-2 block font-medium">
                     {new Date(a.created_at).toLocaleDateString()}
                   </span>

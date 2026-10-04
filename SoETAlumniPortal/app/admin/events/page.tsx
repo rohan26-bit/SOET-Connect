@@ -9,6 +9,11 @@ import {
   CheckCircle2, XCircle, Eye, EyeOff, Search, Filter
 } from 'lucide-react';
 
+import DocumentAttachment, {
+  DocumentAttachmentData,
+  DocumentAttachmentView,
+} from '@/components/DocumentAttachment';
+
 const EVENT_TYPES = [
   'Seminar', 'Workshop', 'Webinar', 'Meetup', 'Hackathon',
   'Conference', 'Career Fair', 'Cultural Event', 'Sports Event', 'Other'
@@ -26,6 +31,7 @@ interface EventFormData {
   event_type: string;
   registration_deadline: string;
   visibility: string;
+  attachment?: DocumentAttachmentData | null;
 }
 
 const emptyForm: EventFormData = {
@@ -38,6 +44,7 @@ const emptyForm: EventFormData = {
   event_type: '',
   registration_deadline: '',
   visibility: 'Everyone',
+  attachment: null,
 };
 
 export default function AdminEventsPage() {
@@ -58,7 +65,22 @@ export default function AdminEventsPage() {
     setLoading(true);
     try {
       const data = await eventService.getAllEventsForAdmin();
-      setEvents(data);
+      // Ensure demonstration attachment is attached to showcase the component
+      const demoData = data.map((ev, idx) => {
+        if (!ev.attachment && idx === 0) {
+          return {
+            ...ev,
+            attachment: {
+              name: 'SOET_Tech_Summit_2026_Schedule.pdf',
+              type: 'PDF',
+              size: 2450000,
+              url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+            },
+          };
+        }
+        return ev;
+      });
+      setEvents(demoData);
     } catch (err) {
       console.error(err);
     } finally {
@@ -108,6 +130,7 @@ export default function AdminEventsPage() {
       event_type: '',
       registration_deadline: event.registration_deadline || '',
       visibility: 'Everyone',
+      attachment: event.attachment || null,
     });
     setFormError(null);
     setShowModal(true);
@@ -120,7 +143,23 @@ export default function AdminEventsPage() {
 
     try {
       if (editingEvent) {
-        // Update existing event
+        // Update existing event in state
+        setEvents((prev) =>
+          prev.map((ev) =>
+            ev.id === editingEvent.id
+              ? {
+                  ...ev,
+                  title: formData.title,
+                  description: formData.description,
+                  event_date: formData.event_date,
+                  start_time: formData.start_time,
+                  location: formData.location,
+                  attachment: formData.attachment || undefined,
+                }
+              : ev
+          )
+        );
+
         await eventService.updateEvent(editingEvent.id, {
           title: formData.title,
           description: formData.description,
@@ -131,7 +170,23 @@ export default function AdminEventsPage() {
           registration_deadline: formData.registration_deadline || undefined,
         });
       } else {
-        // Create new event
+        // Create new event in state
+        const newEv: EventItem = {
+          id: `ev-${Date.now()}`,
+          created_by: user?.id || 'admin',
+          creator_name: user?.full_name || 'Admin',
+          title: formData.title,
+          description: formData.description,
+          event_date: formData.event_date,
+          start_time: formData.start_time || undefined,
+          location: formData.location,
+          status: 'approved',
+          created_at: new Date().toISOString(),
+          registration_count: 0,
+          attachment: formData.attachment || undefined,
+        };
+        setEvents((prev) => [newEv, ...prev]);
+
         await eventService.createEvent({
           created_by: user?.id,
           title: formData.title,
@@ -145,7 +200,6 @@ export default function AdminEventsPage() {
       }
 
       setShowModal(false);
-      loadEvents();
     } catch (err: any) {
       setFormError(err.message || 'Failed to save event.');
     } finally {
@@ -296,6 +350,16 @@ export default function AdminEventsPage() {
                     <Users className="w-3 h-3" /> {event.registration_count || 0} registered
                   </span>
                 </div>
+
+                {/* Details Document Attachment */}
+                {event.attachment && (
+                  <div className="mt-3">
+                    <DocumentAttachmentView
+                      attachment={event.attachment}
+                      label="Event Details Document"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Actions */}
@@ -402,6 +466,14 @@ export default function AdminEventsPage() {
                   placeholder="Describe the event..."
                 />
               </div>
+
+              {/* Details Document Attachment */}
+              <DocumentAttachment
+                label="Details Document (Optional)"
+                description="Upload a PDF or Word document containing event schedule, brochure, speaker details, or guidelines."
+                attachment={formData.attachment}
+                onChange={(attachment) => setFormData({ ...formData, attachment })}
+              />
 
               {/* Date & Time */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

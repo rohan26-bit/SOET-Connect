@@ -1,5 +1,7 @@
 
 
+import { DocumentAttachmentData } from '@/components/DocumentAttachment';
+
 export interface JobItem {
   id: string;
   posted_by: string;
@@ -18,6 +20,7 @@ export interface JobItem {
   poster_name?: string;
   poster_avatar?: string;
   poster_email?: string;
+  attachment?: DocumentAttachmentData;
 }
 
 export interface JobApplicationItem {
@@ -183,6 +186,7 @@ export const jobService = {
     skills?: string[];
     application_url?: string;
     deadline?: string;
+    attachment?: DocumentAttachmentData;
   }) {
 
     const response = await fetch(
