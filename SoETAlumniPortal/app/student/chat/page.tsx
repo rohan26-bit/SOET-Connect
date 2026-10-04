@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
+import LoadingState from '@/components/LoadingState';
 import { useAuth } from '@/components/AuthProvider';
 import {
   chatService,
@@ -273,7 +274,7 @@ function ChatContent() {
 
           <div className="flex-1 overflow-y-auto">
             {loadingConversations ? (
-              <div className="p-6 text-center text-xs text-gray-400">Loading chats...</div>
+              <LoadingState message="Loading messages" className="p-6" />
             ) : conversations.length === 0 ? (
               <div className="p-6 text-center text-xs text-gray-400">
                 <MessageSquare className="w-8 h-8 text-gray-300 mx-auto mb-2" />
@@ -370,7 +371,7 @@ function ChatContent() {
                 )}
 
                 {loadingMessages ? (
-                  <div className="py-12 text-center text-xs text-gray-400">Loading messages...</div>
+                  <LoadingState message="Loading messages" className="py-12" />
                 ) : messages.length === 0 ? (
                   <div className="py-12 text-center text-xs text-gray-400">
                     <MessageSquare className="w-8 h-8 text-gray-300 mx-auto mb-2" />
@@ -471,7 +472,7 @@ function ChatContent() {
 
             <div className="max-h-64 overflow-y-auto divide-y divide-slate-100">
               {loadingAlumni ? (
-                <div className="py-8 text-center text-xs text-slate-400">Loading directory...</div>
+                <LoadingState message="Loading alumni profiles" className="py-8" />
               ) : filteredAlumni.length === 0 ? (
                 <div className="py-8 text-center text-xs text-slate-400">No alumni found.</div>
               ) : (
@@ -511,7 +512,7 @@ function ChatContent() {
 
 export default function ChatPage() {
   return (
-    <Suspense fallback={<div className="p-8 text-center text-xs text-gray-400">Loading chat...</div>}>
+    <Suspense fallback={<LoadingState message="Loading messages" className="p-8" />}>
       <ChatContent />
     </Suspense>
   );

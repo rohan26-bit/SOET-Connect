@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import LoadingState from '@/components/LoadingState';
 import { alumniService, AlumniDirectoryItem } from '@/lib/services/alumniService';
 import { Search, MapPin, Building, GraduationCap, Globe, ExternalLink, Filter, Mail, X } from 'lucide-react';
 
@@ -113,9 +114,7 @@ export default function AlumniDirectoryPage() {
 
       {/* Alumni Grid */}
       {loading ? (
-        <div className="py-16 text-center text-slate-400 text-sm">
-          Searching verified alumni network...
-        </div>
+        <LoadingState message="Loading alumni profiles" className="py-16" />
       ) : alumni.length === 0 ? (
         <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm">
           <GraduationCap className="w-12 h-12 text-slate-300 mx-auto mb-3" />

@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { authService } from '@/lib/services/authService';
 import { GraduationCap, AlertCircle, ArrowRight, ShieldAlert } from 'lucide-react';
+import { ButtonSpinner } from '@/components/LoadingState';
 
 const DEPARTMENTS = [
   'Computer Engineering',
@@ -239,8 +240,17 @@ export default function StudentRegisterPage() {
                   disabled={loading}
                   className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold text-white bg-[#F28C38] hover:bg-[#E07D2E] focus:ring-2 focus:ring-[#F28C38] shadow-lg shadow-[#F28C38]/25 transition disabled:opacity-50 cursor-pointer"
                 >
-                  {loading ? 'Creating Student Account...' : 'Complete Student Registration'}
-                  {!loading && <ArrowRight className="w-4 h-4" />}
+                  {loading ? (
+                    <>
+                      <ButtonSpinner className="text-white" />
+                      <span>Creating Student Account...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Complete Student Registration</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
                 </button>
               </div>
             </form>

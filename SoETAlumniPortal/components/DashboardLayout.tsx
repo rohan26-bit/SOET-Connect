@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
+import LoadingState from '@/components/LoadingState';
 import { 
   Home, Users, Briefcase, Calendar, 
   Bell, User, Settings, Info, 
@@ -91,11 +92,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F7F4EF] text-[#6B5147] font-medium">
-        Loading SOET Portal...
-      </div>
-    );
+    return <LoadingState message="Checking your session" fullPage />;
   }
 
   const userName = user?.full_name || 'User';

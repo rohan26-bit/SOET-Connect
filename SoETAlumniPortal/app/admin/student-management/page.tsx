@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
+import LoadingState from '@/components/LoadingState';
 import { adminService, UserManagementItem } from '@/lib/services/adminService';
 import { 
   GraduationCap, Search, Ban, CheckCircle2, 
@@ -228,10 +229,7 @@ export default function AdminStudentManagementPage() {
         </div>
 
         {loading ? (
-          <div className="p-16 text-center text-xs text-[#6B6B6B]">
-            <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-[#F28C38]" />
-            Loading student records...
-          </div>
+          <LoadingState message="Loading student records" className="p-16" />
         ) : filtered.length === 0 ? (
           <div className="p-16 text-center text-xs text-[#6B6B6B]">
             <GraduationCap className="w-8 h-8 text-[#DDD7D2] mx-auto mb-2" />

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import LoadingState from '@/components/LoadingState';
 import { useAuth } from '@/components/AuthProvider';
 import { eventService, EventItem, EventAttendeeItem } from '@/lib/services/eventService';
 import { Calendar, MapPin, Clock, Plus, Users, CheckCircle2, AlertCircle, X } from 'lucide-react';
@@ -150,7 +151,7 @@ export default function EventsPage() {
       </div>
 
       {loading ? (
-        <div className="py-16 text-center text-slate-400 text-sm">Loading events from database...</div>
+        <LoadingState message="Loading events" className="py-16" />
       ) : events.length === 0 ? (
         <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm">
           <Calendar className="w-12 h-12 text-slate-300 mx-auto mb-3" />
@@ -236,7 +237,7 @@ export default function EventsPage() {
             <p className="text-xs text-slate-500 mb-4">Total: {attendees.length} people</p>
 
             {loadingAttendees ? (
-              <div className="py-8 text-center text-xs text-slate-400">Loading attendee list...</div>
+              <LoadingState message="Loading attendees" className="py-8" />
             ) : attendees.length === 0 ? (
               <div className="py-8 text-center text-xs text-slate-400">No registrations yet.</div>
             ) : (

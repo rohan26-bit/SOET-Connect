@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import LoadingState from '@/components/LoadingState';
 import { useAuth } from '@/components/AuthProvider';
 import { announcementService, AnnouncementItem } from '@/lib/services/announcementService';
 import { Megaphone, Plus, Trash2, Users, GraduationCap, Globe, AlertCircle, X } from 'lucide-react';
@@ -96,7 +97,7 @@ export default function AdminAnnouncementsPage() {
       </div>
 
       {loading ? (
-        <div className="py-16 text-center text-slate-400 text-sm">Loading broadcasts...</div>
+        <LoadingState message="Loading announcements" className="py-16" />
       ) : announcements.length === 0 ? (
         <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm">
           <Megaphone className="w-12 h-12 text-slate-300 mx-auto mb-3" />

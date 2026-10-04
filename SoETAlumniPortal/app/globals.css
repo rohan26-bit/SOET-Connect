@@ -71,3 +71,36 @@ body {
 .light-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #C4BBB4;
 }
+
+/* Global LoadingState animated dots */
+@keyframes loadingDotPulse {
+  0%, 20% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 1;
+  }
+  80%, 100% {
+    opacity: 0.2;
+  }
+}
+
+.loading-dot-1 {
+  animation: loadingDotPulse 1.4s infinite 0s ease-in-out;
+}
+.loading-dot-2 {
+  animation: loadingDotPulse 1.4s infinite 0.25s ease-in-out;
+}
+.loading-dot-3 {
+  animation: loadingDotPulse 1.4s infinite 0.5s ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-dot-1,
+  .loading-dot-2,
+  .loading-dot-3 {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

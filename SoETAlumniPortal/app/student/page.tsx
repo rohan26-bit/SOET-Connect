@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
+import LoadingState from '@/components/LoadingState';
 import { useAuth } from '@/components/AuthProvider';
 import { jobService, JobItem } from '@/lib/services/jobService';
 import { eventService, EventItem } from '@/lib/services/eventService';
@@ -114,7 +115,7 @@ export default function StudentDashboard() {
             </div>
 
             {loading ? (
-              <div className="py-8 text-center text-xs text-[#888888]">Loading jobs from database...</div>
+              <LoadingState message="Loading opportunities" className="py-8" />
             ) : jobs.length === 0 ? (
               <div className="py-8 text-center text-xs text-[#888888]">No active job postings available yet.</div>
             ) : (
@@ -178,7 +179,7 @@ export default function StudentDashboard() {
             </div>
 
             {loading ? (
-              <div className="py-8 text-center text-xs text-[#888888]">Loading events...</div>
+              <LoadingState message="Loading events" className="py-8" />
             ) : events.length === 0 ? (
               <div className="py-8 text-center text-xs text-[#888888]">No upcoming events scheduled.</div>
             ) : (

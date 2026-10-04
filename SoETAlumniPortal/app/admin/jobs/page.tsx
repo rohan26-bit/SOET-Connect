@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import LoadingState from '@/components/LoadingState';
 import { jobService, JobItem } from '@/lib/services/jobService';
 import { Briefcase, CheckCircle2, XCircle, Trash2, Building, MapPin, Search } from 'lucide-react';
 
@@ -83,7 +84,7 @@ export default function AdminJobsPage() {
       </div>
 
       {loading ? (
-        <div className="py-16 text-center text-slate-400 text-sm">Loading all jobs...</div>
+        <LoadingState message="Loading opportunities" className="py-16" />
       ) : filteredJobs.length === 0 ? (
         <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm">
           <Briefcase className="w-12 h-12 text-slate-300 mx-auto mb-3" />

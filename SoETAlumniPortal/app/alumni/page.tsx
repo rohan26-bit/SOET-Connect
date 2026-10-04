@@ -12,6 +12,7 @@ import {
   Briefcase, Calendar, Megaphone, Plus, 
   ShieldCheck, ShieldAlert, ArrowRight, Building, MapPin, Clock, Award, CheckCircle2
 } from 'lucide-react';
+import LoadingState from '@/components/LoadingState';
 
 export default function AlumniDashboard() {
   const { user } = useAuth();
@@ -278,7 +279,7 @@ export default function AlumniDashboard() {
           </div>
 
           {loading ? (
-            <div className="py-8 text-center text-xs text-[#888888]">Loading your jobs...</div>
+            <LoadingState message="Loading opportunities" className="py-8" />
           ) : myJobs.length === 0 ? (
             <div className="py-8 text-center text-xs text-[#888888]">
               You haven't posted any jobs or internships yet.
@@ -312,7 +313,9 @@ export default function AlumniDashboard() {
             </div>
           </div>
 
-          {announcements.length === 0 ? (
+          {loading ? (
+            <LoadingState message="Loading announcements" className="py-8" />
+          ) : announcements.length === 0 ? (
             <div className="py-8 text-center text-xs text-[#888888]">No active announcements.</div>
           ) : (
             <div className="space-y-4">

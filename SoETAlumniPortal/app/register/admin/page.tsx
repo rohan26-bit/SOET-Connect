@@ -10,6 +10,7 @@ import {
   ArrowRight,
   CheckCircle2,
 } from 'lucide-react';
+import { ButtonSpinner } from '@/components/LoadingState';
 
 export default function AdminRegisterPage() {
   const router = useRouter();
@@ -202,11 +203,17 @@ export default function AdminRegisterPage() {
                 disabled={loading}
                 className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-sm font-bold text-white bg-[#F28C38] hover:bg-[#E07D2E] focus:ring-2 focus:ring-[#F28C38] transition-all shadow-lg shadow-[#F28C38]/25 disabled:opacity-50 cursor-pointer"
               >
-                {loading
-                  ? 'Creating Admin Account...'
-                  : 'Create Admin Account'}
-
-                {!loading && <ArrowRight className="w-4 h-4" />}
+                {loading ? (
+                  <>
+                    <ButtonSpinner className="text-white" />
+                    <span>Creating Admin Account...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Create Admin Account</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
 
             </form>

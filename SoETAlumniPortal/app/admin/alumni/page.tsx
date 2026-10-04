@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import LoadingState from '@/components/LoadingState';
 import { adminService, UserManagementItem } from '@/lib/services/adminService';
 import { Users, Search, Building, GraduationCap } from 'lucide-react';
 
@@ -80,7 +81,7 @@ export default function AdminAlumniPage() {
         </div>
 
         {loading ? (
-          <div className="p-12 text-center text-xs text-slate-400">Loading alumni records...</div>
+          <LoadingState message="Loading alumni records" className="p-16" />
         ) : filtered.length === 0 ? (
           <div className="p-12 text-center text-xs text-slate-400">No alumni records found.</div>
         ) : (
