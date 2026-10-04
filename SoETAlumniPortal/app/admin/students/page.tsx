@@ -114,14 +114,14 @@ export default function AdminStudentsPage() {
       <div className="flex items-center text-xs font-semibold text-slate-400 mb-6 uppercase tracking-wider">
         <span>Administration</span>
         <span className="mx-2 text-slate-300">/</span>
-        <span className="text-blue-600">Students Management</span>
+        <span className="text-blue-600">Student Verification</span>
       </div>
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Enrolled Students Directory</h1>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Student Verification</h1>
           <p className="text-xs text-slate-500 mt-1">
-            Review new student registration requests, academic branches, and account permissions.
+            Review and approve student registration requests, verify enrollment details, and manage student accounts.
           </p>
         </div>
 

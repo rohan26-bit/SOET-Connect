@@ -39,6 +39,9 @@ export default function AdminDashboard() {
     loadMetrics();
   }, []);
 
+  const approvedStudents = (metrics.totalStudents || 0) - (metrics.pendingStudents || 0);
+  const pendingStudents = metrics.pendingStudents || 0;
+
   return (
     <DashboardLayout>
       {/* Breadcrumbs */}
@@ -104,7 +107,7 @@ export default function AdminDashboard() {
         {/* Total Students */}
         <div className="bg-white p-6 rounded-3xl border border-[#DDD7D2] shadow-sm flex flex-col justify-between">
           <div className="flex justify-between items-center mb-3">
-            <span className="text-xs font-bold text-[#6B6B6B] uppercase tracking-wider">Students</span>
+            <span className="text-xs font-bold text-[#6B6B6B] uppercase tracking-wider">Total Students</span>
             <div className="w-10 h-10 bg-[#F28C38]/10 text-[#F28C38] rounded-xl flex items-center justify-center">
               <GraduationCap className="w-5 h-5" />
             </div>
@@ -112,7 +115,7 @@ export default function AdminDashboard() {
           <div>
             <div className="text-3xl font-black text-[#4A3832]">{metrics.totalStudents}</div>
             <p className="text-[11px] text-blue-600 font-bold mt-1">
-              {(metrics.totalStudents || 0) - (metrics.pendingStudents || 0)} Verified • {metrics.pendingStudents || 0} Pending
+              {approvedStudents} Verified • {pendingStudents} Pending
             </p>
           </div>
         </div>
@@ -198,13 +201,13 @@ export default function AdminDashboard() {
             <div className="w-10 h-10 bg-[#4A3832] text-white rounded-xl flex items-center justify-center mb-4 shadow-md shadow-[#4A3832]/20">
               <UserCheck className="w-5 h-5" />
             </div>
-            <h3 className="text-base font-bold text-[#4A3832]">Students Management</h3>
+            <h3 className="text-base font-bold text-[#4A3832]">Student Verification</h3>
             <p className="text-xs text-[#6B6B6B] mt-1 leading-relaxed">
-              Browse student directory, check department enrollments, and manage account statuses.
+              Review student registration requests, verify enrollment details, and approve or reject newly registered students.
             </p>
           </div>
           <div className="mt-4 flex items-center text-xs font-bold text-[#F28C38] group-hover:translate-x-1 transition-transform">
-            View Students →
+            Review Student Requests →
           </div>
         </Link>
 

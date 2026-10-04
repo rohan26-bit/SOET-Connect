@@ -7,8 +7,8 @@ import { useAuth } from '@/components/AuthProvider';
 import { 
   Home, Users, Briefcase, Calendar, 
   Bell, User, Settings, Info, 
-  LogOut, Shield, BarChart3, GraduationCap, Megaphone,
-  Menu, X
+  LogOut, Shield, BarChart3, Megaphone,
+  Menu, X, ShieldCheck
 } from 'lucide-react';
 
 const mainNavItems = [
@@ -42,7 +42,7 @@ const alumniMoreNavItems = [
 const adminNavItems = [
   { name: 'Dashboard', icon: Home, href: '/admin' },
   { name: 'Alumni Verification', icon: Shield, href: '/admin/verify' },
-  { name: 'Students Management', icon: GraduationCap, href: '/admin/students' },
+  { name: 'Student Verification', icon: ShieldCheck, href: '/admin/students' },
   { name: 'Alumni Management', icon: Users, href: '/admin/alumni' },
   { name: 'Job Approvals', icon: Briefcase, href: '/admin/jobs' },
   { name: 'Events', icon: Calendar, href: '/admin/events' },
