@@ -50,16 +50,16 @@ export default function AdminJobsPage() {
   return (
     <DashboardLayout>
       {/* Breadcrumbs */}
-      <div className="flex items-center text-xs font-semibold text-slate-400 mb-6 uppercase tracking-wider">
+      <div className="flex items-center text-xs font-semibold text-[#6B6B6B] mb-6 uppercase tracking-wider">
         <span>Administration</span>
-        <span className="mx-2 text-slate-300">/</span>
-        <span className="text-blue-600">Job Approvals & Moderation</span>
+        <span className="mx-2 text-[#DDD7D2]">/</span>
+        <span className="text-[#F28C38]">Job Approvals & Moderation</span>
       </div>
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Job Moderation Console</h1>
-          <p className="text-xs text-slate-500 mt-1">
+          <h1 className="text-2xl font-black text-[#4A3832] tracking-tight">Job Moderation Console</h1>
+          <p className="text-xs text-[#6B6B6B] mt-1">
             Review, approve, or reject job and internship postings submitted by SOET alumni.
           </p>
         </div>
@@ -71,10 +71,10 @@ export default function AdminJobsPage() {
           <button
             key={tab}
             onClick={() => setFilter(tab)}
-            className={`px-4 py-2 rounded-xl text-xs font-bold capitalize transition ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold capitalize transition cursor-pointer ${
               filter === tab
-                ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
-                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                ? 'bg-[#F28C38] text-white shadow-md shadow-[#F28C38]/20'
+                : 'bg-white text-slate-600 border border-[#DDD7D2] hover:bg-slate-50'
             }`}
           >
             {tab} ({jobs.filter((j) => (tab === 'all' ? true : j.status === tab)).length})

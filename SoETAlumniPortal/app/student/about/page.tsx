@@ -4,12 +4,15 @@ import DashboardLayout from '@/components/DashboardLayout';
 export default function AboutPage() {
   return (
     <DashboardLayout>
-      <div className="flex items-center text-sm text-gray-500 mb-6">
-        <span>Home</span><span className="mx-2">/</span><span className="font-medium text-gray-900">About</span>
+      {/* Breadcrumbs */}
+      <div className="flex items-center text-xs font-semibold text-[#6B6B6B] mb-6 uppercase tracking-wider">
+        <span>Portal</span>
+        <span className="mx-2 text-[#DDD7D2]">/</span>
+        <span className="text-[#F28C38]">About SOET Connect</span>
       </div>
-      <h1 className="text-3xl font-bold text-gray-900 mb-6">About SOET Connect</h1>
+      <h1 className="text-2xl font-black text-[#4A3832] tracking-tight mb-6">About SOET Connect</h1>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 max-w-3xl p-8 prose">
+      <div className="bg-white rounded-3xl shadow-sm border border-[#DDD7D2] max-w-3xl p-8 prose">
         <p className="text-lg text-gray-700 mb-4">
           The School of Engineering and Technology (SOET) Alumni Portal is a dedicated platform designed to bridge the gap between current students and our esteemed alumni network.
         </p>
