@@ -40,25 +40,6 @@ export interface UserProfile {
 
 const API_URL = '/api';
 
-async function safeJsonParse(response: Response): Promise<any> {
-  const text = await response.text();
-  try {
-    return JSON.parse(text);
-  } catch {
-    if (!response.ok) {
-      if (response.status >= 500) {
-        throw new Error(
-          'Backend service returned an internal error (500). Please check your credentials or try again shortly.'
-        );
-      }
-      throw new Error(
-        `Server error (${response.status}): ${text.slice(0, 100) || response.statusText || 'Request failed.'}`
-      );
-    }
-    throw new Error('Received an invalid response from the server.');
-  }
-}
-
 export const authService = {
   // ============================================================
   // LOGIN
@@ -81,7 +62,7 @@ export const authService = {
       }),
     });
 
-    const data = await safeJsonParse(response);
+    const data = await response.json();
 
     if (!response.ok) {
       throw new Error(
@@ -168,7 +149,7 @@ export const authService = {
       }),
     });
 
-    const result = await safeJsonParse(response);
+    const result = await response.json();
 
     if (!response.ok) {
       throw new Error(
@@ -229,7 +210,7 @@ export const authService = {
       }),
     });
 
-    const result = await safeJsonParse(response);
+    const result = await response.json();
 
     if (!response.ok) {
       console.error(
@@ -275,7 +256,7 @@ export const authService = {
       }),
     });
 
-    const result = await safeJsonParse(response);
+    const result = await response.json();
 
     if (!response.ok) {
       throw new Error(
