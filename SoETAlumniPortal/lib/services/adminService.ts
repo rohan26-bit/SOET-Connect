@@ -2,6 +2,7 @@ const API_URL = '/api';
 
 export interface AdminMetrics {
   totalStudents: number;
+  pendingStudents?: number;
   totalAlumni: number;
   verifiedAlumni: number;
   pendingAlumni: number;
@@ -174,11 +175,56 @@ export const adminService = {
       degree: s.degree,
       graduation_year: s.graduation_year,
       course_or_company: s.course_or_company || s.course || s.department || 'B.Tech',
-      is_verified: s.is_verified ?? true,
-      verification_status: s.verification_status || 'approved',
+      is_verified: typeof s.is_verified === 'boolean' ? s.is_verified : false,
+      verification_status: s.verification_status || 'pending',
       is_active: s.is_active ?? true,
       created_at: s.created_at,
     }));
+  },
+
+  async getPendingStudents(): Promise<UserManagementItem[]> {
+    const response = await fetch(`${API_URL}/admin/students/pending`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const data = await parseResponse(response);
+    return (data || []).map((s: any) => ({
+      id: s.id,
+      full_name: s.full_name || s.name || '',
+      email: s.email || '',
+      role: 'student' as const,
+      avatar_url: s.avatar_url,
+      department: s.department,
+      degree: s.degree,
+      graduation_year: s.graduation_year,
+      course_or_company: s.course_or_company || s.course || s.department || 'B.Tech',
+      is_verified: typeof s.is_verified === 'boolean' ? s.is_verified : false,
+      verification_status: s.verification_status || 'pending',
+      is_active: s.is_active ?? true,
+      created_at: s.created_at,
+    }));
+  },
+
+  async updateStudentVerification(
+    userId: string,
+    status: 'approved' | 'rejected' | 'suspended'
+  ) {
+    const response = await fetch(
+      `${API_URL}/admin/students/${encodeURIComponent(userId)}/verification?status=${encodeURIComponent(status)}`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    return parseResponse(response);
   },
 
   async getAllAlumni(): Promise<UserManagementItem[]> {

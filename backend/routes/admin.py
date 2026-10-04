@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from database import users_collection, supabase
 from security.dependencies import get_current_user
+from services.notifications import NOTIFICATION_TYPES, create_notification_once
 
 
 router = APIRouter(
@@ -131,6 +132,7 @@ def get_dashboard_metrics(
     })
 
     total_students = 0
+    pending_students = 0
     total_alumni = 0
     verified_alumni = 0
     pending_alumni = 0
@@ -140,6 +142,8 @@ def get_dashboard_metrics(
 
         if role == "student":
             total_students += 1
+            if not user.get("is_verified", False) and user.get("verification_status", "pending") == "pending":
+                pending_students += 1
 
         elif role == "alumni":
             total_alumni += 1
@@ -166,6 +170,7 @@ def get_dashboard_metrics(
 
     return {
         "totalStudents": total_students,
+        "pendingStudents": pending_students,
         "totalAlumni": total_alumni,
         "verifiedAlumni": verified_alumni,
         "pendingAlumni": pending_alumni,
@@ -267,6 +272,23 @@ def _sanitize_user(user: dict) -> dict:
     }
 
 
+def _find_user_by_id(user_id: str) -> dict | None:
+    """Find a user by string ID."""
+    if not user_id:
+        return None
+
+    user_id_str = str(user_id).strip()
+    user = users_collection.find_one({"_id": user_id_str})
+    if user:
+        return user
+
+    for candidate in users_collection.find({}):
+        if str(candidate.get("_id")) == user_id_str:
+            return candidate
+
+    return None
+
+
 @router.get("/students")
 def get_all_students(
     current_user: dict = Depends(get_current_user)
@@ -283,25 +305,121 @@ def get_all_students(
     ]
 
 
-# ============================================================
-# TOGGLE USER ACTIVE STATUS
-# ============================================================
+@router.get("/students/pending")
+def get_pending_students(
+    current_user: dict = Depends(get_current_user)
+):
+    _require_admin(current_user)
 
-def _find_user_by_id(user_id: str) -> dict | None:
-    """Find a user by string ID."""
-    if not user_id:
-        return None
+    student_users = users_collection.find({
+        "role": "student",
+    })
 
-    user_id_str = str(user_id).strip()
-    user = users_collection.find_one({"_id": user_id_str})
-    if user:
-        return user
+    return [
+        _sanitize_user(student)
+        for student in student_users
+        if not student.get("is_verified", False) and student.get("verification_status", "pending") == "pending"
+    ]
 
-    for candidate in users_collection.find({}):
-        if str(candidate.get("_id")) == user_id_str:
-            return candidate
 
-    return None
+@router.patch("/students/{user_id}/verification")
+def update_student_verification(
+    user_id: str,
+    status: str,
+    current_user: dict = Depends(get_current_user)
+):
+    _require_admin(current_user)
+
+    if status not in {"approved", "rejected", "suspended"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid verification status."
+        )
+
+    target_user = users_collection.find_one({
+        "_id": str(user_id),
+        "role": "student"
+    })
+
+    if not target_user:
+        for candidate in users_collection.find({"role": "student"}):
+            if str(candidate.get("_id")) == str(user_id):
+                target_user = candidate
+                break
+
+    if not target_user:
+        other_user = _find_user_by_id(user_id)
+        if other_user and other_user.get("role") != "student":
+            raise HTTPException(
+                status_code=400,
+                detail="Target user is not a student."
+            )
+        raise HTTPException(
+            status_code=404,
+            detail="Student user not found."
+        )
+
+    is_verified = (status == "approved")
+    old_status = target_user.get("verification_status", "pending")
+    target_uid = str(target_user["_id"])
+
+    users_collection.update_one(
+        {"_id": target_user["_id"]},
+        {
+            "$set": {
+                "is_verified": is_verified,
+                "verification_status": status
+            }
+        }
+    )
+
+    if old_status != status:
+        if status == "approved":
+            try:
+                create_notification_once(
+                    user_id=target_uid,
+                    title="Student account approved",
+                    message="Your SOET Connect student account has been approved. You can now sign in and access the portal.",
+                    notification_type=NOTIFICATION_TYPES.get("student_verification", "student_verification"),
+                    entity_type="student",
+                    entity_id=target_uid,
+                    dedupe_key=f"student_verification:{target_uid}:approved",
+                )
+            except Exception:
+                pass
+        elif status == "rejected":
+            try:
+                create_notification_once(
+                    user_id=target_uid,
+                    title="Student account registration rejected",
+                    message="Your SOET Connect student account registration was rejected by an administrator.",
+                    notification_type=NOTIFICATION_TYPES.get("student_verification", "student_verification"),
+                    entity_type="student",
+                    entity_id=target_uid,
+                    dedupe_key=f"student_verification:{target_uid}:rejected",
+                )
+            except Exception:
+                pass
+        elif status == "suspended":
+            try:
+                create_notification_once(
+                    user_id=target_uid,
+                    title="Student account suspended",
+                    message="Your SOET Connect student account has been suspended by an administrator.",
+                    notification_type=NOTIFICATION_TYPES.get("student_verification", "student_verification"),
+                    entity_type="student",
+                    entity_id=target_uid,
+                    dedupe_key=f"student_verification:{target_uid}:suspended",
+                )
+            except Exception:
+                pass
+
+    return {
+        "user_id": str(user_id),
+        "status": status,
+        "is_verified": is_verified,
+        "message": f"Student verification status updated to {status}."
+    }
 
 
 @router.patch("/users/{user_id}/active")

@@ -138,6 +138,30 @@ def login_user(user: LoginRequest):
             detail="This account has been deactivated."
         )
 
+    role = existing_user.get("role")
+    if role in ["student", "alumni"]:
+        v_status = existing_user.get("verification_status", "pending")
+        if v_status == "pending":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your account is awaiting administrator approval."
+            )
+        elif v_status == "rejected":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your account registration was rejected by an administrator."
+            )
+        elif v_status == "suspended":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your account has been suspended by an administrator."
+            )
+        if not (existing_user.get("is_verified", False) and v_status == "approved"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your account is not approved for login."
+            )
+
     access_token = create_access_token(
         user_id=str(existing_user["_id"]),
         role=existing_user["role"]

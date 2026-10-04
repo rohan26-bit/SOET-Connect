@@ -12,6 +12,7 @@ import {
 export default function AdminDashboard() {
   const [metrics, setMetrics] = useState<AdminMetrics>({
     totalStudents: 0,
+    pendingStudents: 0,
     totalAlumni: 0,
     verifiedAlumni: 0,
     pendingAlumni: 0,
@@ -57,6 +58,26 @@ export default function AdminDashboard() {
       </div>
 
       {/* Action Banners */}
+      {(metrics.pendingStudents || 0) > 0 && (
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <GraduationCap className="w-5 h-5 text-blue-600 shrink-0" />
+            <div>
+              <h4 className="text-xs font-bold text-blue-900">
+                {metrics.pendingStudents} Student{(metrics.pendingStudents || 0) > 1 ? 's' : ''} Pending Verification
+              </h4>
+              <p className="text-xs text-blue-700">New student registrations awaiting administrator approval.</p>
+            </div>
+          </div>
+          <Link
+            href="/admin/students"
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md transition self-start sm:self-auto"
+          >
+            Review Students →
+          </Link>
+        </div>
+      )}
+
       {metrics.pendingAlumni > 0 && (
         <div className="mb-8 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -90,7 +111,9 @@ export default function AdminDashboard() {
           </div>
           <div>
             <div className="text-3xl font-black text-[#4A3832]">{metrics.totalStudents}</div>
-            <p className="text-[11px] text-[#6B6B6B] mt-1">Enrolled & registered</p>
+            <p className="text-[11px] text-blue-600 font-bold mt-1">
+              {(metrics.totalStudents || 0) - (metrics.pendingStudents || 0)} Verified • {metrics.pendingStudents || 0} Pending
+            </p>
           </div>
         </div>
 

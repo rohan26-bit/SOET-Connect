@@ -36,14 +36,22 @@ def create_user_document(
 
     now = datetime.now(timezone.utc)
 
+    # Admin is pre-verified; student and alumni accounts remain pending until approved
+    if role == "admin":
+        is_verified = True
+        verification_status = "approved"
+    else:
+        is_verified = False
+        verification_status = "pending"
+
     document = {
         "name": name,
         "email": email.lower().strip(),
         "password_hash": password_hash,
         "role": role,
         "is_active": True,
-        "is_verified": role == "student" or role == "admin",
-"verification_status": "approved" if role == "student" or role == "admin" else "pending",
+        "is_verified": is_verified,
+        "verification_status": verification_status,
         "created_at": now,
         "updated_at": now
     }

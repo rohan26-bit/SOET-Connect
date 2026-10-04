@@ -653,3 +653,183 @@ def test_toggle_real_objectid_user_rbac_and_invalid_ids():
     )
     assert resp_malformed.status_code == 404
     assert "not found" in resp_malformed.json().get("detail", "").lower()
+
+
+# ============================================================
+# STUDENT VERIFICATION WORKFLOW & APPROVAL TESTS
+# ============================================================
+
+def test_admin_can_get_pending_students_and_metrics():
+    """Admin can query /admin/students/pending and see pendingStudents count in /admin/metrics."""
+    headers = setup_test_users()
+
+    # Create a pending student
+    student_id = str(ObjectId())
+    users_collection.insert_one({
+        "_id": student_id,
+        "name": "Pending Queue Student",
+        "email": "pending.queue@student.com",
+        "role": "student",
+        "is_active": True,
+        "is_verified": False,
+        "verification_status": "pending",
+        "student_profile": {"student_id": "STU555", "department": "IT"}
+    })
+
+    # Query pending students
+    resp = client.get("/admin/students/pending", headers=headers["admin"])
+    assert resp.status_code == 200
+    data = resp.json()
+    assert any(s["id"] == student_id for s in data)
+
+    # Query metrics
+    metrics_resp = client.get("/admin/metrics", headers=headers["admin"])
+    assert metrics_resp.status_code == 200
+    metrics = metrics_resp.json()
+    assert "pendingStudents" in metrics
+    assert metrics["pendingStudents"] >= 1
+
+
+def test_admin_can_approve_student():
+    """Admin can approve a pending student via PATCH /admin/students/{user_id}/verification?status=approved."""
+    headers = setup_test_users()
+
+    student_id = str(ObjectId())
+    users_collection.insert_one({
+        "_id": student_id,
+        "name": "Approval Student",
+        "email": "approve.me@student.com",
+        "role": "student",
+        "is_active": True,
+        "is_verified": False,
+        "verification_status": "pending",
+        "student_profile": {"student_id": "STU123"}
+    })
+
+    resp = client.patch(
+        f"/admin/students/{student_id}/verification?status=approved",
+        headers=headers["admin"]
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["user_id"] == student_id
+    assert data["status"] == "approved"
+    assert data["is_verified"] is True
+    assert "approved" in data["message"].lower()
+
+    # Verify persisted in DB
+    u = users_collection.find_one({"_id": student_id})
+    assert u["is_verified"] is True
+    assert u["verification_status"] == "approved"
+
+
+def test_admin_can_reject_student():
+    """Admin can reject a pending student via PATCH /admin/students/{user_id}/verification?status=rejected."""
+    headers = setup_test_users()
+
+    student_id = str(ObjectId())
+    users_collection.insert_one({
+        "_id": student_id,
+        "name": "Reject Student",
+        "email": "reject.me@student.com",
+        "role": "student",
+        "is_active": True,
+        "is_verified": False,
+        "verification_status": "pending",
+    })
+
+    resp = client.patch(
+        f"/admin/students/{student_id}/verification?status=rejected",
+        headers=headers["admin"]
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["user_id"] == student_id
+    assert data["status"] == "rejected"
+    assert data["is_verified"] is False
+
+    u = users_collection.find_one({"_id": student_id})
+    assert u["is_verified"] is False
+    assert u["verification_status"] == "rejected"
+
+
+def test_non_admin_cannot_approve_reject_students():
+    """Student and unauthenticated users cannot approve or reject students."""
+    headers = setup_test_users()
+
+    student_id = str(ObjectId())
+    users_collection.insert_one({
+        "_id": student_id,
+        "name": "Security Student",
+        "email": "sec@student.com",
+        "role": "student",
+        "is_active": True,
+        "is_verified": False,
+        "verification_status": "pending",
+    })
+
+    # Unauthenticated
+    resp_unauth = client.patch(f"/admin/students/{student_id}/verification?status=approved")
+    assert resp_unauth.status_code == 401
+
+    # Student token
+    resp_student = client.patch(
+        f"/admin/students/{student_id}/verification?status=approved",
+        headers=headers["student"]
+    )
+    assert resp_student.status_code == 403
+
+    # Alumni token
+    resp_alumni = client.patch(
+        f"/admin/students/{student_id}/verification?status=approved",
+        headers=headers["alumni"]
+    )
+    assert resp_alumni.status_code == 403
+
+
+def test_cannot_verify_non_student_via_student_endpoint():
+    """Attempting to verify an alumni user through student verification endpoint fails."""
+    headers = setup_test_users()
+
+    alumni_id = str(ObjectId())
+    users_collection.insert_one({
+        "_id": alumni_id,
+        "name": "Alumni Target",
+        "email": "alumni.target@domain.com",
+        "role": "alumni",
+        "is_active": True,
+        "is_verified": False,
+        "verification_status": "pending",
+    })
+
+    resp = client.patch(
+        f"/admin/students/{alumni_id}/verification?status=approved",
+        headers=headers["admin"]
+    )
+    assert resp.status_code == 400
+    assert "not a student" in resp.json().get("detail", "").lower()
+
+
+def test_existing_alumni_verification_flow_still_works():
+    """Alumni verification endpoint /alumni/verify/{user_id} continues to work properly."""
+    headers = setup_test_users()
+
+    alumni_id = str(ObjectId())
+    users_collection.insert_one({
+        "_id": alumni_id,
+        "name": "Alumni Verifiable",
+        "email": "verifiable.alumni@domain.com",
+        "role": "alumni",
+        "is_active": True,
+        "is_verified": False,
+        "verification_status": "pending",
+    })
+
+    resp = client.patch(
+        f"/alumni/verify/{alumni_id}?status=approved",
+        headers=headers["admin"]
+    )
+    assert resp.status_code == 200
+    u = users_collection.find_one({"_id": alumni_id})
+    assert u["is_verified"] is True
+    assert u["verification_status"] == "approved"

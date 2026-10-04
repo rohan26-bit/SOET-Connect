@@ -70,7 +70,7 @@ def test_register_admin_disallowed(client, monkeypatch):
 
 
 def test_login_success(client):
-    """Logging in with correct credentials returns 200 and access_token."""
+    """Logging in with approved credentials returns 200 and access_token."""
     reg_payload = {
         "name": "Login User",
         "email": "loginuser@example.com",
@@ -78,6 +78,13 @@ def test_login_success(client):
         "role": "student"
     }
     client.post("/auth/register", json=reg_payload)
+
+    # Approve student in database
+    from database import users_collection
+    users_collection.update_one(
+        {"email": "loginuser@example.com"},
+        {"$set": {"is_verified": True, "verification_status": "approved"}}
+    )
 
     login_payload = {
         "email": "loginuser@example.com",
@@ -177,3 +184,155 @@ def test_register_admin_valid_secret_constant_time(client, monkeypatch):
     response = client.post("/auth/register", json=payload)
     assert response.status_code == 201
     assert response.json()["role"] == "admin"
+
+
+# ============================================================
+# STUDENT & ALUMNI VERIFICATION WORKFLOW TESTS
+# ============================================================
+
+def test_student_registration_is_pending(client):
+    """New student registration must be pending, unverified, and create profile."""
+    payload = {
+        "name": "Pending Student",
+        "email": "pending.student@example.com",
+        "password": "SecurePassword123!",
+        "role": "student",
+        "student_id": "STU999",
+        "department": "CSE",
+        "course": "B.Tech"
+    }
+    res = client.post("/auth/register", json=payload)
+    assert res.status_code == 201
+    data = res.json()
+    assert data["role"] == "student"
+    assert data["is_verified"] is False
+
+    from database import users_collection
+    u = users_collection.find_one({"email": "pending.student@example.com"})
+    assert u is not None
+    assert u["is_verified"] is False
+    assert u["verification_status"] == "pending"
+    assert "student_profile" in u
+    assert u["student_profile"]["student_id"] == "STU999"
+    assert u["student_profile"]["department"] == "CSE"
+
+
+def test_alumni_registration_is_pending(client):
+    """New alumni registration must be pending and unverified."""
+    payload = {
+        "name": "Pending Alumni",
+        "email": "pending.alumni@example.com",
+        "password": "SecurePassword123!",
+        "role": "alumni",
+        "alumni_id": "ALU999",
+        "department": "CSE"
+    }
+    res = client.post("/auth/register", json=payload)
+    assert res.status_code == 201
+    assert res.json()["is_verified"] is False
+
+    from database import users_collection
+    u = users_collection.find_one({"email": "pending.alumni@example.com"})
+    assert u is not None
+    assert u["is_verified"] is False
+    assert u["verification_status"] == "pending"
+
+
+def test_admin_registration_is_approved(client, monkeypatch):
+    """Admin registration with valid secret is auto-approved."""
+    import routes.auth
+    monkeypatch.setattr(routes.auth, "ADMIN_REGISTRATION_SECRET", "test-secret-123")
+    payload = {
+        "name": "Auto Approved Admin",
+        "email": "approved.admin@example.com",
+        "password": "AdminPassword123!",
+        "role": "admin",
+        "admin_secret": "test-secret-123"
+    }
+    res = client.post("/auth/register", json=payload)
+    assert res.status_code == 201
+    assert res.json()["is_verified"] is True
+
+    from database import users_collection
+    u = users_collection.find_one({"email": "approved.admin@example.com"})
+    assert u["is_verified"] is True
+    assert u["verification_status"] == "approved"
+
+
+def test_pending_student_login_returns_403(client):
+    """Pending student cannot log in and receives 403."""
+    client.post("/auth/register", json={
+        "name": "Student A",
+        "email": "student.a@example.com",
+        "password": "Password123!",
+        "role": "student"
+    })
+    res = client.post("/auth/login", json={
+        "email": "student.a@example.com",
+        "password": "Password123!"
+    })
+    assert res.status_code == 403
+    assert "Your account is awaiting administrator approval." in res.json().get("detail", "")
+
+
+def test_rejected_student_login_returns_403(client):
+    """Rejected student cannot log in and receives 403."""
+    client.post("/auth/register", json={
+        "name": "Student B",
+        "email": "student.b@example.com",
+        "password": "Password123!",
+        "role": "student"
+    })
+    from database import users_collection
+    users_collection.update_one(
+        {"email": "student.b@example.com"},
+        {"$set": {"verification_status": "rejected", "is_verified": False}}
+    )
+    res = client.post("/auth/login", json={
+        "email": "student.b@example.com",
+        "password": "Password123!"
+    })
+    assert res.status_code == 403
+    assert "Your account registration was rejected by an administrator." in res.json().get("detail", "")
+
+
+def test_suspended_student_login_returns_403(client):
+    """Suspended student cannot log in and receives 403."""
+    client.post("/auth/register", json={
+        "name": "Student C",
+        "email": "student.c@example.com",
+        "password": "Password123!",
+        "role": "student"
+    })
+    from database import users_collection
+    users_collection.update_one(
+        {"email": "student.c@example.com"},
+        {"$set": {"verification_status": "suspended", "is_verified": False}}
+    )
+    res = client.post("/auth/login", json={
+        "email": "student.c@example.com",
+        "password": "Password123!"
+    })
+    assert res.status_code == 403
+    assert "Your account has been suspended by an administrator." in res.json().get("detail", "")
+
+
+def test_approved_student_login_returns_200(client):
+    """Approved student logs in successfully with 200."""
+    client.post("/auth/register", json={
+        "name": "Student D",
+        "email": "student.d@example.com",
+        "password": "Password123!",
+        "role": "student"
+    })
+    from database import users_collection
+    users_collection.update_one(
+        {"email": "student.d@example.com"},
+        {"$set": {"verification_status": "approved", "is_verified": True}}
+    )
+    res = client.post("/auth/login", json={
+        "email": "student.d@example.com",
+        "password": "Password123!"
+    })
+    assert res.status_code == 200
+    assert "access_token" in res.json()

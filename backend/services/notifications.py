@@ -19,6 +19,7 @@ NOTIFICATION_TYPES = {
     "event_registration": "event_registration",
     "event_cancellation": "event_cancellation",
     "announcement": "announcement",
+    "student_verification": "student_verification",
 }
 
 
