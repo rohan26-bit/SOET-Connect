@@ -5,6 +5,7 @@ from bson import ObjectId
 from fastapi.testclient import TestClient
 
 # Ensure test environment variables before module imports
+os.environ["DATABASE_BACKEND"] = "mongodb"
 os.environ["DATABASE_MODE"] = "mock"
 os.environ["DATABASE_NAME"] = "soet_connect_test"
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-soet-connect-tests-32char"
