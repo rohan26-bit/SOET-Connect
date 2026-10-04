@@ -31,8 +31,8 @@ export default function LoginPage() {
       } else {
         router.push('/student');
       }
-    } catch (err: any) {
-      setError(err.message || 'Login failed. Please check your credentials.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }
@@ -46,7 +46,8 @@ export default function LoginPage() {
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
         <div className="flex justify-center">
-          <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center p-2 shadow-md shadow-[#4A3832]/5 border border-[#DDD7D2]">
+          <div className="w-[72px] h-[72px] bg-white rounded-2xl flex items-center justify-center p-2 shadow-md shadow-[#4A3832]/5 border border-[#DDD7D2]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/mgm-university-logo.svg"
               alt="MGM University Logo"

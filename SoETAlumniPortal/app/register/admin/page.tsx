@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { authService } from '@/lib/services/authService';
 import {
-  Shield,
   AlertCircle,
   ArrowRight,
   CheckCircle2,
@@ -51,8 +50,8 @@ export default function AdminRegisterPage() {
       setTimeout(() => {
         router.push('/login');
       }, 2000);
-    } catch (err: any) {
-      setError(err.message || 'Admin registration failed.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Admin registration failed.');
     } finally {
       setLoading(false);
     }
@@ -65,8 +64,13 @@ export default function AdminRegisterPage() {
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
         <div className="flex justify-center mb-4">
-          <div className="w-12 h-12 bg-[#4A3832]/10 border border-[#4A3832]/20 rounded-2xl flex items-center justify-center text-[#4A3832]">
-            <Shield className="w-6 h-6" />
+          <div className="w-[72px] h-[72px] bg-white rounded-2xl flex items-center justify-center p-2 shadow-md shadow-[#4A3832]/5 border border-[#DDD7D2]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/mgm-university-logo.svg"
+              alt="MGM University Logo"
+              className="w-full h-full object-contain"
+            />
           </div>
         </div>
 

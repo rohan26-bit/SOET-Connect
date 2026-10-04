@@ -11,11 +11,11 @@ export default function RegisterSelectionPage() {
       <div className="absolute bottom-[-10%] right-[-10%] w-[40rem] h-[40rem] bg-[#4A3832]/5 rounded-full blur-3xl pointer-events-none" />
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10 text-center mb-8">
-        <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center p-2 shadow-md shadow-[#4A3832]/5 border border-[#DDD7D2] mx-auto mb-4">
+        <div className="w-[72px] h-[72px] bg-white rounded-2xl flex items-center justify-center p-2 shadow-md shadow-[#4A3832]/5 border border-[#DDD7D2] mx-auto mb-4">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/mgm-university-logo.svg"
             alt="MGM University Logo"
-       
             className="w-full h-full object-contain"
           />
         </div>

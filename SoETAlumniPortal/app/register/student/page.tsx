@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { authService } from '@/lib/services/authService';
-import { GraduationCap, AlertCircle, ArrowRight, ShieldAlert } from 'lucide-react';
+import { AlertCircle, ArrowRight, ShieldAlert } from 'lucide-react';
 import { ButtonSpinner } from '@/components/LoadingState';
 
 const DEPARTMENTS = [
@@ -51,8 +51,8 @@ export default function StudentRegisterPage() {
         fullName: trimmedName,
       });
       setSubmitted(true);
-    } catch (err: any) {
-      setError(err.message || 'Registration failed.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Registration failed.');
     } finally {
       setLoading(false);
     }
@@ -62,8 +62,13 @@ export default function StudentRegisterPage() {
     <div className="min-h-screen bg-[#F7F4EF] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 font-sans relative overflow-hidden">
       <div className="sm:mx-auto sm:w-full sm:max-w-xl relative z-10">
         <div className="flex justify-center mb-4">
-          <div className="w-12 h-12 bg-[#F28C38]/15 border border-[#F28C38]/30 rounded-2xl flex items-center justify-center text-[#F28C38]">
-            <GraduationCap className="w-6 h-6" />
+          <div className="w-[72px] h-[72px] bg-white rounded-2xl flex items-center justify-center p-2 shadow-md shadow-[#4A3832]/5 border border-[#DDD7D2]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/mgm-university-logo.svg"
+              alt="MGM University Logo"
+              className="w-full h-full object-contain"
+            />
           </div>
         </div>
         <h2 className="text-center text-3xl font-extrabold text-[#4A3832] tracking-tight">

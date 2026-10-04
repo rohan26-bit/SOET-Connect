@@ -21,7 +21,8 @@ export default function LandingPage() {
       {/* Navigation */}
       <nav className="h-16 flex items-center justify-between px-6 sm:px-8 bg-white/95 backdrop-blur-md border-b border-[#DDD7D2] sticky top-0 z-40 shadow-sm">
         <div className="flex items-center gap-3 font-semibold text-lg text-[#4A3832]">
-          <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center p-0.5 shadow-sm border border-[#DDD7D2]">
+          <div className="w-10 h-10 sm:w-11 sm:h-11 bg-white rounded-xl flex items-center justify-center p-1 shadow-sm border border-[#DDD7D2] shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/mgm-university-logo.svg"
               alt="MGM University Logo"
@@ -43,6 +44,7 @@ export default function LandingPage() {
         <section className="relative w-full min-h-[580px] sm:min-h-[640px] lg:min-h-[700px] flex items-center bg-[#211510] overflow-hidden">
           {/* Integrated SOET Building Photo dominating the right side (58-60% on desktop, full-width on mobile) */}
           <div className="absolute inset-y-0 right-0 w-full lg:w-[60%] xl:w-[58%] z-0 overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/soet-building.jpg"
               alt="School of Engineering and Technology, MGM University"
