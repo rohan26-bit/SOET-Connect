@@ -531,10 +531,11 @@ export default function AdminEventsPage() {
               {/* Registration Deadline & Visibility */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Registration Deadline *</label>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                    Registration Deadline <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
                   <input
                     type="date"
-                    required
                     value={formData.registration_deadline}
                     onChange={(e) => setFormData({ ...formData, registration_deadline: e.target.value })}
                     className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/50 transition"
