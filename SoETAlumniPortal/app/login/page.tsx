@@ -163,17 +163,26 @@ export default function LoginPage() {
 
           <div className="mt-6 text-center border-t border-[#DDD7D2] pt-5">
             <p className="text-xs text-[#6B6B6B]">
-              {role === 'admin'
-                ? 'Admin access is restricted to the designated administrator.'
-                : "Don't have an account? "}
-              
-              {role !== 'admin' && (
-                <Link
-                  href={role === 'student' ? '/register/student' : '/register/alumni'}
-                  className="font-semibold text-[#F28C38] hover:text-[#E07D2E] transition"
-                >
-                  Register as {role}
-                </Link>
+              {role === 'admin' ? (
+                <>
+                  Admin access is restricted to designated administrators.{' '}
+                  <Link
+                    href="/register/admin"
+                    className="font-semibold text-[#F28C38] hover:text-[#E07D2E] transition"
+                  >
+                    Set up admin account
+                  </Link>
+                </>
+              ) : (
+                <>
+                  {"Don't have an account? "}
+                  <Link
+                    href={role === 'student' ? '/register/student' : '/register/alumni'}
+                    className="font-semibold text-[#F28C38] hover:text-[#E07D2E] transition"
+                  >
+                    Register as {role}
+                  </Link>
+                </>
               )}
             </p>
           </div>

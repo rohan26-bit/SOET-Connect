@@ -45,16 +45,16 @@ export default function AdminStudentsPage() {
   return (
     <DashboardLayout>
       {/* Breadcrumbs */}
-      <div className="flex items-center text-xs font-semibold text-slate-400 mb-6 uppercase tracking-wider">
+      <div className="flex items-center text-xs font-semibold text-[#6B6B6B] mb-6 uppercase tracking-wider">
         <span>Administration</span>
-        <span className="mx-2 text-slate-300">/</span>
-        <span className="text-blue-600">Students Management</span>
+        <span className="mx-2 text-[#DDD7D2]">/</span>
+        <span className="text-[#F28C38]">Students Management</span>
       </div>
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Enrolled Students Directory</h1>
-          <p className="text-xs text-slate-500 mt-1">
+          <h1 className="text-2xl font-black text-[#4A3832] tracking-tight">Enrolled Students Directory</h1>
+          <p className="text-xs text-[#6B6B6B] mt-1">
             Manage student registrations, academic branches, and account permissions.
           </p>
         </div>

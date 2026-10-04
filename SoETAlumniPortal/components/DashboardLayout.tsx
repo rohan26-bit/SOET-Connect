@@ -8,7 +8,7 @@ import {
   Home, Users, Briefcase, Calendar, 
   Bell, User, Settings, Info, 
   LogOut, Shield, BarChart3, GraduationCap, Megaphone,
-  Menu, X
+  Menu, X, MessageSquare, Award
 } from 'lucide-react';
 
 const mainNavItems = [
@@ -16,6 +16,7 @@ const mainNavItems = [
   { name: 'Alumni Directory', icon: Users, href: '/student/alumni' },
   { name: 'Jobs & Internships', icon: Briefcase, href: '/student/jobs' },
   { name: 'Events', icon: Calendar, href: '/student/events' },
+  { name: 'Messages & Chat', icon: MessageSquare, href: '/student/chat' },
   { name: 'Notifications', icon: Bell, href: '/student/notifications' },
   { name: 'My Profile', icon: User, href: '/student/profile' },
 ];
@@ -30,6 +31,8 @@ const alumniNavItems = [
   { name: 'Alumni Directory', icon: Users, href: '/student/alumni' },
   { name: 'Jobs & Internships', icon: Briefcase, href: '/student/jobs' },
   { name: 'Events', icon: Calendar, href: '/student/events' },
+  { name: 'Achievements', icon: Award, href: '/alumni/achievements' },
+  { name: 'Messages & Chat', icon: MessageSquare, href: '/student/chat' },
   { name: 'Notifications', icon: Bell, href: '/student/notifications' },
   { name: 'My Profile', icon: User, href: '/student/profile' },
 ];

@@ -55,14 +55,14 @@ export default function NotificationsPage() {
   return (
     <DashboardLayout>
       {/* Breadcrumbs */}
-      <div className="flex items-center text-xs font-semibold text-slate-400 mb-6 uppercase tracking-wider">
+      <div className="flex items-center text-xs font-semibold text-[#6B6B6B] mb-6 uppercase tracking-wider">
         <span>Activity</span>
-        <span className="mx-2 text-slate-300">/</span>
-        <span className="text-blue-600">Notifications</span>
+        <span className="mx-2 text-[#DDD7D2]">/</span>
+        <span className="text-[#F28C38]">Notifications</span>
       </div>
 
       <div className="max-w-3xl mx-auto">
-        <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm">
+        <div className="bg-white rounded-3xl p-8 border border-[#DDD7D2] shadow-sm">
           
           <div className="flex items-center justify-between pb-6 border-b border-slate-100 mb-6">
             <div>

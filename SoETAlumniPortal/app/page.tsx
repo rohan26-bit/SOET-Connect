@@ -140,7 +140,7 @@ export default function LandingPage() {
         {/* Stats */}
         <section className="py-16 bg-[#4A3832] text-white">
           <div className="max-w-6xl mx-auto px-8">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 divide-x divide-[#6B5147]">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:divide-x divide-[#6B5147]">
               {stats.map((s, i) => (
                 <div key={i} className="px-6 text-center md:text-left">
                   <div className="text-4xl font-black text-[#F6A15A] mb-2 tracking-tight">{s.value}</div>

@@ -147,17 +147,17 @@ export default function JobsPage() {
   return (
     <DashboardLayout>
       {/* Breadcrumbs */}
-      <div className="flex items-center text-xs font-semibold text-slate-400 mb-6 uppercase tracking-wider">
+      <div className="flex items-center text-xs font-semibold text-[#6B6B6B] mb-6 uppercase tracking-wider">
         <span>Careers</span>
-        <span className="mx-2 text-slate-300">/</span>
-        <span className="text-blue-600">Jobs & Internships</span>
+        <span className="mx-2 text-[#DDD7D2]">/</span>
+        <span className="text-[#F28C38]">Jobs & Internships</span>
       </div>
 
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Opportunities & Placements</h1>
-          <p className="text-xs text-slate-500 mt-1">
+          <h1 className="text-2xl font-black text-[#4A3832] tracking-tight">Opportunities & Placements</h1>
+          <p className="text-xs text-[#6B6B6B] mt-1">
             Discover corporate roles, startups, and internships verified by SOET Alumni.
           </p>
         </div>
@@ -165,7 +165,7 @@ export default function JobsPage() {
         {isAlumniOrAdmin && (
           <button
             onClick={() => setShowPostModal(true)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-600/25 transition cursor-pointer self-start md:self-auto"
+            className="flex items-center gap-2 px-5 py-2.5 bg-[#F28C38] hover:bg-[#E07D2E] text-white rounded-xl text-xs font-bold shadow-lg shadow-[#F28C38]/25 transition cursor-pointer self-start md:self-auto"
           >
             <Plus className="w-4 h-4" /> Post New Job
           </button>
@@ -173,13 +173,13 @@ export default function JobsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200 mb-6">
+      <div className="flex border-b border-[#DDD7D2] mb-6">
         <button
           onClick={() => setActiveTab('browse')}
           className={`py-3 px-4 text-xs font-bold border-b-2 transition ${
             activeTab === 'browse'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-slate-500 hover:text-slate-900'
+              ? 'border-[#F28C38] text-[#F28C38]'
+              : 'border-transparent text-[#6B6B6B] hover:text-[#4A3832]'
           }`}
         >
           Browse Opportunities
@@ -190,8 +190,8 @@ export default function JobsPage() {
             onClick={() => setActiveTab('my_applications')}
             className={`py-3 px-4 text-xs font-bold border-b-2 transition ${
               activeTab === 'my_applications'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
+                ? 'border-[#F28C38] text-[#F28C38]'
+                : 'border-transparent text-[#6B6B6B] hover:text-[#4A3832]'
             }`}
           >
             My Applications
@@ -203,8 +203,8 @@ export default function JobsPage() {
             onClick={() => setActiveTab('my_posted_jobs')}
             className={`py-3 px-4 text-xs font-bold border-b-2 transition ${
               activeTab === 'my_posted_jobs'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
+                ? 'border-[#F28C38] text-[#F28C38]'
+                : 'border-transparent text-[#6B6B6B] hover:text-[#4A3832]'
             }`}
           >
             My Posted Jobs
