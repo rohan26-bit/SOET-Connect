@@ -1,125 +1,167 @@
 import os
+import uuid
+
+from dotenv import load_dotenv
+from pymongo import MongoClient
 import certifi
+from pwdlib import PasswordHash
+
+
+load_dotenv()
+
+MONGODB_URL = os.getenv("MONGODB_URL")
+DATABASE_NAME = os.getenv("DATABASE_NAME")
+
+password_hash = PasswordHash.recommended()
+
+
+# ============================================================
+# LOCAL DEVELOPMENT FALLBACK
+# ============================================================
+
+class LocalInsertResult:
+    def __init__(self, inserted_id):
+        self.inserted_id = inserted_id
+
+
+class LocalUsersCollection:
+    def __init__(self):
+        self.users = []
+
+        # Demo student account
+        self.users.append({
+            "_id": "demo-student-id",
+            "name": "Demo Student",
+            "email": "test@student.com",
+            "password_hash": password_hash.hash("Test@12345"),
+            "role": "student",
+            "is_active": True,
+            "is_verified": True,
+        })
+
+        # Demo alumni account
+        self.users.append({
+            "_id": "demo-alumni-id",
+            "name": "Demo Alumni",
+            "email": "test@alumni.com",
+            "password_hash": password_hash.hash("Test@12345"),
+            "role": "alumni",
+            "is_active": True,
+            "is_verified": True,
+            "verification_status": "approved",
+        })
+
+        # Demo admin account
+        self.users.append({
+            "_id": "demo-admin-id",
+            "name": "Demo Admin",
+            "email": "test@admin.com",
+            "password_hash": password_hash.hash("Test@12345"),
+            "role": "admin",
+            "is_active": True,
+            "is_verified": True,
+        })
+
+    def find_one(self, query):
+        for user in self.users:
+            if all(
+                user.get(key) == value
+                for key, value in query.items()
+            ):
+                return user
+
+        return None
+
+    def find(self, query):
+        results = []
+
+        for user in self.users:
+            matches = True
+
+            for key, value in query.items():
+                if user.get(key) != value:
+                    matches = False
+                    break
+
+            if matches:
+                results.append(user)
+
+        return results
+
+    def insert_one(self, document):
+        document["_id"] = str(uuid.uuid4())
+        self.users.append(document)
+
+        return LocalInsertResult(document["_id"])
+
+    def update_one(self, query, update):
+        for user in self.users:
+            matches = all(
+                user.get(key) == value
+                for key, value in query.items()
+            )
+
+            if matches:
+                if "$set" in update:
+                    for key, value in update["$set"].items():
+                        user[key] = value
+
+                return True
+
+        return False
+
+
+# ============================================================
+# MONGODB CONNECTION
+# ============================================================
+
+mongo_available = False
+client = None
+database = None
+
 try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
+    if not MONGODB_URL:
+        raise ValueError("MONGODB_URL is not set in .env")
 
-DATABASE_BACKEND = os.getenv("DATABASE_BACKEND", "supabase").lower()
-DATABASE_MODE = os.getenv("DATABASE_MODE", "atlas").lower()
+    if not DATABASE_NAME:
+        raise ValueError("DATABASE_NAME is not set in .env")
 
-if DATABASE_BACKEND == "supabase":
-    # ---- Supabase PostgreSQL Mode ----
-    from database_supabase import (
-        supabase,
-        supabase_users_collection,
-        supabase_conversations_collection,
-        supabase_messages_collection,
-        test_supabase_connection,
+    client = MongoClient(
+        MONGODB_URL,
+        tls=True,
+        tlsCAFile=certifi.where(),
+        serverSelectionTimeoutMS=3000,
+        connectTimeoutMS=3000,
+        socketTimeoutMS=3000,
     )
 
-    class _SupabaseDatabaseWrapper:
-        def __init__(self):
-            self._collections = {
-                "users": supabase_users_collection,
-                "conversations": supabase_conversations_collection,
-                "messages": supabase_messages_collection,
-            }
+    client.admin.command("ping")
 
-        def __getitem__(self, name: str):
-            return self._collections.get(name, supabase_users_collection)
-
-    client = None
-    database = _SupabaseDatabaseWrapper()
-    users_collection = supabase_users_collection
-    test_database_connection = test_supabase_connection
-
-else:
-    # ---- MongoDB Mode (Atlas or Mock) ----
-    def get_database_config():
-        mode = os.getenv("DATABASE_MODE", "atlas").lower()
-
-        if mode == "mock":
-            db_name = (
-                os.getenv("DATABASE_NAME", "").strip()
-                or os.getenv("MONGODB_DATABASE", "").strip()
-                or "soet_connect_test"
-            )
-            return {
-                "mode": "mock",
-                "mongodb_url": None,
-                "database_name": db_name,
-                "timeout_ms": 0,
-            }
-
-        mongodb_url = (
-            os.getenv("MONGODB_URL", "").strip()
-            or os.getenv("MONGODB_URI", "").strip()
-        )
-        database_name = (
-            os.getenv("DATABASE_NAME", "").strip()
-            or os.getenv("MONGODB_DATABASE", "").strip()
-        )
-
-        if not mongodb_url or mongodb_url == "YOUR_MONGODB_CONNECTION_STRING":
-            raise ValueError(
-                "MongoDB connection URI is not configured. Set MONGODB_URL (or MONGODB_URI) in your .env file."
-            )
-
-        if not database_name or database_name == "YOUR_DATABASE_NAME":
-            raise ValueError(
-                "MongoDB database name is not configured. Set DATABASE_NAME (or MONGODB_DATABASE) in your .env file."
-            )
-
-        try:
-            timeout_ms = int(os.getenv("MONGODB_TIMEOUT_MS", "5000"))
-        except ValueError:
-            timeout_ms = 5000
-
-        return {
-            "mode": "atlas",
-            "mongodb_url": mongodb_url,
-            "database_name": database_name,
-            "timeout_ms": timeout_ms,
-        }
-
-    _config = get_database_config()
-
-    if _config["mode"] == "mock":
-        import mongomock
-
-        client = mongomock.MongoClient()
-        DATABASE_NAME = _config["database_name"]
-        database = client[DATABASE_NAME]
-    else:
-        from pymongo import MongoClient
-
-        MONGODB_URL = _config["mongodb_url"]
-        DATABASE_NAME = _config["database_name"]
-        timeout_ms = _config["timeout_ms"]
-
-        client_kwargs = {
-            "serverSelectionTimeoutMS": timeout_ms,
-            "tlsCAFile": certifi.where(),
-        }
-
-        if (
-            MONGODB_URL.startswith("mongodb+srv://")
-            or "tls=true" in MONGODB_URL.lower()
-            or "ssl=true" in MONGODB_URL.lower()
-        ):
-            client_kwargs["tls"] = True
-
-        client = MongoClient(MONGODB_URL, **client_kwargs)
-        database = client[DATABASE_NAME]
-
+    database = client[DATABASE_NAME]
     users_collection = database["users"]
 
-    def test_database_connection():
+    mongo_available = True
+
+    print("MongoDB: CONNECTED")
+
+except Exception as e:
+    print("MongoDB unavailable - using LOCAL DEVELOPMENT DATABASE")
+    print("MongoDB error:", e)
+
+    users_collection = LocalUsersCollection()
+
+
+# ============================================================
+# DATABASE HEALTH CHECK
+# ============================================================
+
+def test_database_connection():
+    if mongo_available:
         try:
             client.admin.command("ping")
             return True
         except Exception as e:
-            print(f"MONGODB CONNECTION ERROR: {type(e).__name__} - {e}")
-            return False
+            print("MONGODB ERROR:", e)
+            return False
+
+    return False
