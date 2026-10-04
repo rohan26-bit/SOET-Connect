@@ -114,6 +114,7 @@ _mock_store: Dict[str, List[dict]] = {
     "announcements": [],
     "notifications": [],
     "achievements": [],
+    "bug_reports": [],
 }
 
 

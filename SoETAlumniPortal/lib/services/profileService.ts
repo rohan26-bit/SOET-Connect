@@ -163,4 +163,23 @@ export const profileService = {
     syncLocalStorageUser({ avatar_url: data.avatar_url || base64Url });
     return data.avatar_url || base64Url;
   },
+
+  // ============================================================
+  // UPDATE ADMIN PROFILE
+  // ============================================================
+
+  async updateAdminProfile(data: { fullName?: string }) {
+    const response = await fetch(`${API_URL}/profile/me`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    const updated = await parseResponse(response);
+    syncLocalStorageUser(updated);
+    return updated;
+  },
 };

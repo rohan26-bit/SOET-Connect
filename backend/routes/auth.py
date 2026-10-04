@@ -1,14 +1,16 @@
 import os
 import secrets
 
+from datetime import datetime, timezone
 from dotenv import load_dotenv
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from database import users_collection
 from models.user import create_user_document
-from schemas.auth import RegisterRequest, LoginRequest
+from schemas.auth import RegisterRequest, LoginRequest, ChangePasswordRequest
 from pwdlib import PasswordHash
 from security.jwt import create_access_token
+from security.dependencies import get_current_user
 
 
 load_dotenv()
@@ -178,4 +180,73 @@ def login_user(user: LoginRequest):
             "role": existing_user["role"],
             "is_verified": existing_user.get("is_verified", False)
         }
+    }
+
+
+# =========================
+# CHANGE PASSWORD
+# =========================
+
+@router.post("/change-password")
+def change_password(
+    payload: ChangePasswordRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    user_id = current_user.get("user_id")
+    existing_user = users_collection.find_one({"_id": str(user_id)})
+    if not existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User account not found."
+        )
+
+    if not existing_user.get("is_active", True):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account has been deactivated."
+        )
+
+    # 1. Verify current password
+    if not password_hash.verify(payload.current_password, existing_user.get("password_hash", "")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect."
+        )
+
+    # 2. Check confirmation match
+    if payload.new_password != payload.confirm_new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password and confirmation do not match."
+        )
+
+    # 3. Validate password length / strength
+    if len(payload.new_password.strip()) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be at least 8 characters long."
+        )
+
+    # 4. Check that new password is not identical to current password
+    if payload.current_password == payload.new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password cannot be the same as the current password."
+        )
+
+    # 5. Hash new password securely with Argon2
+    new_hashed = password_hash.hash(payload.new_password)
+
+    # 6. Update user document
+    now = datetime.now(timezone.utc).isoformat()
+    users_collection.update_one(
+        {"_id": existing_user["_id"]},
+        {"$set": {
+            "password_hash": new_hashed,
+            "updated_at": now
+        }}
+    )
+
+    return {
+        "message": "Password changed successfully."
     }

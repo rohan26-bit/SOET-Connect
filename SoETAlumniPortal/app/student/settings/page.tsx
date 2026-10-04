@@ -1,5 +1,6 @@
 'use client';
 import DashboardLayout from '@/components/DashboardLayout';
+import ReportIssueForm from '@/components/ReportIssueForm';
 
 export default function SettingsPage() {
   return (
@@ -39,6 +40,14 @@ export default function SettingsPage() {
         </div>
 
         <button className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium">Save Settings</button>
+
+        <div className="pt-8 border-t border-gray-100">
+          <div className="mb-4">
+            <h2 className="text-lg font-bold text-gray-900">Support & Report an Issue</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Found a bug or having trouble? Let the technical team know.</p>
+          </div>
+          <ReportIssueForm initialRoute="/student/settings" />
+        </div>
       </div>
     </DashboardLayout>
   );

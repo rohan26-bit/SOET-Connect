@@ -14,6 +14,7 @@ from routes.announcements import router as announcements_router
 from routes.notifications import router as notifications_router
 from routes.admin import router as admin_router
 from routes.chat import router as chat_router
+from routes.bug_reports import router as bug_reports_router
 
 
 app = FastAPI(
@@ -60,6 +61,7 @@ api_router.include_router(announcements_router)
 api_router.include_router(notifications_router)
 api_router.include_router(admin_router)
 api_router.include_router(chat_router)
+api_router.include_router(bug_reports_router)
 
 app.include_router(api_router)
 app.include_router(auth_router)
@@ -72,6 +74,7 @@ app.include_router(announcements_router)
 app.include_router(notifications_router)
 app.include_router(admin_router)
 app.include_router(chat_router)
+app.include_router(bug_reports_router)
 
 @app.get("/")
 def root():
@@ -81,11 +84,21 @@ def root():
     }
 
 
-@app.get("/health")
-def health_check():
+def _get_health_status():
     database_status = test_database_connection()
-
+    env = os.getenv("ENVIRONMENT", "production" if os.getenv("VERCEL") else "development")
     return {
         "api": "healthy",
-        "database": "connected" if database_status else "disconnected"
+        "database": "connected" if database_status else "disconnected",
+        "environment": env,
     }
+
+
+@api_router.get("/health")
+def api_health_check():
+    return _get_health_status()
+
+
+@app.get("/health")
+def health_check():
+    return _get_health_status()

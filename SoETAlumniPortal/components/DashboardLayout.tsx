@@ -9,7 +9,7 @@ import {
   Home, Users, Briefcase, Calendar, 
   Bell, User, Settings, Info, 
   LogOut, Shield, BarChart3, Megaphone,
-  Menu, X, ShieldCheck, GraduationCap
+  Menu, X, ShieldCheck, GraduationCap, Bug
 } from 'lucide-react';
 
 const mainNavItems = [
@@ -53,6 +53,7 @@ const adminNavItems = [
 ];
 
 const adminMoreNavItems = [
+  { name: 'Issue Reports', icon: Bug, href: '/admin/bug-reports' },
   { name: 'Settings', icon: Settings, href: '/admin/settings' },
 ];
 

@@ -336,3 +336,113 @@ def test_approved_student_login_returns_200(client):
     })
     assert res.status_code == 200
     assert "access_token" in res.json()
+
+
+def test_change_password_success(client, admin_user):
+    """Admin successfully changes password with valid credentials."""
+    from routes.auth import password_hash
+    from database import users_collection
+
+    # Set known password hash for admin
+    users_collection.update_one(
+        {"_id": admin_user["id"]},
+        {"$set": {"password_hash": password_hash.hash("OldPassword123!")}}
+    )
+
+    payload = {
+        "current_password": "OldPassword123!",
+        "new_password": "NewSecretPassword456!",
+        "confirm_new_password": "NewSecretPassword456!"
+    }
+
+    res = client.post("/auth/change-password", json=payload, headers=admin_user["headers"])
+    assert res.status_code == 200
+    assert res.json()["message"] == "Password changed successfully."
+
+    # Verify old password no longer works
+    login_old = client.post("/auth/login", json={
+        "email": admin_user["email"],
+        "password": "OldPassword123!"
+    })
+    assert login_old.status_code == 401
+
+    # Verify new password works
+    login_new = client.post("/auth/login", json={
+        "email": admin_user["email"],
+        "password": "NewSecretPassword456!"
+    })
+    assert login_new.status_code == 200
+
+
+def test_change_password_incorrect_current_password(client, admin_user):
+    """Fails when current password does not match."""
+    from routes.auth import password_hash
+    from database import users_collection
+
+    users_collection.update_one(
+        {"_id": admin_user["id"]},
+        {"$set": {"password_hash": password_hash.hash("CorrectPassword123!")}}
+    )
+
+    payload = {
+        "current_password": "WrongPassword!",
+        "new_password": "BrandNewPassword123!",
+        "confirm_new_password": "BrandNewPassword123!"
+    }
+
+    res = client.post("/auth/change-password", json=payload, headers=admin_user["headers"])
+    assert res.status_code == 400
+    assert "Current password is incorrect." in res.json().get("detail", "")
+
+
+def test_change_password_mismatched_confirmation(client, admin_user):
+    """Fails when new password and confirm do not match."""
+    from routes.auth import password_hash
+    from database import users_collection
+
+    users_collection.update_one(
+        {"_id": admin_user["id"]},
+        {"$set": {"password_hash": password_hash.hash("Password123!")}}
+    )
+
+    payload = {
+        "current_password": "Password123!",
+        "new_password": "BrandNewPassword123!",
+        "confirm_new_password": "DifferentPassword456!"
+    }
+
+    res = client.post("/auth/change-password", json=payload, headers=admin_user["headers"])
+    assert res.status_code == 400
+    assert "New password and confirmation do not match." in res.json().get("detail", "")
+
+
+def test_change_password_same_as_old(client, admin_user):
+    """Fails when new password is same as old."""
+    from routes.auth import password_hash
+    from database import users_collection
+
+    users_collection.update_one(
+        {"_id": admin_user["id"]},
+        {"$set": {"password_hash": password_hash.hash("ExistingPassword123!")}}
+    )
+
+    payload = {
+        "current_password": "ExistingPassword123!",
+        "new_password": "ExistingPassword123!",
+        "confirm_new_password": "ExistingPassword123!"
+    }
+
+    res = client.post("/auth/change-password", json=payload, headers=admin_user["headers"])
+    assert res.status_code == 400
+    assert "New password cannot be the same" in res.json().get("detail", "")
+
+
+def test_change_password_unauthenticated(client):
+    """Fails when not logged in."""
+    res = client.post("/auth/change-password", json={
+        "current_password": "OldPassword123!",
+        "new_password": "NewPassword123!",
+        "confirm_new_password": "NewPassword123!"
+    })
+    assert res.status_code == 401
+

@@ -336,4 +336,34 @@ export const authService = {
       return null;
     }
   },
+
+  // ============================================================
+  // CHANGE PASSWORD
+  // ============================================================
+
+  async changePassword(data: {
+    current_password: string;
+    new_password: string;
+    confirm_new_password: string;
+  }): Promise<{ message: string }> {
+    const token = localStorage.getItem('soet_access_token');
+    if (!token) {
+      throw new Error('Your session has expired. Please log in again.');
+    }
+
+    const response = await fetch(`${API_URL}/auth/change-password`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    const result = await safeJsonParse(response);
+    if (!response.ok) {
+      throw new Error(result.detail || 'Failed to change password.');
+    }
+    return result;
+  },
 };
