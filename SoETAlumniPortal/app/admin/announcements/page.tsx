@@ -6,6 +6,10 @@ import LoadingState from '@/components/LoadingState';
 import { useAuth } from '@/components/AuthProvider';
 import { announcementService, AnnouncementItem } from '@/lib/services/announcementService';
 import { Megaphone, Plus, Trash2, Users, GraduationCap, Globe, AlertCircle, X } from 'lucide-react';
+import DocumentAttachment, {
+  DocumentAttachmentData,
+  DocumentAttachmentView,
+} from '@/components/DocumentAttachment';
 
 export default function AdminAnnouncementsPage() {
   const { user } = useAuth();
@@ -19,6 +23,7 @@ export default function AdminAnnouncementsPage() {
     title: '',
     content: '',
     target_audience: 'all' as 'all' | 'students' | 'alumni',
+    attachment: null as DocumentAttachmentData | null,
   });
 
   const loadAnnouncements = async () => {
@@ -49,10 +54,11 @@ export default function AdminAnnouncementsPage() {
         title: newAnnouncement.title,
         content: newAnnouncement.content,
         target_audience: newAnnouncement.target_audience,
+        attachment: newAnnouncement.attachment,
       });
 
       setShowModal(false);
-      setNewAnnouncement({ title: '', content: '', target_audience: 'all' });
+      setNewAnnouncement({ title: '', content: '', target_audience: 'all', attachment: null });
       loadAnnouncements();
     } catch (err: any) {
       setError(err.message || 'Failed to create announcement.');
@@ -129,6 +135,13 @@ export default function AdminAnnouncementsPage() {
                 <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3.5 rounded-2xl mb-4">
                   {a.content}
                 </p>
+
+                {/* Document Attachment Display */}
+                {a.attachment && a.attachment.name && (
+                  <div className="mb-3">
+                    <DocumentAttachmentView attachment={a.attachment} label="Attached Document" />
+                  </div>
+                )}
               </div>
 
               <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
@@ -209,6 +222,13 @@ export default function AdminAnnouncementsPage() {
                   className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+
+              {/* Document Attachment */}
+              <DocumentAttachment
+                label="Announcement Document (Optional)"
+                value={newAnnouncement.attachment}
+                onChange={(attachment) => setNewAnnouncement({ ...newAnnouncement, attachment })}
+              />
 
               <div className="pt-2 flex justify-end gap-2">
                 <button

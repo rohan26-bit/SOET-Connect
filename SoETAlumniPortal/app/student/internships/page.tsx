@@ -6,6 +6,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
 import { jobService, JobItem } from '@/lib/services/jobService';
 import { Briefcase, Building, MapPin, ArrowRight } from 'lucide-react';
+import { DocumentAttachmentView } from '@/components/DocumentAttachment';
 
 export default function InternshipsPage() {
   const [internships, setInternships] = useState<JobItem[]>([]);
@@ -73,6 +74,13 @@ export default function InternshipsPage() {
                   {job.salary && <span>• Stipend: {job.salary}</span>}
                 </div>
               </div>
+
+              {/* Document Attachment Display */}
+              {job.attachment && job.attachment.name && (
+                <div className="mt-3">
+                  <DocumentAttachmentView attachment={job.attachment} label="Internship Details" />
+                </div>
+              )}
 
               <Link
                 href="/student/jobs"

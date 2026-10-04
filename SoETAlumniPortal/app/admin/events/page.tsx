@@ -9,6 +9,10 @@ import {
   Calendar, Plus, Trash2, MapPin, Clock, Users, X, Edit3,
   CheckCircle2, XCircle, Eye, EyeOff, Search, Filter
 } from 'lucide-react';
+import DocumentAttachment, {
+  DocumentAttachmentData,
+  DocumentAttachmentView,
+} from '@/components/DocumentAttachment';
 
 const EVENT_TYPES = [
   'Seminar', 'Workshop', 'Webinar', 'Meetup', 'Hackathon',
@@ -27,6 +31,7 @@ interface EventFormData {
   event_type: string;
   registration_deadline: string;
   visibility: string;
+  attachment: DocumentAttachmentData | null;
 }
 
 const emptyForm: EventFormData = {
@@ -39,6 +44,7 @@ const emptyForm: EventFormData = {
   event_type: '',
   registration_deadline: '',
   visibility: 'Everyone',
+  attachment: null,
 };
 
 export default function AdminEventsPage() {
@@ -109,6 +115,7 @@ export default function AdminEventsPage() {
       event_type: '',
       registration_deadline: event.registration_deadline || '',
       visibility: 'Everyone',
+      attachment: event.attachment || null,
     });
     setFormError(null);
     setShowModal(true);
@@ -130,6 +137,7 @@ export default function AdminEventsPage() {
           location: formData.location,
           event_type: formData.event_type || undefined,
           registration_deadline: formData.registration_deadline || undefined,
+          attachment: formData.attachment,
         });
       } else {
         // Create new event
@@ -142,6 +150,7 @@ export default function AdminEventsPage() {
           location: formData.location,
           event_type: formData.event_type || undefined,
           registration_deadline: formData.registration_deadline || undefined,
+          attachment: formData.attachment,
         });
       }
 
@@ -297,6 +306,16 @@ export default function AdminEventsPage() {
                     <Users className="w-3 h-3" /> {event.registration_count || 0} registered
                   </span>
                 </div>
+
+                {/* Document Attachment Display */}
+                {event.attachment && event.attachment.name && (
+                  <div className="mt-3">
+                    <DocumentAttachmentView
+                      attachment={event.attachment}
+                      label="Event Document"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Actions */}
@@ -483,6 +502,13 @@ export default function AdminEventsPage() {
                   </select>
                 </div>
               </div>
+
+              {/* Document Attachment */}
+              <DocumentAttachment
+                label="Event Document (Optional)"
+                value={formData.attachment}
+                onChange={(attachment) => setFormData({ ...formData, attachment })}
+              />
 
               {/* Actions */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">

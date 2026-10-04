@@ -5,6 +5,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
 import { jobService, JobItem } from '@/lib/services/jobService';
 import { Briefcase, CheckCircle2, XCircle, Trash2, Building, MapPin, Search } from 'lucide-react';
+import { DocumentAttachmentView } from '@/components/DocumentAttachment';
 
 export default function AdminJobsPage() {
   const [jobs, setJobs] = useState<JobItem[]>([]);
@@ -124,6 +125,13 @@ export default function AdminJobsPage() {
                 <div className="text-[11px] text-slate-400">
                   Posted by: <span className="font-semibold text-slate-700">{job.poster_name || 'Alumni'}</span> ({job.poster_email || '—'})
                 </div>
+
+                {/* Document Attachment Display */}
+                {job.attachment && job.attachment.name && (
+                  <div className="mt-3">
+                    <DocumentAttachmentView attachment={job.attachment} label="Job Details" />
+                  </div>
+                )}
               </div>
 
               <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">

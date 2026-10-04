@@ -9,6 +9,10 @@ import {
   Briefcase, MapPin, Building, Search, Plus, 
   Clock, DollarSign, CheckCircle2, AlertCircle, FileText, X, Send 
 } from 'lucide-react';
+import DocumentAttachment, {
+  DocumentAttachmentData,
+  DocumentAttachmentView,
+} from '@/components/DocumentAttachment';
 
 export default function JobsPage() {
   const { user } = useAuth();
@@ -43,6 +47,7 @@ export default function JobsPage() {
     skillsStr: '',
     application_url: '',
     deadline: '',
+    attachment: null as DocumentAttachmentData | null,
   });
 
   const loadData = async () => {
@@ -119,6 +124,7 @@ export default function JobsPage() {
         skills,
         application_url: newJob.application_url,
         deadline: newJob.deadline || undefined,
+        attachment: newJob.attachment,
       });
 
       setShowPostModal(false);
@@ -133,6 +139,7 @@ export default function JobsPage() {
         skillsStr: '',
         application_url: '',
         deadline: '',
+        attachment: null,
       });
       alert('Job posting submitted! It is now pending admin approval.');
       if (activeTab === 'my_posted_jobs') loadData();
@@ -292,6 +299,13 @@ export default function JobsPage() {
                             {s}
                           </span>
                         ))}
+                      </div>
+                    )}
+
+                    {/* Document Attachment Display */}
+                    {job.attachment && job.attachment.name && (
+                      <div className="mb-4">
+                        <DocumentAttachmentView attachment={job.attachment} label="Job Details" />
                       </div>
                     )}
                   </div>
@@ -595,6 +609,13 @@ export default function JobsPage() {
                   className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+
+              {/* Document Attachment */}
+              <DocumentAttachment
+                label="Job Document (Optional)"
+                value={newJob.attachment}
+                onChange={(attachment) => setNewJob({ ...newJob, attachment })}
+              />
 
               <div className="pt-2 flex justify-end gap-2">
                 <button
