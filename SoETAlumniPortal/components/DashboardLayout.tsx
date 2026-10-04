@@ -106,6 +106,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const userEmail = user?.email || '';
   const isAdmin = user?.role === 'admin';
   const isAlumni = user?.role === 'alumni';
+  const profileLink = isAdmin ? '/admin/settings' : '/student/profile';
+  const roleLabel = (user?.role || 'student').toUpperCase();
   const navItems = isAdmin ? adminNavItems : isAlumni ? alumniNavItems : mainNavItems;
   const moreItems = isAdmin ? adminMoreNavItems : isAlumni ? alumniMoreNavItems : studentMoreNavItems;
 
@@ -200,21 +202,40 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           {/* Drawer */}
           <div className="relative w-72 max-w-[85vw] bg-[#4A3832] text-gray-200 flex flex-col h-full shadow-2xl z-10">
-            {/* Header / Logo + Close Button */}
-            <div className="h-16 flex items-center justify-between px-6 border-b border-[#6B5147] shrink-0">
-              <div className="flex items-center">
-                <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center p-1 mr-3 shadow-md shrink-0">
-                  <img
-                    src="/mgm-university-logo.svg"
-                    alt="MGM University Logo"
-                    className="w-full h-full object-contain"
+            {/* Header / User Profile + Close Button */}
+            <div className="h-16 flex items-center justify-between px-5 border-b border-[#6B5147] shrink-0">
+              <Link
+                href={profileLink}
+                onClick={() => setIsMobileNavOpen(false)}
+                className="flex items-center min-w-0 flex-1 mr-2 group"
+                title={`View Profile (${userName})`}
+              >
+                <div className="relative mr-3 shrink-0">
+                  {user?.avatar_url ? (
+                    <img
+                      src={user.avatar_url}
+                      alt={userName}
+                      className="w-10 h-10 rounded-xl object-cover border-2 border-[#F28C38] shadow-md group-hover:border-white transition"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 bg-gradient-to-tr from-[#F28C38] to-[#F6A15A] rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-md border border-white/20 group-hover:scale-105 transition">
+                      {userInitials}
+                    </div>
+                  )}
+                  <span
+                    className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-[#4A3832] rounded-full"
+                    title="Active"
                   />
                 </div>
-                <div>
-                  <h1 className="text-white font-bold leading-tight tracking-wide">Alumni Portal</h1>
-                  <p className="text-xs text-[#F6A15A] font-medium uppercase tracking-wider">{user?.role || 'Student'}</p>
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-white font-bold text-sm leading-tight tracking-wide truncate group-hover:text-[#F6A15A] transition">
+                    {userName}
+                  </h2>
+                  <p className="text-[11px] text-[#F6A15A] font-extrabold uppercase tracking-wider mt-0.5">
+                    {roleLabel}
+                  </p>
                 </div>
-              </div>
+              </Link>
               <button
                 type="button"
                 onClick={() => setIsMobileNavOpen(false)}
@@ -236,20 +257,38 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Desktop Sidebar */}
       <aside className="w-64 bg-[#4A3832] text-gray-200 flex-col hidden md:flex shrink-0 h-full">
-        {/* Logo */}
-        <div className="h-16 flex items-center px-6 border-b border-[#6B5147] shrink-0">
-          <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center p-1 mr-3 shadow-md shrink-0">
-            <img
-              src="/mgm-university-logo.svg"
-              alt="MGM University Logo"
-              className="w-full h-full object-contain"
+        {/* User Profile Header (Student / Admin / Alumni) */}
+        <Link
+          href={profileLink}
+          className="h-16 flex items-center px-5 border-b border-[#6B5147] shrink-0 hover:bg-[#5A453D]/40 transition group"
+          title={`View Profile (${userName})`}
+        >
+          <div className="relative mr-3 shrink-0">
+            {user?.avatar_url ? (
+              <img
+                src={user.avatar_url}
+                alt={userName}
+                className="w-10 h-10 rounded-xl object-cover border-2 border-[#F28C38] shadow-md group-hover:border-white transition"
+              />
+            ) : (
+              <div className="w-10 h-10 bg-gradient-to-tr from-[#F28C38] to-[#F6A15A] rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-md border border-white/20 group-hover:scale-105 transition">
+                {userInitials}
+              </div>
+            )}
+            <span
+              className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-[#4A3832] rounded-full"
+              title="Active"
             />
           </div>
-          <div>
-            <h1 className="text-white font-bold leading-tight tracking-wide">Alumni Portal</h1>
-            <p className="text-xs text-[#F6A15A] font-medium uppercase tracking-wider">{user?.role || 'Student'}</p>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-white font-bold text-sm leading-tight tracking-wide truncate group-hover:text-[#F6A15A] transition">
+              {userName}
+            </h2>
+            <p className="text-[11px] text-[#F6A15A] font-extrabold uppercase tracking-wider mt-0.5">
+              {roleLabel}
+            </p>
           </div>
-        </div>
+        </Link>
 
         {/* Navigation */}
         {renderNavLinks()}
