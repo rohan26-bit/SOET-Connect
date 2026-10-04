@@ -2,9 +2,8 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { authService } from '@/lib/services/authService';
-import { GraduationCap, AlertCircle, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { GraduationCap, AlertCircle, ArrowRight, ShieldAlert } from 'lucide-react';
 
 const DEPARTMENTS = [
   'Computer Engineering',
@@ -17,7 +16,6 @@ const DEPARTMENTS = [
 ];
 
 export default function StudentRegisterPage() {
-  const router = useRouter();
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -32,7 +30,7 @@ export default function StudentRegisterPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,10 +49,7 @@ export default function StudentRegisterPage() {
         ...formData,
         fullName: trimmedName,
       });
-      setSuccess(true);
-      setTimeout(() => {
-        router.push('/login');
-      }, 2000);
+      setSubmitted(true);
     } catch (err: any) {
       setError(err.message || 'Registration failed.');
     } finally {
@@ -88,18 +83,20 @@ export default function StudentRegisterPage() {
             </div>
           )}
 
-          {success ? (
+          {submitted ? (
             <div className="text-center py-8">
-              <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto mb-4 animate-bounce" />
-              <h3 className="text-xl font-bold text-[#4A3832] mb-2">Account Created Successfully!</h3>
-              <p className="text-sm text-[#6B6B6B] mb-6">
-                Your student profile has been registered. Redirecting to login...
+              <div className="w-16 h-16 bg-amber-500/10 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-amber-500/20">
+                <ShieldAlert className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-bold text-[#4A3832] mb-2">Registration Submitted for Verification</h3>
+              <p className="text-sm text-[#6B6B6B] max-w-md mx-auto mb-6 leading-relaxed">
+                Thank you for registering! Your student account is currently <span className="text-amber-600 font-bold">Pending Admin Verification</span>. Once verified by the department administrator, you will be able to sign in and access the SOET Connect portal.
               </p>
               <Link
                 href="/login"
                 className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#F28C38] hover:bg-[#E07D2E] text-white text-sm font-bold rounded-xl shadow-lg shadow-[#F28C38]/25 transition"
               >
-                Go to Sign In <ArrowRight className="w-4 h-4" />
+                Return to Sign In <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
           ) : (
