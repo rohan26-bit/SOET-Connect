@@ -19,8 +19,10 @@ APPLICATIONS_FILE = None
 
 
 # ============================================================
-# VALID STATUSES
+# ALLOWED ROLES & VALID STATUSES
 # ============================================================
+
+ALLOWED_APPLICATION_ROLES = {"student", "alumni", "admin"}
 
 VALID_APPLICATION_STATUSES = {
     "applied",
@@ -71,7 +73,9 @@ def load_applications() -> list[dict]:
         apps = []
         for row in res.data or []:
             a = dict(row)
-            a["student_id"] = str(row.get("applicant_id", ""))
+            applicant_id = str(row.get("applicant_id", ""))
+            a["applicant_id"] = applicant_id
+            a["student_id"] = applicant_id
             a["created_at"] = row.get("applied_at", "")
             if a.get("status") == "submitted":
                 a["status"] = "applied"
@@ -112,15 +116,16 @@ def get_user_from_token(current_user: dict) -> dict | None:
 # NEW API ENDPOINTS: /applications
 # ============================================================
 
+@router.post("/applications")
 @router.post("/applications/apply")
 def apply_for_job(
     application: ApplicationCreateRequest,
     current_user: dict = Depends(get_current_user)
 ):
-    if current_user.get("role") != "student":
+    if current_user.get("role") not in ALLOWED_APPLICATION_ROLES:
         raise HTTPException(
             status_code=403,
-            detail="Only students can apply for jobs."
+            detail="Only students, alumni, and administrators can apply for jobs."
         )
 
     target_job = _find_job(application.job_id)
@@ -136,12 +141,13 @@ def apply_for_job(
             detail="Applications can only be submitted for approved jobs."
         )
 
-    student_id = str(current_user.get("user_id"))
+    applicant_id = str(current_user.get("user_id"))
     applications = load_applications()
 
     for existing in applications:
+        existing_applicant = str(existing.get("applicant_id") or existing.get("student_id"))
         if (
-            str(existing.get("student_id")) == student_id
+            existing_applicant == applicant_id
             and str(existing.get("job_id")) == str(application.job_id)
         ):
             raise HTTPException(
@@ -162,7 +168,8 @@ def apply_for_job(
             detail="This account has been deactivated."
         )
 
-    student_name = user.get("name", "Student")
+    applicant_name = user.get("name") or "Applicant"
+    student_name = applicant_name
     app_id = str(uuid.uuid4())
     now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -170,7 +177,7 @@ def apply_for_job(
     supabase.table("job_applications").insert({
         "id": app_id,
         "job_id": str(application.job_id),
-        "applicant_id": student_id,
+        "applicant_id": applicant_id,
         "status": db_status,
         "resume_url": application.resume_url or "",
         "cover_letter": application.cover_letter or "",
@@ -181,8 +188,10 @@ def apply_for_job(
     app_document = {
         "id": app_id,
         "job_id": str(application.job_id),
-        "student_id": student_id,
+        "student_id": applicant_id,
         "student_name": student_name,
+        "applicant_id": applicant_id,
+        "applicant_name": applicant_name,
         "resume_url": application.resume_url or "",
         "cover_letter": application.cover_letter or "",
         "status": "applied",
@@ -196,7 +205,7 @@ def apply_for_job(
         create_notification_once(
             user_id=poster_id,
             title="New job application",
-            message=f'{student_name} applied for your job "{job_title}".',
+            message=f'{applicant_name} applied for your job "{job_title}".',
             notification_type=NOTIFICATION_TYPES["job_application"],
             entity_type="application",
             entity_id=app_id,
@@ -216,13 +225,13 @@ def apply_for_job(
 def get_my_applications_endpoint(
     current_user: dict = Depends(get_current_user)
 ):
-    if current_user.get("role") != "student":
+    if current_user.get("role") not in ALLOWED_APPLICATION_ROLES:
         raise HTTPException(
             status_code=403,
-            detail="Only students can view their own applications."
+            detail="Only students, alumni, and administrators can view their own applications."
         )
 
-    student_id = str(current_user.get("user_id"))
+    user_id = str(current_user.get("user_id"))
     applications = load_applications()
     jobs = load_jobs()
 
@@ -230,13 +239,15 @@ def get_my_applications_endpoint(
 
     results = []
     for app in applications:
-        if str(app.get("student_id")) == student_id:
+        app_user_id = str(app.get("applicant_id") or app.get("student_id"))
+        if app_user_id == user_id:
             job = job_lookup.get(str(app.get("job_id")))
 
             result = {
                 "id": app.get("id"),
                 "job_id": app.get("job_id"),
-                "student_id": app.get("student_id"),
+                "student_id": app_user_id,
+                "applicant_id": app_user_id,
                 "resume_url": app.get("resume_url", ""),
                 "cover_letter": app.get("cover_letter", ""),
                 "status": app.get("status"),
@@ -290,26 +301,34 @@ def get_job_applicants(
 
     for app in applications:
         if str(app.get("job_id")) == str(job_id):
-            student_name = app.get("student_name", "")
-            student_email = ""
+            applicant_id = str(app.get("applicant_id") or app.get("student_id"))
+            applicant_name = app.get("student_name", "")
+            applicant_email = ""
             department = ""
 
-            student_user = users_collection.find_one(
-                {"_id": app.get("student_id")}
+            applicant_user = users_collection.find_one(
+                {"_id": applicant_id}
             )
 
-            if student_user:
-                student_name = student_user.get("name", student_name)
-                student_email = student_user.get("email", "")
-                student_profile = student_user.get("student_profile", {})
-                department = student_profile.get("department", "")
+            if applicant_user:
+                applicant_name = applicant_user.get("name", applicant_name)
+                applicant_email = applicant_user.get("email", "")
+                profile = (
+                    applicant_user.get("student_profile")
+                    or applicant_user.get("alumni_profile")
+                    or {}
+                )
+                department = profile.get("department", "")
 
             results.append({
                 "id": app.get("id"),
                 "job_id": app.get("job_id"),
-                "student_id": app.get("student_id"),
-                "student_name": student_name,
-                "student_email": student_email,
+                "student_id": applicant_id,
+                "student_name": applicant_name,
+                "applicant_id": applicant_id,
+                "applicant_name": applicant_name,
+                "student_email": applicant_email,
+                "applicant_email": applicant_email,
                 "department": department,
                 "resume_url": app.get("resume_url", ""),
                 "cover_letter": app.get("cover_letter", ""),
@@ -383,11 +402,11 @@ def update_application_status(
             }).eq("id", str(application_id)).execute()
 
             if old_status != request.status:
-                student_id = str(app.get("student_id"))
+                applicant_id = str(app.get("applicant_id") or app.get("student_id"))
                 job_title = job.get("title", "") if job else ""
                 try:
                     create_notification_once(
-                        user_id=student_id,
+                        user_id=applicant_id,
                         title="Application status updated",
                         message=f'Your application for "{job_title}" is now "{request.status}".',
                         notification_type=NOTIFICATION_TYPES["application_status"],
@@ -419,7 +438,8 @@ def withdraw_application(
 
     for app in applications:
         if str(app.get("id")) == str(application_id):
-            if str(app.get("student_id")) != user_id:
+            app_user_id = str(app.get("applicant_id") or app.get("student_id"))
+            if app_user_id != user_id:
                 raise HTTPException(
                     status_code=403,
                     detail="You can only withdraw your own applications."
@@ -454,10 +474,10 @@ def apply_to_job_compatibility(
     body: JobApplicationCreateRequest,
     current_user: dict = Depends(get_current_user),
 ):
-    if current_user.get("role") != "student":
+    if current_user.get("role") not in ALLOWED_APPLICATION_ROLES:
         raise HTTPException(
             status_code=403,
-            detail="Only students can apply to jobs."
+            detail="Only students, alumni, and administrators can apply to jobs."
         )
 
     job = _find_job(job_id)
@@ -473,12 +493,13 @@ def apply_to_job_compatibility(
             detail="Applications are only accepted for approved jobs."
         )
 
-    student_id = str(current_user.get("user_id"))
+    applicant_id = str(current_user.get("user_id"))
     applications = load_applications()
 
     for app in applications:
+        existing_applicant = str(app.get("applicant_id") or app.get("student_id"))
         if (
-            str(app.get("student_id")) == student_id
+            existing_applicant == applicant_id
             and str(app.get("job_id")) == str(job_id)
         ):
             raise HTTPException(
@@ -499,14 +520,15 @@ def apply_to_job_compatibility(
             detail="This account has been deactivated."
         )
 
-    student_name = user.get("name", "Student")
+    applicant_name = user.get("name") or "Applicant"
+    student_name = applicant_name
     app_id = str(uuid.uuid4())
     now_iso = datetime.now(timezone.utc).isoformat()
 
     supabase.table("job_applications").insert({
         "id": app_id,
         "job_id": str(job_id),
-        "applicant_id": student_id,
+        "applicant_id": applicant_id,
         "status": "submitted",
         "resume_url": body.resume_url or "",
         "cover_letter": body.cover_letter or "",
@@ -519,8 +541,10 @@ def apply_to_job_compatibility(
         "job_id": str(job_id),
         "job_title": job.get("title", ""),
         "company": job.get("company", ""),
-        "student_id": student_id,
+        "student_id": applicant_id,
         "student_name": student_name,
+        "applicant_id": applicant_id,
+        "applicant_name": applicant_name,
         "cover_letter": body.cover_letter or "",
         "resume_url": body.resume_url or "",
         "status": "applied",
@@ -534,7 +558,7 @@ def apply_to_job_compatibility(
         create_notification_once(
             user_id=poster_id,
             title="New job application",
-            message=f'{student_name} applied for your job "{job_title}".',
+            message=f'{applicant_name} applied for your job "{job_title}".',
             notification_type=NOTIFICATION_TYPES["job_application"],
             entity_type="application",
             entity_id=app_id,
@@ -553,18 +577,18 @@ def apply_to_job_compatibility(
 def get_my_applications_jobs_compatibility(
     current_user: dict = Depends(get_current_user),
 ):
-    if current_user.get("role") != "student":
+    if current_user.get("role") not in ALLOWED_APPLICATION_ROLES:
         raise HTTPException(
             status_code=403,
-            detail="Only students can view their own applications."
+            detail="Only students, alumni, and administrators can view their own applications."
         )
 
-    student_id = str(current_user.get("user_id"))
+    applicant_id = str(current_user.get("user_id"))
     applications = load_applications()
 
     return [
         app for app in applications
-        if str(app.get("student_id")) == student_id
+        if str(app.get("applicant_id") or app.get("student_id")) == applicant_id
     ]
 
 
@@ -644,12 +668,12 @@ def update_application_status_compatibility(
             }).eq("id", str(application_id)).execute()
 
             if old_status != body.status:
-                student_id = str(app.get("student_id"))
+                applicant_id = str(app.get("applicant_id") or app.get("student_id"))
                 job_obj = _find_job(app.get("job_id"))
                 job_title = job_obj.get("title", "") if job_obj else app.get("job_title", "")
                 try:
                     create_notification_once(
-                        user_id=student_id,
+                        user_id=applicant_id,
                         title="Application status updated",
                         message=f'Your application for "{job_title}" is now "{body.status}".',
                         notification_type=NOTIFICATION_TYPES["application_status"],
