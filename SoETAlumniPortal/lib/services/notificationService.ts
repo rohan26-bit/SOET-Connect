@@ -38,6 +38,34 @@ export interface NotificationItem {
   dedupe_key?: string;
 }
 
+export interface NotificationPreferences {
+  user_id?: string;
+  email_enabled: boolean;
+  sms_enabled: boolean;
+  in_app_enabled: boolean;
+  notify_jobs: boolean;
+  notify_events: boolean;
+  notify_announcements: boolean;
+  notify_applications: boolean;
+  notify_gallery: boolean;
+  phone?: string;
+  is_phone_verified?: boolean;
+  is_email_configured?: boolean;
+  is_sms_configured?: boolean;
+}
+
+export interface NotificationDeliveryItem {
+  id: string;
+  notification_id?: string;
+  user_id: string;
+  channel: 'email' | 'sms' | 'in_app';
+  status: 'accepted' | 'sent' | 'delivered' | 'skipped' | 'failed' | 'pending';
+  provider?: string;
+  recipient?: string;
+  error_message?: string;
+  created_at: string;
+}
+
 export const notificationService = {
   // ============================================================
   // GET ALL NOTIFICATIONS
@@ -89,5 +117,55 @@ export const notificationService = {
     });
 
     return await parseResponse(response);
+  },
+
+  // ============================================================
+  // GET PREFERENCES
+  // ============================================================
+
+  async getPreferences(): Promise<NotificationPreferences> {
+    const response = await fetch(`${API_URL}/notifications/preferences`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    return await parseResponse(response);
+  },
+
+  // ============================================================
+  // UPDATE PREFERENCES
+  // ============================================================
+
+  async updatePreferences(prefs: Partial<NotificationPreferences>): Promise<NotificationPreferences> {
+    const response = await fetch(`${API_URL}/notifications/preferences`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(prefs),
+    });
+
+    return await parseResponse(response);
+  },
+
+  // ============================================================
+  // GET DELIVERIES (AUDIT TRAIL)
+  // ============================================================
+
+  async getDeliveries(limit: number = 20): Promise<NotificationDeliveryItem[]> {
+    const response = await fetch(`${API_URL}/notifications/deliveries?limit=${limit}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const data = await parseResponse(response);
+    return Array.isArray(data) ? data : [];
   },
 };

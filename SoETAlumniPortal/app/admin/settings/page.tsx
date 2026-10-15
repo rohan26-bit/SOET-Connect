@@ -9,6 +9,7 @@ import { authService, UserProfile } from '@/lib/services/authService';
 import { systemStatusService, SystemStatus } from '@/lib/services/systemStatusService';
 import { ButtonSpinner } from '@/components/LoadingState';
 import ReportIssueForm from '@/components/ReportIssueForm';
+import NotificationPreferencesCard from '@/components/NotificationPreferencesCard';
 import {
   Shield,
   User,
@@ -708,6 +709,10 @@ export default function AdminSettingsPage() {
               </button>
             </div>
           </form>
+
+          <div className="mt-8 border-t border-[#DDD7D2]/80 pt-8">
+            <NotificationPreferencesCard />
+          </div>
         </div>
       )}
 

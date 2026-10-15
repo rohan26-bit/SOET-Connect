@@ -9,7 +9,8 @@ import {
   Home, Users, Briefcase, Calendar, 
   Bell, User, Settings, Info, 
   LogOut, Shield, BarChart3, Megaphone,
-  Menu, X, ShieldCheck, GraduationCap, Bug
+  Menu, X, ShieldCheck, GraduationCap, Bug,
+  Image as ImageIcon
 } from 'lucide-react';
 
 const mainNavItems = [
@@ -17,6 +18,7 @@ const mainNavItems = [
   { name: 'Alumni Directory', icon: Users, href: '/student/alumni' },
   { name: 'Jobs & Internships', icon: Briefcase, href: '/student/jobs' },
   { name: 'Events', icon: Calendar, href: '/student/events' },
+  { name: 'Gallery', icon: ImageIcon, href: '/gallery' },
   { name: 'Notifications', icon: Bell, href: '/student/notifications' },
   { name: 'My Profile', icon: User, href: '/student/profile' },
 ];
@@ -31,6 +33,7 @@ const alumniNavItems = [
   { name: 'Alumni Directory', icon: Users, href: '/student/alumni' },
   { name: 'Jobs & Internships', icon: Briefcase, href: '/student/jobs' },
   { name: 'Events', icon: Calendar, href: '/student/events' },
+  { name: 'Gallery', icon: ImageIcon, href: '/gallery' },
   { name: 'Notifications', icon: Bell, href: '/student/notifications' },
   { name: 'My Profile', icon: User, href: '/student/profile' },
 ];
@@ -48,11 +51,13 @@ const adminNavItems = [
   { name: 'Alumni Management', icon: Users, href: '/admin/alumni' },
   { name: 'Job Approvals', icon: Briefcase, href: '/admin/jobs' },
   { name: 'Events', icon: Calendar, href: '/admin/events' },
+  { name: 'Gallery Moderation', icon: ImageIcon, href: '/admin/gallery' },
   { name: 'Announcements', icon: Megaphone, href: '/admin/announcements' },
   { name: 'Reports & Analytics', icon: BarChart3, href: '/admin/reports' },
 ];
 
 const adminMoreNavItems = [
+  { name: 'Public Gallery', icon: ImageIcon, href: '/gallery' },
   { name: 'Issue Reports', icon: Bug, href: '/admin/bug-reports' },
   { name: 'Settings', icon: Settings, href: '/admin/settings' },
 ];

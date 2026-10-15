@@ -20,6 +20,11 @@ NOTIFICATION_TYPES = {
     "event_cancellation": "event_cancellation",
     "announcement": "announcement",
     "student_verification": "student_verification",
+    "gallery_submission": "gallery_submission",
+    "gallery_approval": "gallery_approval",
+    "gallery_rejection": "gallery_rejection",
+    "password_reset": "password_reset",
+    "phone_verification": "phone_verification",
 }
 
 
@@ -86,6 +91,19 @@ def create_notification(
         supabase.table("notifications").insert(notif_row).execute()
     except Exception as e:
         print("Error inserting notification to Supabase:", e)
+
+    # Safely dispatch external notifications (Email / SMS) based on user preferences
+    try:
+        from services.delivery import dispatch_external_notification
+        dispatch_external_notification(
+            user_id=user_id_str,
+            title=title,
+            message=message,
+            event_type=notification_type or "general",
+            notification_id=notif_id,
+        )
+    except Exception as e:
+        pass
 
     return notif_row
 

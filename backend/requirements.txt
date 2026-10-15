@@ -6,4 +6,6 @@ PyJWT
 email-validator
 httpx
 pytest
+pillow
+python-multipart
 

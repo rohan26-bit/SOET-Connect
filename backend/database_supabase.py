@@ -141,13 +141,21 @@ _mock_store: Dict[str, List[dict]] = {
     "notifications": [],
     "achievements": [],
     "bug_reports": [],
+    "gallery_photos": [],
+    "notification_preferences": [],
+    "notification_deliveries": [],
+    "password_reset_challenges": [],
+    "phone_verification_codes": [],
 }
+
+_mock_storage: Dict[str, bytes] = {}
 
 
 def reset_mock_db():
-    """Clear all mock tables for test isolation."""
+    """Clear all mock tables and mock storage for test isolation."""
     for key in _mock_store:
         _mock_store[key].clear()
+    _mock_storage.clear()
 
 
 class MockInsertBuilder:
@@ -233,6 +241,22 @@ class MockQueryBuilder:
         self.filters.append((column, "in", values))
         return self
 
+    def gt(self, column: str, value: Any):
+        self.filters.append((column, "gt", value))
+        return self
+
+    def gte(self, column: str, value: Any):
+        self.filters.append((column, "gte", value))
+        return self
+
+    def lt(self, column: str, value: Any):
+        self.filters.append((column, "lt", value))
+        return self
+
+    def lte(self, column: str, value: Any):
+        self.filters.append((column, "lte", value))
+        return self
+
     def order(self, column: str, desc: bool = False):
         self.order_by = (column, desc)
         return self
@@ -261,6 +285,18 @@ class MockQueryBuilder:
             elif op == "in":
                 vals = [str(v).strip().lower() for v in val]
                 if str(row_val if row_val is not None else "").strip().lower() not in vals:
+                    return False
+            elif op == "gt":
+                if str(row_val or "") <= str(val or ""):
+                    return False
+            elif op == "gte":
+                if str(row_val or "") < str(val or ""):
+                    return False
+            elif op == "lt":
+                if str(row_val or "") >= str(val or ""):
+                    return False
+            elif op == "lte":
+                if str(row_val or "") > str(val or ""):
                     return False
         return True
 
@@ -302,6 +338,7 @@ class MockQueryBuilder:
         for item in items:
             row = dict(item)
             item_id = row.get("id")
+            user_id = row.get("user_id") if self.table_name == "notification_preferences" else None
             found = False
             if item_id:
                 for existing in table_rows:
@@ -312,8 +349,17 @@ class MockQueryBuilder:
                         result.append(dict(existing))
                         found = True
                         break
+            elif user_id:
+                for existing in table_rows:
+                    if str(existing.get("user_id")) == str(user_id):
+                        existing.update(row)
+                        if "updated_at" in existing:
+                            existing["updated_at"] = now_iso
+                        result.append(dict(existing))
+                        found = True
+                        break
             if not found:
-                if "id" not in row or not row["id"]:
+                if self.table_name != "notification_preferences" and ("id" not in row or not row["id"]):
                     row["id"] = str(uuid.uuid4())
                 if "created_at" not in row:
                     row["created_at"] = now_iso
@@ -438,6 +484,22 @@ class SupabaseQueryBuilder:
         self.params[column] = f"in.({formatted})"
         return self
 
+    def gt(self, column: str, value: Any):
+        self.params[column] = f"gt.{value}"
+        return self
+
+    def gte(self, column: str, value: Any):
+        self.params[column] = f"gte.{value}"
+        return self
+
+    def lt(self, column: str, value: Any):
+        self.params[column] = f"lt.{value}"
+        return self
+
+    def lte(self, column: str, value: Any):
+        self.params[column] = f"lte.{value}"
+        return self
+
     def order(self, column: str, desc: bool = False):
         direction = "desc" if desc else "asc"
         self.params["order"] = f"{column}.{direction}"
@@ -485,8 +547,107 @@ class SupabaseQueryBuilder:
         return SupabaseDeleteBuilder(self.base_url, self.headers, self.timeout)
 
 
+class MockStorageBucket:
+    """In-memory bucket adapter for storage in test mode."""
+
+    def __init__(self, bucket: str):
+        self.bucket = bucket
+
+    def upload(self, path: str, file_bytes: bytes, content_type: str = "application/octet-stream") -> dict:
+        key = f"{self.bucket}/{path.lstrip('/')}"
+        _mock_storage[key] = file_bytes
+        return {"Key": key, "path": path}
+
+    def download(self, path: str) -> Optional[bytes]:
+        key = f"{self.bucket}/{path.lstrip('/')}"
+        return _mock_storage.get(key)
+
+    def delete(self, paths: Union[str, list]) -> list:
+        if isinstance(paths, str):
+            paths = [paths]
+        deleted = []
+        for p in paths:
+            key = f"{self.bucket}/{p.lstrip('/')}"
+            if key in _mock_storage:
+                del _mock_storage[key]
+                deleted.append({"name": p})
+        return deleted
+
+    def create_signed_url(self, path: str, expires_in: int = 3600) -> str:
+        return f"/api/gallery/storage/{self.bucket}/{path.lstrip('/')}"
+
+
+class SupabaseStorageBucket:
+    """Supabase Storage API bucket client."""
+
+    def __init__(self, bucket: str, timeout: float = 10.0):
+        self.bucket = bucket
+        self.timeout = timeout
+        cfg = get_supabase_config()
+        self.storage_url = f"{cfg['url']}/storage/v1"
+        self.headers = {
+            "apikey": SUPABASE_SERVICE_ROLE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        }
+
+    def upload(self, path: str, file_bytes: bytes, content_type: str = "application/octet-stream") -> dict:
+        client = get_http_client(self.timeout)
+        headers = {**self.headers, "Content-Type": content_type}
+        url = f"{self.storage_url}/object/{self.bucket}/{path.lstrip('/')}"
+        resp = client.post(url, headers=headers, content=file_bytes)
+        if not resp.is_success:
+            headers["x-upsert"] = "true"
+            resp = client.put(url, headers=headers, content=file_bytes)
+            if not resp.is_success:
+                raise RuntimeError(f"Storage upload failed ({resp.status_code}): {resp.text}")
+        return resp.json() if resp.text else {"path": path}
+
+    def download(self, path: str) -> Optional[bytes]:
+        client = get_http_client(self.timeout)
+        url = f"{self.storage_url}/object/{self.bucket}/{path.lstrip('/')}"
+        resp = client.get(url, headers=self.headers)
+        if resp.status_code == 200:
+            return resp.content
+        return None
+
+    def delete(self, paths: Union[str, list]) -> list:
+        if isinstance(paths, str):
+            paths = [paths]
+        client = get_http_client(self.timeout)
+        url = f"{self.storage_url}/object/{self.bucket}"
+        headers = {**self.headers, "Content-Type": "application/json"}
+        resp = client.delete(url, headers=headers, json={"prefixes": paths})
+        if resp.status_code == 200:
+            return resp.json()
+        return []
+
+    def create_signed_url(self, path: str, expires_in: int = 3600) -> str:
+        client = get_http_client(self.timeout)
+        url = f"{self.storage_url}/object/sign/{self.bucket}/{path.lstrip('/')}"
+        headers = {**self.headers, "Content-Type": "application/json"}
+        resp = client.post(url, headers=headers, json={"expiresIn": expires_in})
+        if resp.status_code == 200:
+            data = resp.json()
+            signed_path = data.get("signedURL") or data.get("signedUrl")
+            cfg = get_supabase_config()
+            return f"{cfg['url']}/storage/v1{signed_path}"
+        return f"/api/gallery/{path}"
+
+
+class SupabaseStorageClient:
+    """Storage client facade for Supabase Storage."""
+
+    def from_(self, bucket: str):
+        if os.getenv("DATABASE_MODE", "").lower() == "mock":
+            return MockStorageBucket(bucket)
+        return SupabaseStorageBucket(bucket)
+
+
 class SupabaseClient:
-    """Primary client instance for accessing Supabase PostgreSQL."""
+    """Primary client instance for accessing Supabase PostgreSQL and Storage."""
+
+    def __init__(self):
+        self.storage = SupabaseStorageClient()
 
     def table(self, table_name: str):
         if os.getenv("DATABASE_MODE", "").lower() == "mock":
@@ -543,6 +704,8 @@ class SupabaseUsersCollection:
             "password_hash": user_row.get("password_hash", ""),
             "role": user_row.get("role", ""),
             "avatar_url": user_row.get("avatar_url"),
+            "phone": user_row.get("phone"),
+            "is_phone_verified": user_row.get("is_phone_verified", False),
             "is_active": user_row.get("is_active", True),
             "is_verified": user_row.get("is_verified", False),
             "verification_status": user_row.get("verification_status", "pending"),
@@ -562,6 +725,8 @@ class SupabaseUsersCollection:
                     "graduation_year": p.get("graduation_year"),
                     "phone": p.get("phone"),
                 }
+                if not doc.get("phone") and p.get("phone"):
+                    doc["phone"] = p.get("phone")
             elif fetch_profile:
                 try:
                     prof_res = supabase.table("student_profiles").select("*").eq("user_id", user_id).execute()
@@ -744,6 +909,10 @@ class SupabaseUsersCollection:
         else:
             user_id = str(uuid.uuid4())
 
+        phone_val = doc.get("phone")
+        if not phone_val and isinstance(doc.get("student_profile"), dict):
+            phone_val = doc.get("student_profile", {}).get("phone")
+
         user_row = {
             "id": user_id,
             "name": doc.get("name"),
@@ -751,6 +920,8 @@ class SupabaseUsersCollection:
             "password_hash": doc.get("password_hash"),
             "role": doc.get("role"),
             "avatar_url": doc.get("avatar_url"),
+            "phone": phone_val,
+            "is_phone_verified": doc.get("is_phone_verified", False),
             "is_active": doc.get("is_active", True),
             "is_verified": doc.get("is_verified", False),
             "verification_status": doc.get("verification_status", "pending"),
@@ -776,7 +947,7 @@ class SupabaseUsersCollection:
                 "course": sp.get("course"),
                 "academic_year": sp.get("academic_year"),
                 "graduation_year": sp.get("graduation_year"),
-                "phone": sp.get("phone"),
+                "phone": sp.get("phone") or phone_val,
             }).execute()
 
         elif role == "alumni" and "alumni_profile" in doc:
@@ -811,9 +982,14 @@ class SupabaseUsersCollection:
 
         # Base user fields
         base_updates = {}
-        for k in ["name", "email", "password_hash", "avatar_url", "is_active", "is_verified", "verification_status"]:
+        for k in ["name", "email", "password_hash", "avatar_url", "is_active", "is_verified", "verification_status", "phone", "is_phone_verified"]:
             if k in set_fields:
                 base_updates[k] = set_fields[k]
+
+        if "student_profile" in set_fields and isinstance(set_fields["student_profile"], dict):
+            sp_phone = set_fields["student_profile"].get("phone")
+            if sp_phone and "phone" not in base_updates:
+                base_updates["phone"] = sp_phone
 
         if base_updates:
             builder = supabase.table("users").update(base_updates)
