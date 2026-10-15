@@ -74,7 +74,12 @@ export default function AdminRegisterPage() {
           </div>
         </div>
 
-        <h2 className="text-center text-3xl font-extrabold text-[#4A3832] tracking-tight">
+        <div className="text-center mb-1">
+          <span className="text-xs font-bold text-[#F28C38] uppercase tracking-wider">
+            SOET Connect - Alumni Portal
+          </span>
+        </div>
+        <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-[#4A3832] tracking-tight">
           Admin Registration
         </h2>
 

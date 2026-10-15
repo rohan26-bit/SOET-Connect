@@ -24,6 +24,8 @@ export interface EventItem {
   creator_avatar?: string;
   registration_count?: number;
   is_registered?: boolean;
+  is_past?: boolean;
+  is_registration_closed?: boolean;
   attachment?: {
     name: string;
     type: string;
@@ -124,7 +126,8 @@ export const eventService = {
   // GET MY EVENTS (CREATOR)
   // ============================================================
   async getMyEvents(userId: string): Promise<EventItem[]> {
-    const response = await fetch(`${API_URL}/events`, {
+    const url = userId ? `${API_URL}/events?created_by=${encodeURIComponent(userId)}` : `${API_URL}/events`;
+    const response = await fetch(url, {
       headers: getAuthHeaders(),
     });
 
@@ -135,9 +138,10 @@ export const eventService = {
     }
 
     return (data || [])
-      .filter((e: any) => String(e.created_by) === String(userId))
+      .filter((e: any) => !userId || String(e.created_by) === String(userId))
       .map(normalizeEvent);
   },
+
 
   // ============================================================
   // CREATE EVENT

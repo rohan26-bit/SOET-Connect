@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from database import users_collection, supabase
 from security.dependencies import get_current_user
 from services.notifications import NOTIFICATION_TYPES, create_notification_once
-from routes.jobs import load_jobs
+from routes.jobs import load_jobs, is_job_expired
 
 
 router = APIRouter(
@@ -139,6 +139,12 @@ def apply_for_job(
         raise HTTPException(
             status_code=400,
             detail="Applications can only be submitted for approved jobs."
+        )
+
+    if is_job_expired(target_job):
+        raise HTTPException(
+            status_code=400,
+            detail="The application deadline for this job has passed."
         )
 
     applicant_id = str(current_user.get("user_id"))
@@ -491,6 +497,12 @@ def apply_to_job_compatibility(
         raise HTTPException(
             status_code=400,
             detail="Applications are only accepted for approved jobs."
+        )
+
+    if is_job_expired(job):
+        raise HTTPException(
+            status_code=400,
+            detail="The application deadline for this job has passed."
         )
 
     applicant_id = str(current_user.get("user_id"))

@@ -24,9 +24,9 @@ def get_user_from_token(current_user: dict):
     user_id = current_user.get("user_id")
     role = current_user.get("role")
 
-    user = users_collection.find_one({"_id": str(user_id)})
+    user = users_collection.find_one({"_id": str(user_id)}, include_profiles=False)
     if not user and role:
-        users = users_collection.find({"role": role})
+        users = users_collection.find({"role": role}, include_profiles=False)
         for candidate in users:
             if str(candidate.get("_id")) == str(user_id):
                 user = candidate

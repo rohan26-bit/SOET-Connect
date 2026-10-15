@@ -22,39 +22,73 @@ export default function AlumniDashboard() {
   const [aciData, setAciData] = useState<AlumniAciResponse | null>(null);
   const [aciLoading, setAciLoading] = useState(true);
   const [aciError, setAciError] = useState<string | null>(null);
+  const [jobsLoading, setJobsLoading] = useState(true);
+  const [announcementsLoading, setAnnouncementsLoading] = useState(true);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadData() {
-      if (!user) return;
-      try {
-        const [jobsData, eventsData, announcementsData] = await Promise.all([
-          jobService.getMyPostedJobs(user.id),
-          eventService.getMyEvents(user.id),
-          announcementService.getAnnouncements(),
-        ]);
-        setMyJobs(jobsData);
-        setMyEvents(eventsData);
-        setAnnouncements(announcementsData);
-      } catch (err) {
-        console.error('Error loading alumni dashboard data:', err);
-      } finally {
-        setLoading(false);
-      }
+    if (!user) return;
+    let isMounted = true;
 
-      // Fetch ACI metrics dynamically from FastAPI
-      try {
-        const aci = await alumniService.getMyAci();
-        setAciData(aci);
-      } catch (err: any) {
-        // Handle unverified or network error gracefully
+    // Fetch jobs independently
+    jobService
+      .getMyPostedJobs(user.id)
+      .then((jobsData) => {
+        if (isMounted) {
+          setMyJobs(jobsData);
+          setJobsLoading(false);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error('Error loading jobs:', err);
+        if (isMounted) {
+          setJobsLoading(false);
+          setLoading(false);
+        }
+      });
+
+    // Fetch events independently
+    eventService
+      .getMyEvents(user.id)
+      .then((eventsData) => {
+        if (isMounted) setMyEvents(eventsData);
+      })
+      .catch((err) => {
+        console.error('Error loading events:', err);
+      });
+
+    // Fetch announcements independently
+    announcementService
+      .getAnnouncements()
+      .then((announcementsData) => {
+        if (isMounted) {
+          setAnnouncements(announcementsData);
+          setAnnouncementsLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error('Error loading announcements:', err);
+        if (isMounted) setAnnouncementsLoading(false);
+      });
+
+    // Fetch ACI metrics dynamically and concurrently without blocking dashboard items
+    alumniService
+      .getMyAci()
+      .then((aci) => {
+        if (isMounted) setAciData(aci);
+      })
+      .catch((err: any) => {
         console.warn('ACI metrics unavailable:', err.message);
-        setAciError(err.message || 'Contribution metrics unavailable');
-      } finally {
-        setAciLoading(false);
-      }
-    }
-    loadData();
+        if (isMounted) setAciError(err.message || 'Contribution metrics unavailable');
+      })
+      .finally(() => {
+        if (isMounted) setAciLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, [user]);
 
   const userName = user?.full_name || 'Alumni Member';
@@ -67,9 +101,9 @@ export default function AlumniDashboard() {
     <DashboardLayout>
       {/* Breadcrumbs */}
       <div className="flex items-center text-xs font-semibold text-[#6B6B6B] mb-6 uppercase tracking-wider">
-        <span>Portal</span>
+        <span>SOET Connect - Alumni Portal</span>
         <span className="mx-2 text-[#DDD7D2]">/</span>
-        <span className="text-[#F28C38]">Alumni Enterprise Dashboard</span>
+        <span className="text-[#F28C38]">Alumni Dashboard</span>
       </div>
 
       {/* Verification Notice Banner if Pending */}
@@ -278,7 +312,7 @@ export default function AlumniDashboard() {
             </Link>
           </div>
 
-          {loading ? (
+          {jobsLoading ? (
             <LoadingState message="Loading opportunities" className="py-8" />
           ) : myJobs.length === 0 ? (
             <div className="py-8 text-center text-xs text-[#888888]">
@@ -313,7 +347,7 @@ export default function AlumniDashboard() {
             </div>
           </div>
 
-          {loading ? (
+          {announcementsLoading ? (
             <LoadingState message="Loading announcements" className="py-8" />
           ) : announcements.length === 0 ? (
             <div className="py-8 text-center text-xs text-[#888888]">No active announcements.</div>

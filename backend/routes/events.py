@@ -1,6 +1,12 @@
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+
+try:
+    from zoneinfo import ZoneInfo
+    KOLKATA_TZ = ZoneInfo("Asia/Kolkata")
+except Exception:
+    KOLKATA_TZ = timezone(timedelta(hours=5, minutes=30))
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -21,6 +27,70 @@ EVENTS_FILE = None
 REGISTRATIONS_FILE = None
 
 VALID_EVENT_STATUSES = {"pending", "approved", "rejected", "cancelled", "completed"}
+
+
+def parse_iso_datetime(dt_str: str | None) -> datetime | None:
+    if not dt_str:
+        return None
+    s = str(dt_str).strip()
+    if not s:
+        return None
+    try:
+        if len(s) == 10 and s[4] == '-' and s[7] == '-':
+            # Treat date-only deadline as end of that day in UTC
+            return datetime.fromisoformat(s).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
+
+
+def is_event_past(event: dict) -> bool:
+    """An approved event remains visible through the event date itself.
+    Beginning the following day in Asia/Kolkata, it is excluded from active feeds."""
+    date_str = str(event.get("date") or event.get("event_date") or event.get("start_date") or "").strip()
+    if not date_str:
+        return False
+    try:
+        clean_date = date_str.split("T")[0].split(" ")[0]
+        event_dt = datetime.strptime(clean_date, "%Y-%m-%d").date()
+        today_ist = datetime.now(KOLKATA_TZ).date()
+        return event_dt < today_ist
+    except Exception:
+        return False
+
+
+def is_event_registration_closed(event: dict) -> bool:
+    """Check if registration is closed either via registration_deadline or event start/date."""
+    reg_dl = event.get("registration_deadline")
+    if reg_dl:
+        dt = parse_iso_datetime(reg_dl)
+        if dt:
+            return datetime.now(timezone.utc) > dt
+
+    # Default to when event starts (or end of event date in IST)
+    date_str = str(event.get("date") or event.get("event_date") or event.get("start_date") or "").strip()
+    time_str = str(event.get("time") or event.get("start_time") or "").strip()
+    if not date_str:
+        return False
+    try:
+        clean_date = date_str.split("T")[0].split(" ")[0]
+        if time_str:
+            for t_fmt in ["%H:%M", "%H:%M:%S", "%I:%M %p", "%I:%M%p"]:
+                try:
+                    t_val = datetime.strptime(time_str, t_fmt).time()
+                    event_dt_ist = datetime.combine(datetime.strptime(clean_date, "%Y-%m-%d").date(), t_val, tzinfo=KOLKATA_TZ)
+                    return datetime.now(timezone.utc) > event_dt_ist.astimezone(timezone.utc)
+                except ValueError:
+                    continue
+        end_of_day_ist = datetime.combine(datetime.strptime(clean_date, "%Y-%m-%d").date(), datetime.max.time(), tzinfo=KOLKATA_TZ)
+        return datetime.now(timezone.utc) > end_of_day_ist.astimezone(timezone.utc)
+    except Exception:
+        return False
 
 
 # ============================================================
@@ -62,22 +132,53 @@ class EventUpdateRequest(BaseModel):
 # HELPERS — events
 # ============================================================
 
-def load_events() -> list[dict]:
-    """Load events directly from Supabase PostgreSQL events table."""
+def load_events(status: str | None = None, created_by: str | None = None) -> list[dict]:
+    """Load events directly from Supabase PostgreSQL with database filtering and batch creator lookups."""
     try:
-        res = supabase.table("events").select("*").order("date", desc=True).execute()
+        q = supabase.table("events").select("*")
+        if status:
+            q = q.eq("status", status)
+        if created_by:
+            q = q.eq("created_by", str(created_by))
+        res = q.order("date", desc=True).execute()
+
+        raw_events = res.data or []
+        if not raw_events:
+            return []
+
+        # Batch resolve creator names to eliminate per-event N+1 queries
+        creator_ids = list({str(e["created_by"]) for e in raw_events if e.get("created_by") and not e.get("creator_name")})
+        creator_names = {}
+        if creator_ids:
+            try:
+                users_res = supabase.table("users").select("id,name,legacy_mongo_id").in_("id", creator_ids).execute()
+                for u in users_res.data or []:
+                    uname = u.get("name") or "User"
+                    if u.get("id"):
+                        creator_names[str(u["id"])] = uname
+                    if u.get("legacy_mongo_id"):
+                        creator_names[str(u["legacy_mongo_id"])] = uname
+            except Exception:
+                pass
+
         events = []
-        for row in res.data or []:
+        for row in raw_events:
             e = dict(row)
             date_val = str(row.get("date", ""))
             e["event_date"] = date_val
             e["start_date"] = date_val
             e["start_time"] = str(row.get("time", ""))
             e["registration_deadline"] = row.get("registration_deadline")
+            e["is_past"] = is_event_past(e)
+            e["is_registration_closed"] = is_event_registration_closed(e)
             if not e.get("creator_name") and e.get("created_by"):
-                u = users_collection.find_one({"_id": str(e["created_by"])})
-                if u:
-                    e["creator_name"] = u.get("name", "User")
+                cid = str(e["created_by"])
+                if cid in creator_names:
+                    e["creator_name"] = creator_names[cid]
+                else:
+                    u = users_collection.find_one({"_id": cid}, include_profiles=False)
+                    if u:
+                        e["creator_name"] = u.get("name", "User")
             events.append(e)
         return events
     except Exception as e:
@@ -86,27 +187,72 @@ def load_events() -> list[dict]:
 
 
 def _find_event(event_id: str) -> dict | None:
-    for event in load_events():
-        if str(event.get("id")) == str(event_id):
-            return event
-    return None
+    """Find a single event by primary key id."""
+    try:
+        res = supabase.table("events").select("*").eq("id", str(event_id)).limit(1).execute()
+        if not res.data:
+            return None
+        row = res.data[0]
+        e = dict(row)
+        date_val = str(row.get("date", ""))
+        e["event_date"] = date_val
+        e["start_date"] = date_val
+        e["start_time"] = str(row.get("time", ""))
+        e["registration_deadline"] = row.get("registration_deadline")
+        e["is_past"] = is_event_past(e)
+        e["is_registration_closed"] = is_event_registration_closed(e)
+        if not e.get("creator_name") and e.get("created_by"):
+            u = users_collection.find_one({"_id": str(e["created_by"])}, include_profiles=False)
+            if u:
+                e["creator_name"] = u.get("name", "User")
+        return e
+    except Exception as e:
+        print(f"Error fetching event {event_id}:", e)
+        return None
 
 
 # ============================================================
 # HELPERS — registrations
 # ============================================================
 
-def load_registrations() -> list[dict]:
-    """Load registrations directly from Supabase PostgreSQL event_registrations table."""
+def load_registrations(hydrate_users: bool = True, event_id: str | None = None, user_id: str | None = None) -> list[dict]:
+    """Load registrations directly from Supabase PostgreSQL with optional user hydration and filtering."""
     try:
-        res = supabase.table("event_registrations").select("*").execute()
+        q = supabase.table("event_registrations").select("*")
+        if event_id:
+            q = q.eq("event_id", str(event_id))
+        if user_id:
+            q = q.eq("user_id", str(user_id))
+        res = q.execute()
+
+        raw_regs = res.data or []
+        if not raw_regs:
+            return []
+
+        user_map = {}
+        if hydrate_users:
+            uids = list({str(r["user_id"]) for r in raw_regs if r.get("user_id") and not r.get("user_name")})
+            if uids:
+                try:
+                    users_res = supabase.table("users").select("id,name,email,role,legacy_mongo_id").in_("id", uids).execute()
+                    for u in users_res.data or []:
+                        if u.get("id"):
+                            user_map[str(u["id"])] = u
+                        if u.get("legacy_mongo_id"):
+                            user_map[str(u["legacy_mongo_id"])] = u
+                except Exception:
+                    pass
+
         regs = []
-        for row in res.data or []:
+        for row in raw_regs:
             r = dict(row)
             if not r.get("created_at") and r.get("registered_at"):
                 r["created_at"] = r["registered_at"]
-            if not r.get("user_name") and r.get("user_id"):
-                u = users_collection.find_one({"_id": str(r["user_id"])})
+            if hydrate_users and not r.get("user_name") and r.get("user_id"):
+                uid = str(r["user_id"])
+                u = user_map.get(uid)
+                if not u:
+                    u = users_collection.find_one({"_id": uid}, include_profiles=False)
                 if u:
                     r["user_name"] = u.get("name", "User")
                     r["name"] = u.get("name", "User")
@@ -124,12 +270,12 @@ def get_user_from_token(current_user: dict):
     user_id = current_user.get("user_id")
     role = current_user.get("role")
 
-    user = users_collection.find_one({"_id": str(user_id)})
+    user = users_collection.find_one({"_id": str(user_id)}, include_profiles=False)
     if user:
         return user
 
     if role:
-        users = users_collection.find({"role": role})
+        users = users_collection.find({"role": role}, include_profiles=False)
         for candidate in users:
             if str(candidate.get("_id")) == str(user_id):
                 return candidate
@@ -143,13 +289,17 @@ def get_user_from_token(current_user: dict):
 
 @router.get("")
 def get_events(
+    created_by: str | None = None,
     current_user: dict = Depends(get_current_user),
 ):
     role = current_user.get("role")
     user_id = str(current_user.get("user_id"))
 
-    events = load_events()
-    registrations = load_registrations()
+    # Load events (support database-level filtering for specific creator e.g. alumni dashboard)
+    events = load_events(created_by=created_by) if created_by else load_events()
+
+    # Load registration references without hydrating user details (fast count & registration check)
+    registrations = load_registrations(hydrate_users=False)
 
     # Pre-calculate registration counts per event
     reg_counts = {}
@@ -168,8 +318,9 @@ def get_events(
         status = event.get("status")
         creator_id = str(event.get("created_by"))
 
-        # Visibility: Admin sees all; non-admin sees approved or own events
-        if role == "admin" or status == "approved" or creator_id == user_id:
+        # Visibility: Admin sees all; non-admin sees approved unexpired events or own events
+        is_past = event.get("is_past", False)
+        if role == "admin" or creator_id == user_id or (status == "approved" and not is_past):
             ev_copy = dict(event)
             if not ev_copy.get("event_date") and ev_copy.get("start_date"):
                 ev_copy["event_date"] = ev_copy["start_date"]
@@ -241,7 +392,7 @@ def create_event(
         "created_at": now_iso,
         "updated_at": now_iso,
     }
-    if os.getenv("DATABASE_MODE", "").lower() == "mock" and body.registration_deadline:
+    if body.registration_deadline is not None:
         event_row["registration_deadline"] = body.registration_deadline
 
     supabase.table("events").insert(event_row).execute()
@@ -309,13 +460,10 @@ def get_event_details(
             detail="Event not found."
         )
 
-    registrations = load_registrations()
-    reg_count = sum(
-        1 for r in registrations if str(r.get("event_id")) == str(event_id)
-    )
+    registrations = load_registrations(hydrate_users=False, event_id=event_id)
+    reg_count = len(registrations)
     is_reg = any(
-        str(r.get("event_id")) == str(event_id)
-        and str(r.get("user_id")) == user_id
+        str(r.get("user_id")) == user_id
         for r in registrations
     )
 
@@ -390,6 +538,8 @@ def update_event(
         db_updates["date"] = update_data["start_date"]
     if "start_time" in update_data:
         db_updates["time"] = update_data["start_time"]
+    if "registration_deadline" in update_data:
+        db_updates["registration_deadline"] = update_data["registration_deadline"]
 
     supabase.table("events").update(db_updates).eq("id", str(event_id)).execute()
 
@@ -511,20 +661,11 @@ def register_for_event(
             detail="Registrations are only accepted for approved events."
         )
 
-    deadline_str = event.get("registration_deadline")
-    if deadline_str:
-        try:
-            deadline = datetime.fromisoformat(deadline_str)
-            if deadline.tzinfo is None:
-                deadline = deadline.replace(tzinfo=timezone.utc)
-
-            if datetime.now(timezone.utc) > deadline:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Registration deadline has passed."
-                )
-        except ValueError:
-            pass
+    if is_event_registration_closed(event):
+        raise HTTPException(
+            status_code=400,
+            detail="Registration deadline has passed."
+        )
 
     user_id = str(current_user.get("user_id"))
     registrations = load_registrations()
@@ -604,7 +745,7 @@ def cancel_event_registration(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user.get("user_id"))
-    registrations = load_registrations()
+    registrations = load_registrations(hydrate_users=False, event_id=event_id, user_id=user_id)
 
     for reg in registrations:
         if (
@@ -633,12 +774,7 @@ def get_my_registrations(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user.get("user_id"))
-    registrations = load_registrations()
-
-    return [
-        reg for reg in registrations
-        if str(reg.get("user_id")) == user_id
-    ]
+    return load_registrations(hydrate_users=False, user_id=user_id)
 
 
 # ============================================================
@@ -666,8 +802,4 @@ def get_event_registrations(
             detail="You do not have permission to view registrations for this event."
         )
 
-    registrations = load_registrations()
-    return [
-        reg for reg in registrations
-        if str(reg.get("event_id")) == str(event_id)
-    ]
+    return load_registrations(hydrate_users=True, event_id=event_id)

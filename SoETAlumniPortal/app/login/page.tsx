@@ -55,11 +55,11 @@ export default function LoginPage() {
             />
           </div>
         </div>
-        <h2 className="mt-5 text-center text-3xl font-extrabold text-[#4A3832] tracking-tight">
-          SOET Connect
+        <h2 className="mt-5 text-center text-2xl sm:text-3xl font-extrabold text-[#4A3832] tracking-tight">
+          SOET Connect - Alumni Portal
         </h2>
         <p className="mt-2 text-center text-sm text-[#6B6B6B] font-medium">
-          Sign in to access your enterprise dashboard
+          Sign in to your account
         </p>
       </div>
 

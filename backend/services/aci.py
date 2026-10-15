@@ -45,11 +45,11 @@ def get_tier_and_badge(score: int) -> tuple[str, str]:
 
 
 def get_user_by_id(user_id: str) -> dict | None:
-    """Find user document by string representation."""
+    """Find user document by string representation without hydrating profile."""
     user_id_str = str(user_id).strip()
-    user = users_collection.find_one({"_id": user_id_str})
+    user = users_collection.find_one({"_id": user_id_str}, include_profiles=False)
     if not user:
-        users = users_collection.find({"role": "alumni"})
+        users = users_collection.find({"role": "alumni"}, include_profiles=False)
         for candidate in users:
             if str(candidate.get("_id")) == user_id_str:
                 return candidate
@@ -104,35 +104,39 @@ def calculate_alumni_aci(
 
     verification_pts = VERIFICATION_POINTS
 
-    # Load data from Supabase if not passed in
+    # Load data from Supabase if not passed in (scoped specifically to this alumnus)
     if jobs is None:
         # Check if monkeypatched file exists (for tests)
-        if JOBS_FILE.exists() and JOBS_FILE.read_text(encoding="utf-8").strip() != "[]":
+        if JOBS_FILE.exists() and JOBS_FILE.read_text(encoding="utf-8").strip() not in ("", "[]"):
             jobs = load_json_data(JOBS_FILE)
         else:
             try:
-                res = supabase.table("jobs").select("*").execute()
+                res = supabase.table("jobs").select("id,posted_by,status").eq("posted_by", user_id_str).eq("status", "approved").execute()
                 jobs = res.data or []
             except Exception:
                 jobs = []
 
     if events is None:
-        if EVENTS_FILE.exists() and EVENTS_FILE.read_text(encoding="utf-8").strip() != "[]":
+        if EVENTS_FILE.exists() and EVENTS_FILE.read_text(encoding="utf-8").strip() not in ("", "[]"):
             events = load_json_data(EVENTS_FILE)
         else:
             try:
-                res = supabase.table("events").select("*").execute()
+                res = supabase.table("events").select("id,created_by,status").eq("created_by", user_id_str).eq("status", "approved").execute()
                 events = res.data or []
             except Exception:
                 events = []
 
     if registrations is None:
-        if REGISTRATIONS_FILE.exists() and REGISTRATIONS_FILE.read_text(encoding="utf-8").strip() != "[]":
+        if REGISTRATIONS_FILE.exists() and REGISTRATIONS_FILE.read_text(encoding="utf-8").strip() not in ("", "[]"):
             registrations = load_json_data(REGISTRATIONS_FILE)
         else:
             try:
-                res = supabase.table("event_registrations").select("*").execute()
+                res = supabase.table("event_registrations").select("id,event_id,user_id").eq("user_id", user_id_str).execute()
                 registrations = res.data or []
+                reg_event_ids = list({str(r["event_id"]) for r in registrations if r.get("event_id")})
+                if reg_event_ids:
+                    ev_res = supabase.table("events").select("id,created_by,status").in_("id", reg_event_ids).execute()
+                    events = (events or []) + (ev_res.data or [])
             except Exception:
                 registrations = []
 

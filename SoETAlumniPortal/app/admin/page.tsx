@@ -26,17 +26,21 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
     async function loadMetrics() {
       try {
         const data = await adminService.getDashboardMetrics();
-        setMetrics(data);
+        if (isMounted) setMetrics(data);
       } catch (err) {
         console.error('Failed to load admin metrics:', err);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     }
     loadMetrics();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const approvedStudents = (metrics.totalStudents || 0) - (metrics.pendingStudents || 0);
@@ -46,16 +50,16 @@ export default function AdminDashboard() {
     <DashboardLayout>
       {/* Breadcrumbs */}
       <div className="flex items-center text-xs font-semibold text-[#6B6B6B] mb-6 uppercase tracking-wider">
-        <span>Administration</span>
+        <span>SOET Connect - Alumni Portal</span>
         <span className="mx-2 text-[#DDD7D2]">/</span>
-        <span className="text-[#F28C38]">Executive Overview</span>
+        <span className="text-[#F28C38]">Admin Dashboard</span>
       </div>
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-black text-[#4A3832] tracking-tight">SOET Connect Admin Console</h1>
+          <h1 className="text-2xl font-black text-[#4A3832] tracking-tight">Admin Console</h1>
           <p className="text-xs text-[#6B6B6B] mt-1">
-            Real-time platform metrics, verification queue, and moderations.
+            Platform metrics, verification queue, and moderations.
           </p>
         </div>
       </div>

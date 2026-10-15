@@ -19,10 +19,16 @@ export default function AdminAnnouncementsPage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Expiry edit modal state
+  const [editingExpiryAnn, setEditingExpiryAnn] = useState<AnnouncementItem | null>(null);
+  const [newExpiryToSet, setNewExpiryToSet] = useState('');
+  const [updatingExpiry, setUpdatingExpiry] = useState(false);
+
   const [newAnnouncement, setNewAnnouncement] = useState({
     title: '',
     content: '',
     target_audience: 'all' as 'all' | 'students' | 'alumni',
+    expires_at: '',
     attachment: null as DocumentAttachmentData | null,
   });
 
@@ -49,21 +55,45 @@ export default function AdminAnnouncementsPage() {
     setError(null);
 
     try {
+      const isoExpiresAt = newAnnouncement.expires_at
+        ? new Date(newAnnouncement.expires_at).toISOString()
+        : null;
+
       await announcementService.createAnnouncement({
         created_by: user.id,
         title: newAnnouncement.title,
         content: newAnnouncement.content,
         target_audience: newAnnouncement.target_audience,
+        expires_at: isoExpiresAt,
         attachment: newAnnouncement.attachment,
       });
 
       setShowModal(false);
-      setNewAnnouncement({ title: '', content: '', target_audience: 'all', attachment: null });
+      setNewAnnouncement({ title: '', content: '', target_audience: 'all', expires_at: '', attachment: null });
       loadAnnouncements();
     } catch (err: any) {
       setError(err.message || 'Failed to create announcement.');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleUpdateExpiry = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingExpiryAnn) return;
+    setUpdatingExpiry(true);
+    try {
+      const isoVal = newExpiryToSet ? new Date(newExpiryToSet).toISOString() : null;
+      await announcementService.updateAnnouncement(editingExpiryAnn.id, {
+        expires_at: isoVal,
+      });
+      setEditingExpiryAnn(null);
+      setNewExpiryToSet('');
+      await loadAnnouncements();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update announcement expiration.');
+    } finally {
+      setUpdatingExpiry(false);
     }
   };
 
@@ -119,16 +149,48 @@ export default function AdminAnnouncementsPage() {
             >
               <div>
                 <div className="flex justify-between items-start mb-3">
-                  <span className={`px-2.5 py-1 text-[10px] font-bold rounded-lg uppercase flex items-center gap-1 ${
-                    a.target_audience === 'students' ? 'bg-blue-50 text-blue-700' :
-                    a.target_audience === 'alumni' ? 'bg-indigo-50 text-indigo-700' :
-                    'bg-emerald-50 text-emerald-700'
-                  }`}>
-                    {a.target_audience === 'students' && <GraduationCap className="w-3 h-3" />}
-                    {a.target_audience === 'alumni' && <Users className="w-3 h-3" />}
-                    {a.target_audience === 'all' && <Globe className="w-3 h-3" />}
-                    Audience: {a.target_audience}
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {a.is_expired && (
+                      <span className="px-2.5 py-1 text-[10px] font-bold rounded-lg uppercase bg-slate-200 text-slate-700">
+                        Expired
+                      </span>
+                    )}
+                    <span className={`px-2.5 py-1 text-[10px] font-bold rounded-lg uppercase flex items-center gap-1 ${
+                      a.target_audience === 'students' ? 'bg-blue-50 text-blue-700' :
+                      a.target_audience === 'alumni' ? 'bg-indigo-50 text-indigo-700' :
+                      'bg-emerald-50 text-emerald-700'
+                    }`}>
+                      {a.target_audience === 'students' && <GraduationCap className="w-3 h-3" />}
+                      {a.target_audience === 'alumni' && <Users className="w-3 h-3" />}
+                      {a.target_audience === 'all' && <Globe className="w-3 h-3" />}
+                      Audience: {a.target_audience}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Expiry Details */}
+                <div className="my-2.5 flex items-center justify-between text-[11px] bg-slate-50 px-3 py-2 rounded-xl border border-slate-100">
+                  <div>
+                    {a.expires_at ? (
+                      <span className="text-slate-600">
+                        Expires on: <strong className={a.is_expired ? 'text-red-600' : 'text-slate-800'}>
+                          {new Date(a.expires_at).toLocaleString()}
+                        </strong>
+                      </span>
+                    ) : (
+                      <span className="text-amber-600 font-semibold">No expiry set (Indefinite)</span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingExpiryAnn(a);
+                      setNewExpiryToSet(a.expires_at ? new Date(a.expires_at).toISOString().slice(0, 16) : '');
+                    }}
+                    className="text-xs text-blue-600 hover:text-blue-700 font-bold underline"
+                  >
+                    {a.is_expired ? 'Reactivate / Edit Expiry' : 'Edit Expiry'}
+                  </button>
                 </div>
 
                 <h3 className="text-base font-bold text-slate-900 mb-2">{a.title}</h3>

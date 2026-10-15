@@ -173,10 +173,19 @@ export default function EventsPage() {
               className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition flex flex-col justify-between"
             >
               <div>
-                <div className="flex items-center gap-2 text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-xl w-fit mb-4">
+                <div className="flex items-center gap-2 text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-xl w-fit mb-2">
                   <Clock className="w-3.5 h-3.5" />
                   <span>{new Date(event.event_date).toLocaleDateString()} {event.start_time ? `• ${event.start_time}` : ''}</span>
                 </div>
+
+                {event.registration_deadline && (
+                  <p className="text-[11px] text-slate-500 mb-3 flex items-center gap-1 font-medium">
+                    <Clock className="w-3 h-3 text-slate-400" />
+                    Reg. Deadline: <strong className={event.is_registration_closed ? 'text-red-600' : 'text-slate-700'}>
+                      {new Date(event.registration_deadline).toLocaleDateString()}
+                    </strong>
+                  </p>
+                )}
 
                 <h3 className="text-base font-bold text-slate-900 leading-snug mb-2">{event.title}</h3>
                 <p className="text-xs text-slate-500 flex items-center gap-1.5 mb-3">
@@ -222,6 +231,13 @@ export default function EventsPage() {
                       className="px-3 py-1.5 bg-emerald-100 hover:bg-red-100 text-emerald-700 hover:text-red-700 text-xs font-bold rounded-lg transition flex items-center gap-1"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" /> Registered
+                    </button>
+                  ) : event.is_registration_closed ? (
+                    <button
+                      disabled
+                      className="px-3.5 py-1.5 bg-slate-200 text-slate-500 text-xs font-bold rounded-lg cursor-not-allowed"
+                    >
+                      Registration Closed
                     </button>
                   ) : (
                     <button

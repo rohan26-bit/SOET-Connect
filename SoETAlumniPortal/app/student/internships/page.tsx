@@ -29,7 +29,7 @@ export default function InternshipsPage() {
   return (
     <DashboardLayout>
       <div className="flex items-center text-xs font-semibold text-slate-400 mb-6 uppercase tracking-wider">
-        <span>Careers</span>
+        <span>SOET Connect - Alumni Portal</span>
         <span className="mx-2 text-slate-300">/</span>
         <span className="text-blue-600">Internships</span>
       </div>
@@ -37,7 +37,7 @@ export default function InternshipsPage() {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">Active Student Internships</h1>
-          <p className="text-xs text-slate-500 mt-1">Verified industry internship opportunities from SOET alumni.</p>
+          <p className="text-xs text-slate-500 mt-1">Verified industry internship opportunities from our alumni network.</p>
         </div>
         <Link
           href="/student/jobs"

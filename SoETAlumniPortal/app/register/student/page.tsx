@@ -71,7 +71,12 @@ export default function StudentRegisterPage() {
             />
           </div>
         </div>
-        <h2 className="text-center text-3xl font-extrabold text-[#4A3832] tracking-tight">
+        <div className="text-center mb-1">
+          <span className="text-xs font-bold text-[#F28C38] uppercase tracking-wider">
+            SOET Connect - Alumni Portal
+          </span>
+        </div>
+        <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-[#4A3832] tracking-tight">
           Student Registration
         </h2>
         <p className="mt-2 text-center text-sm text-[#6B6B6B]">
@@ -96,7 +101,7 @@ export default function StudentRegisterPage() {
               </div>
               <h3 className="text-xl font-bold text-[#4A3832] mb-2">Registration Submitted for Verification</h3>
               <p className="text-sm text-[#6B6B6B] max-w-md mx-auto mb-6 leading-relaxed">
-                Thank you for registering! Your student account is currently <span className="text-amber-600 font-bold">Pending Admin Verification</span>. Once verified by the department administrator, you will be able to sign in and access the SOET Connect portal.
+                Thank you for registering! Your student account is currently <span className="text-amber-600 font-bold">Pending Admin Verification</span>. Once verified by the department administrator, you will be able to sign in and access the SOET Connect - Alumni Portal.
               </p>
               <Link
                 href="/login"

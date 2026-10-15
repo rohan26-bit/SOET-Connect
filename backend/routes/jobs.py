@@ -33,6 +33,12 @@ class JobCreateRequest(BaseModel):
     skills: list[str] = []
     application_url: str = ""
     deadline: str | None = None
+    application_deadline: str | None = None
+
+
+class JobDeadlineUpdateRequest(BaseModel):
+    deadline: str | None = None
+    application_deadline: str | None = None
 
 
 class JobStatusRequest(BaseModel):
@@ -43,25 +49,90 @@ class JobStatusRequest(BaseModel):
 # HELPERS
 # ============================================================
 
-def load_jobs() -> list[dict]:
-    """Load jobs directly from Supabase PostgreSQL jobs table."""
+def parse_iso_datetime(dt_str: str | None) -> datetime | None:
+    if not dt_str:
+        return None
+    s = str(dt_str).strip()
+    if not s:
+        return None
     try:
-        res = supabase.table("jobs").select("*").order("created_at", desc=True).execute()
+        if len(s) == 10 and s[4] == '-' and s[7] == '-':
+            # Treat date-only deadline as end of that day in UTC
+            return datetime.fromisoformat(s).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
+
+
+def is_job_expired(job: dict) -> bool:
+    """Return True if the job's application deadline has passed in UTC."""
+    deadline_val = job.get("application_deadline") or job.get("deadline")
+    if not deadline_val:
+        return False
+    dt = parse_iso_datetime(deadline_val)
+    if dt is None:
+        return False
+    return datetime.now(timezone.utc) > dt
+
+
+def load_jobs(status: str | None = None, posted_by: str | None = None) -> list[dict]:
+    """Load jobs directly from Supabase PostgreSQL with database-side filtering and batch user lookups."""
+    try:
+        q = supabase.table("jobs").select("*")
+        if status:
+            q = q.eq("status", status)
+        if posted_by:
+            q = q.eq("posted_by", str(posted_by))
+        res = q.order("created_at", desc=True).execute()
+
+        raw_jobs = res.data or []
+        if not raw_jobs:
+            return []
+
+        # Batch resolve poster names to eliminate per-job N+1 queries
+        poster_ids = list({str(j["posted_by"]) for j in raw_jobs if j.get("posted_by") and not j.get("poster_name")})
+        poster_names = {}
+        if poster_ids:
+            try:
+                users_res = supabase.table("users").select("id,name,legacy_mongo_id").in_("id", poster_ids).execute()
+                for u in users_res.data or []:
+                    uname = u.get("name") or "Alumni"
+                    if u.get("id"):
+                        poster_names[str(u["id"])] = uname
+                    if u.get("legacy_mongo_id"):
+                        poster_names[str(u["legacy_mongo_id"])] = uname
+            except Exception:
+                pass
+
         jobs = []
-        for row in res.data or []:
+        for row in raw_jobs:
             j = dict(row)
             j["employment_type"] = row.get("job_type", "")
             j["experience"] = row.get("experience_level", "")
             j["salary"] = row.get("salary_range", "")
+            deadline_val = row.get("application_deadline") or row.get("deadline")
+            j["deadline"] = deadline_val
+            j["application_deadline"] = deadline_val
+            j["is_expired"] = is_job_expired(j)
             if not j.get("poster_name") and j.get("posted_by"):
-                u = users_collection.find_one({"_id": str(j["posted_by"])})
-                if u:
-                    j["poster_name"] = u.get("name", "Alumni")
+                pid = str(j["posted_by"])
+                if pid in poster_names:
+                    j["poster_name"] = poster_names[pid]
+                else:
+                    u = users_collection.find_one({"_id": pid}, include_profiles=False)
+                    if u:
+                        j["poster_name"] = u.get("name", "Alumni")
             jobs.append(j)
         return jobs
     except Exception as e:
         print("Error loading jobs from Supabase:", e)
         return []
+
 
 
 def get_user_from_token(current_user: dict):
@@ -126,6 +197,15 @@ def create_job(
         else "pending"
     )
 
+    deadline_val = job.application_deadline or job.deadline
+    if deadline_val:
+        dt = parse_iso_datetime(deadline_val)
+        if dt and dt <= datetime.now(timezone.utc):
+            raise HTTPException(
+                status_code=400,
+                detail="Application deadline must be in the future."
+            )
+
     job_id = str(uuid.uuid4())
     user_id = str(current_user.get("user_id"))
     poster_name = user.get("name", "Alumni")
@@ -144,6 +224,7 @@ def create_job(
         "requirements": "",
         "skills": job.skills or [],
         "status": initial_status,
+        "application_deadline": deadline_val,
         "created_at": now_iso,
         "updated_at": now_iso,
     }
@@ -157,7 +238,9 @@ def create_job(
         "experience": job.experience,
         "salary": job.salary,
         "application_url": job.application_url,
-        "deadline": job.deadline,
+        "deadline": deadline_val,
+        "application_deadline": deadline_val,
+        "is_expired": False,
     }
 
     if initial_status == "pending":
@@ -188,16 +271,13 @@ def create_job(
 def get_jobs(
     current_user: dict = Depends(get_current_user)
 ):
-    jobs = load_jobs()
+    # Admin users see all jobs (approved, pending, rejected, etc.)
+    if current_user.get("role") == "admin":
+        return load_jobs()
 
-    # Normal users only see approved jobs
-    if current_user.get("role") not in {"admin"}:
-        jobs = [
-            job for job in jobs
-            if job.get("status") == "approved"
-        ]
-
-    return jobs
+    # Normal users only see approved jobs that have not expired
+    all_approved = load_jobs(status="approved")
+    return [j for j in all_approved if not j.get("is_expired")]
 
 
 # ============================================================
@@ -209,12 +289,7 @@ def get_my_jobs(
     current_user: dict = Depends(get_current_user)
 ):
     user_id = str(current_user.get("user_id"))
-    jobs = load_jobs()
-
-    return [
-        job for job in jobs
-        if str(job.get("posted_by")) == user_id
-    ]
+    return load_jobs(posted_by=user_id)
 
 
 # ============================================================
@@ -253,7 +328,67 @@ def get_job_details(
     job["employment_type"] = job.get("job_type", "")
     job["experience"] = job.get("experience_level", "")
     job["salary"] = job.get("salary_range", "")
+    deadline_val = job.get("application_deadline") or job.get("deadline")
+    job["deadline"] = deadline_val
+    job["application_deadline"] = deadline_val
+    job["is_expired"] = is_job_expired(job)
     return job
+
+
+# ============================================================
+# UPDATE JOB DEADLINE (ADMIN OR POSTER)
+# ============================================================
+
+@router.patch("/{job_id}/deadline")
+def update_job_deadline(
+    job_id: str,
+    request: JobDeadlineUpdateRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role")
+    user_id = str(current_user.get("user_id"))
+
+    res = supabase.table("jobs").select("*").eq("id", str(job_id)).limit(1).execute()
+    if not res.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Job not found."
+        )
+
+    job = res.data[0]
+    if role != "admin" and str(job.get("posted_by")) != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only update the deadline for your own jobs."
+        )
+
+    deadline_val = request.application_deadline or request.deadline
+    if deadline_val:
+        dt = parse_iso_datetime(deadline_val)
+        if dt and dt <= datetime.now(timezone.utc):
+            raise HTTPException(
+                status_code=400,
+                detail="Application deadline must be in the future."
+            )
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    supabase.table("jobs").update({
+        "application_deadline": deadline_val,
+        "updated_at": now_iso
+    }).eq("id", str(job_id)).execute()
+
+    job["application_deadline"] = deadline_val
+    job["deadline"] = deadline_val
+    job["updated_at"] = now_iso
+    job["is_expired"] = is_job_expired(job)
+    job["employment_type"] = job.get("job_type", "")
+    job["experience"] = job.get("experience_level", "")
+    job["salary"] = job.get("salary_range", "")
+
+    return {
+        "message": "Job deadline updated successfully.",
+        "job": job
+    }
 
 
 # ============================================================

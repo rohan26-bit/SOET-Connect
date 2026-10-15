@@ -1,4 +1,5 @@
 from collections import Counter
+import concurrent.futures
 from pathlib import Path
 import json
 
@@ -42,7 +43,7 @@ def _count_by(items: list[dict], field: str) -> dict[str, int]:
     ))
 
 
-def _read_data(table_name: str, file_path) -> list[dict]:
+def _read_data(table_name: str, file_path=None, columns: str = "*") -> list[dict]:
     """Read from test-patched JSON file if present, otherwise query Supabase table."""
     if file_path and Path(file_path).exists():
         try:
@@ -54,14 +55,29 @@ def _read_data(table_name: str, file_path) -> list[dict]:
         except Exception:
             pass
     try:
-        return supabase.table(table_name).select("*").execute().data or []
+        return supabase.table(table_name).select(columns).execute().data or []
     except Exception:
         return []
 
 
 def _gather_stats() -> dict:
-    """Gather all dashboard statistics from Supabase PostgreSQL tables."""
-    all_users = list(users_collection.find({}))
+    """Gather all dashboard statistics concurrently from Supabase PostgreSQL tables."""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=7) as executor:
+        fut_users = executor.submit(users_collection.find, {}, False)
+        fut_jobs = executor.submit(_read_data, "jobs", JOBS_FILE, "id,status")
+        fut_apps = executor.submit(_read_data, "job_applications", APPLICATIONS_FILE, "id,status")
+        fut_events = executor.submit(_read_data, "events", EVENTS_FILE, "id,status")
+        fut_regs = executor.submit(_read_data, "event_registrations", REGISTRATIONS_FILE or EVENT_REGISTRATIONS_FILE, "id")
+        fut_ann = executor.submit(lambda: supabase.table("announcements").select("id").execute().data or [])
+        fut_notif = executor.submit(lambda: supabase.table("notifications").select("id").execute().data or [])
+
+        all_users = list(fut_users.result())
+        jobs = fut_jobs.result()
+        applications = fut_apps.result()
+        events = fut_events.result()
+        event_registrations = fut_regs.result()
+        announcements = fut_ann.result()
+        notifications = fut_notif.result()
 
     users_by_role = dict(Counter(
         u.get("role", "unknown") for u in all_users
@@ -76,28 +92,13 @@ def _gather_stats() -> dict:
         if not u.get("is_verified", False) and u.get("verification_status", "pending") == "pending"
     )
 
-    jobs = _read_data("jobs", JOBS_FILE)
     jobs_by_status = _count_by(jobs, "status")
 
-    applications = _read_data("job_applications", APPLICATIONS_FILE)
     applications_by_status = _count_by(applications, "status")
     if "submitted" in applications_by_status and "applied" not in applications_by_status:
         applications_by_status["applied"] = applications_by_status["submitted"]
 
-    events = _read_data("events", EVENTS_FILE)
     events_by_status = _count_by(events, "status")
-
-    event_registrations = _read_data("event_registrations", REGISTRATIONS_FILE or EVENT_REGISTRATIONS_FILE)
-
-    try:
-        announcements = supabase.table("announcements").select("*").execute().data or []
-    except Exception:
-        announcements = []
-
-    try:
-        notifications = supabase.table("notifications").select("*").execute().data or []
-    except Exception:
-        notifications = []
 
     return {
         "all_users": all_users,
@@ -127,9 +128,19 @@ def get_dashboard_metrics(
 ):
     _require_admin(current_user)
 
-    active_users = users_collection.find({
-        "is_active": True
-    })
+    # Concurrently retrieve user tallies and table counts with minimal column payload
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        fut_users = executor.submit(users_collection.find, {"is_active": True}, False)
+        fut_jobs = executor.submit(_read_data, "jobs", JOBS_FILE, "id,status")
+        fut_events = executor.submit(_read_data, "events", EVENTS_FILE, "id,status")
+        fut_regs = executor.submit(_read_data, "event_registrations", REGISTRATIONS_FILE or EVENT_REGISTRATIONS_FILE, "id")
+        fut_apps = executor.submit(_read_data, "job_applications", APPLICATIONS_FILE, "id")
+
+        active_users = fut_users.result()
+        jobs = fut_jobs.result()
+        events = fut_events.result()
+        registrations = fut_regs.result()
+        applications = fut_apps.result()
 
     total_students = 0
     pending_students = 0
@@ -154,18 +165,13 @@ def get_dashboard_metrics(
             if not user.get("is_verified", False) and user.get("verification_status", "pending") == "pending":
                 pending_alumni += 1
 
-    jobs = _read_data("jobs", JOBS_FILE)
     total_jobs = len(jobs)
     pending_jobs = sum(1 for job in jobs if job.get("status") == "pending")
-
-    events = _read_data("events", EVENTS_FILE)
-    registrations = _read_data("event_registrations", REGISTRATIONS_FILE or EVENT_REGISTRATIONS_FILE)
 
     total_events = len(events)
     pending_events = sum(1 for event in events if event.get("status") == "pending")
     total_registrations = len(registrations)
 
-    applications = _read_data("job_applications", APPLICATIONS_FILE)
     total_applications = len(applications)
 
     return {

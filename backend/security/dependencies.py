@@ -9,13 +9,13 @@ security = HTTPBearer(auto_error=False)
 
 
 def get_user_by_id(user_id: str) -> dict | None:
-    """Find a user by ID string in Supabase PostgreSQL."""
+    """Find a user by ID string without hydrating unused profile details."""
     if not user_id:
         return None
 
     user_id_str = str(user_id).strip()
     try:
-        return users_collection.find_one({"_id": user_id_str})
+        return users_collection.find_one({"_id": user_id_str}, include_profiles=False)
     except Exception:
         return None
 

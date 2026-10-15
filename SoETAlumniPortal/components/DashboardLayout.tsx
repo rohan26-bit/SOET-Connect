@@ -207,8 +207,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   />
                 </div>
                 <div>
-                  <h1 className="text-white font-bold leading-tight tracking-wide">Alumni Portal</h1>
-                  <p className="text-xs text-[#F6A15A] font-medium uppercase tracking-wider">{user?.role || 'Student'}</p>
+                  <h1 className="text-white font-bold leading-tight tracking-wide text-sm">SOET Connect</h1>
+                  <p className="text-xs text-[#F6A15A] font-medium tracking-wide">Alumni Portal</p>
                 </div>
               </div>
               <button
@@ -242,8 +242,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             />
           </div>
           <div>
-            <h1 className="text-white font-bold leading-tight tracking-wide">Alumni Portal</h1>
-            <p className="text-xs text-[#F6A15A] font-medium uppercase tracking-wider">{user?.role || 'Student'}</p>
+            <h1 className="text-white font-bold leading-tight tracking-wide text-sm">SOET Connect</h1>
+            <p className="text-xs text-[#F6A15A] font-medium tracking-wide">Alumni Portal</p>
           </div>
         </div>
 
@@ -268,7 +268,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             >
               {isMobileNavOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
-            <span className="font-semibold text-[#4A3832] text-sm">SOET Connect</span>
+            <span className="font-semibold text-[#4A3832] text-sm truncate">SOET Connect - Alumni Portal</span>
           </div>
           <div className="flex items-center space-x-4 sm:space-x-6">
             <Link href="/student/notifications" className="text-[#6B6B6B] hover:text-[#4A3832] relative p-1" aria-label="Notifications">

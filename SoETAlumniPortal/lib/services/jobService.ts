@@ -17,7 +17,9 @@ export interface JobItem {
   skills?: string[];
   application_url?: string;
   deadline?: string;
-  status: 'pending' | 'approved' | 'rejected';
+  application_deadline?: string;
+  is_expired?: boolean;
+  status: 'pending' | 'approved' | 'rejected' | 'closed';
   created_at: string;
   poster_name?: string;
   poster_avatar?: string;
@@ -202,12 +204,15 @@ export const jobService = {
     skills?: string[];
     application_url?: string;
     deadline?: string;
+    application_deadline?: string;
     attachment?: DocumentAttachmentData | null;
   }) {
     const serializedDescription = serializeAttachmentIntoText(
       jobData.description,
       jobData.attachment
     );
+
+    const deadlineVal = jobData.application_deadline || jobData.deadline || null;
 
     const response = await fetch(
       `${API_URL}/jobs`,
@@ -226,7 +231,8 @@ export const jobService = {
           skills: jobData.skills || [],
           application_url:
             jobData.application_url || '',
-          deadline: jobData.deadline || null,
+          deadline: deadlineVal,
+          application_deadline: deadlineVal,
           attachment: jobData.attachment ? {
             name: jobData.attachment.name,
             type: jobData.attachment.type,
@@ -246,6 +252,30 @@ export const jobService = {
     }
 
     return data.job;
+  },
+
+
+  // ============================================================
+  // UPDATE JOB DEADLINE
+  // ============================================================
+
+  async updateJobDeadline(jobId: string, deadline: string | null): Promise<JobItem> {
+    const response = await fetch(`${API_URL}/jobs/${jobId}/deadline`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        deadline,
+        application_deadline: deadline,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || 'Failed to update job deadline.');
+    }
+
+    return normalizeJob(data.job);
   },
 
 

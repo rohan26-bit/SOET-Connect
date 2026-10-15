@@ -15,26 +15,49 @@ export default function StudentDashboard() {
   const [jobs, setJobs] = useState<JobItem[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [jobsLoading, setJobsLoading] = useState(true);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const [announcementsLoading, setAnnouncementsLoading] = useState(true);
 
   useEffect(() => {
-    async function loadData() {
-      try {
-        const [jobsData, eventsData, announcementsData] = await Promise.all([
-          jobService.getApprovedJobs(),
-          eventService.getApprovedEvents(user?.id),
-          announcementService.getAnnouncements(),
-        ]);
-        setJobs(jobsData);
-        setEvents(eventsData);
-        setAnnouncements(announcementsData);
-      } catch (err) {
-        console.error('Error loading dashboard data:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadData();
+    let isMounted = true;
+
+    // Fetch jobs independently
+    jobService
+      .getApprovedJobs()
+      .then((jobsData) => {
+        if (isMounted) setJobs(jobsData);
+      })
+      .catch((err) => console.error('Error loading jobs:', err))
+      .finally(() => {
+        if (isMounted) setJobsLoading(false);
+      });
+
+    // Fetch events independently
+    eventService
+      .getApprovedEvents(user?.id)
+      .then((eventsData) => {
+        if (isMounted) setEvents(eventsData);
+      })
+      .catch((err) => console.error('Error loading events:', err))
+      .finally(() => {
+        if (isMounted) setEventsLoading(false);
+      });
+
+    // Fetch announcements independently
+    announcementService
+      .getAnnouncements()
+      .then((announcementsData) => {
+        if (isMounted) setAnnouncements(announcementsData);
+      })
+      .catch((err) => console.error('Error loading announcements:', err))
+      .finally(() => {
+        if (isMounted) setAnnouncementsLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, [user]);
 
   const firstName = user?.full_name?.trim().split(' ')[0] || 'Student';
@@ -45,7 +68,7 @@ export default function StudentDashboard() {
     <DashboardLayout>
       {/* Breadcrumbs */}
       <div className="flex items-center text-xs font-semibold text-[#6B6B6B] mb-6 uppercase tracking-wider">
-        <span>Home</span>
+        <span>SOET Connect - Alumni Portal</span>
         <span className="mx-2 text-[#DDD7D2]">/</span>
         <span className="text-[#F28C38]">Student Dashboard</span>
       </div>
@@ -54,7 +77,7 @@ export default function StudentDashboard() {
       <div className="bg-gradient-to-r from-[#4A3832] to-[#6B5147] rounded-3xl p-8 text-white shadow-xl shadow-[#4A3832]/20 mb-8 relative overflow-hidden">
         <div className="relative z-10 max-w-2xl">
           <span className="inline-block px-3 py-1 bg-[#F28C38]/20 border border-[#F28C38]/40 rounded-full text-xs font-bold text-[#F6A15A] mb-3">
-            Academic Year • SOET Connect
+            Academic Year • SOET Connect - Alumni Portal
           </span>
           <h1 className="text-3xl font-extrabold tracking-tight mb-2">
             Welcome back, {firstName}!
@@ -107,14 +130,14 @@ export default function StudentDashboard() {
             <div className="flex justify-between items-center mb-6">
               <div>
                 <h2 className="text-lg font-bold text-[#4A3832]">Recommended Jobs & Internships</h2>
-                <p className="text-xs text-[#6B6B6B]">Verified postings by SOET Connect</p>
+                <p className="text-xs text-[#6B6B6B]">Verified postings from our alumni network</p>
               </div>
               <Link href="/student/jobs" className="text-xs font-bold text-[#F28C38] hover:text-[#E07D2E] flex items-center gap-1 transition">
                 View all <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
 
-            {loading ? (
+            {jobsLoading ? (
               <LoadingState message="Loading opportunities" className="py-8" />
             ) : jobs.length === 0 ? (
               <div className="py-8 text-center text-xs text-[#888888]">No active job postings available yet.</div>
@@ -150,7 +173,9 @@ export default function StudentDashboard() {
             <h2 className="text-lg font-bold text-[#4A3832] mb-4 flex items-center gap-2">
               <Megaphone className="w-5 h-5 text-[#F28C38]" /> University Announcements
             </h2>
-            {announcements.length === 0 ? (
+            {announcementsLoading ? (
+              <LoadingState message="Loading announcements" className="py-6" />
+            ) : announcements.length === 0 ? (
               <div className="py-6 text-center text-xs text-[#888888]">No announcements at this time.</div>
             ) : (
               <div className="space-y-4">
@@ -178,7 +203,7 @@ export default function StudentDashboard() {
               </Link>
             </div>
 
-            {loading ? (
+            {eventsLoading ? (
               <LoadingState message="Loading events" className="py-8" />
             ) : events.length === 0 ? (
               <div className="py-8 text-center text-xs text-[#888888]">No upcoming events scheduled.</div>

@@ -34,6 +34,8 @@ export interface AnnouncementItem {
   title: string;
   content: string;
   target_audience: 'all' | 'students' | 'alumni';
+  expires_at?: string;
+  is_expired?: boolean;
   created_at: string;
   created_by?: string;
   is_published?: boolean;
@@ -81,6 +83,7 @@ export const announcementService = {
     title: string;
     content: string;
     target_audience: 'all' | 'students' | 'alumni';
+    expires_at?: string | null;
     created_by?: string;
     is_published?: boolean;
     attachment?: DocumentAttachmentData | null;
@@ -100,6 +103,7 @@ export const announcementService = {
         title: data.title,
         content: serializedContent,
         target_audience: data.target_audience || 'all',
+        expires_at: data.expires_at || null,
         attachment: data.attachment ? {
           name: data.attachment.name,
           type: data.attachment.type,
@@ -122,6 +126,7 @@ export const announcementService = {
       title?: string;
       content?: string;
       target_audience?: 'all' | 'students' | 'alumni';
+      expires_at?: string | null;
       attachment?: DocumentAttachmentData | null;
     }
   ) {

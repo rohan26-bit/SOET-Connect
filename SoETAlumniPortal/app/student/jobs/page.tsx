@@ -106,12 +106,13 @@ export default function JobsPage() {
 
   const handlePostJob = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || !isAlumniOrAdmin) return;
     setPosting(true);
     setPostError(null);
 
     try {
       const skills = newJob.skillsStr.split(',').map((s) => s.trim()).filter(Boolean);
+      const isoDeadline = newJob.deadline ? new Date(newJob.deadline).toISOString() : undefined;
       await jobService.createJob({
         posted_by: user.id,
         title: newJob.title,
@@ -123,7 +124,8 @@ export default function JobsPage() {
         salary: newJob.salary,
         skills,
         application_url: newJob.application_url,
-        deadline: newJob.deadline || undefined,
+        deadline: isoDeadline,
+        application_deadline: isoDeadline,
         attachment: newJob.attachment,
       });
 
@@ -193,7 +195,7 @@ export default function JobsPage() {
           Browse Opportunities
         </button>
 
-        {user?.role === 'student' && (
+        {user && (
           <button
             onClick={() => setActiveTab('my_applications')}
             className={`py-3 px-4 text-xs font-bold border-b-2 transition ${
@@ -310,20 +312,38 @@ export default function JobsPage() {
                     )}
                   </div>
 
+                  {(job.application_deadline || job.deadline) && (
+                    <div className="mb-3 text-[11px] text-slate-500 flex items-center gap-1 font-medium">
+                      <Clock className="w-3.5 h-3.5 text-slate-400" />
+                      <span>
+                        Deadline: <strong className={job.is_expired ? 'text-red-600' : 'text-slate-700'}>
+                          {new Date(job.application_deadline || job.deadline!).toLocaleDateString()}
+                        </strong>
+                      </span>
+                    </div>
+                  )}
+
                   <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
                     <span className="text-[10px] text-slate-400">
                       Posted by {job.poster_name || 'Alumni'}
                     </span>
 
-                    {user?.role === 'student' ? (
+                    {user && job.posted_by && String(job.posted_by) === String(user.id) ? (
+                      <span className="text-xs font-semibold text-slate-400">Your Posting</span>
+                    ) : job.is_expired ? (
+                      <button
+                        disabled
+                        className="px-4 py-2 bg-slate-200 text-slate-500 text-xs font-bold rounded-xl cursor-not-allowed"
+                      >
+                        Application Closed
+                      </button>
+                    ) : (
                       <button
                         onClick={() => setSelectedJob(job)}
                         className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-md shadow-blue-600/20 transition cursor-pointer"
                       >
                         Apply Now
                       </button>
-                    ) : (
-                      <span className="text-xs font-bold text-slate-400">Student Portal Only</span>
                     )}
                   </div>
                 </div>
@@ -384,6 +404,11 @@ export default function JobsPage() {
                     <p className="text-xs text-slate-500">{j.company} • {j.location} • {j.employment_type}</p>
                   </div>
                   <div className="flex items-center gap-3">
+                    {j.is_expired && (
+                      <span className="px-2.5 py-1 text-[10px] font-bold rounded-full uppercase bg-slate-200 text-slate-700">
+                        Expired
+                      </span>
+                    )}
                     <span className={`px-3 py-1 text-xs font-bold rounded-full uppercase tracking-wider ${
                       j.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
                       j.status === 'rejected' ? 'bg-red-100 text-red-700' :
@@ -488,7 +513,7 @@ export default function JobsPage() {
       )}
 
       {/* Post Job Modal */}
-      {showPostModal && (
+      {showPostModal && isAlumniOrAdmin && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl relative border border-slate-100 max-h-[90vh] overflow-y-auto">
             <button
@@ -583,17 +608,32 @@ export default function JobsPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                  Required Skills (comma separated)
-                </label>
-                <input
-                  type="text"
-                  value={newJob.skillsStr}
-                  onChange={(e) => setNewJob({ ...newJob, skillsStr: e.target.value })}
-                  placeholder="e.g. Java, Spring Boot, MySQL"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-blue-500"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Application Deadline *
+                  </label>
+                  <input
+                    type="datetime-local"
+                    required
+                    min={new Date().toISOString().slice(0, 16)}
+                    value={newJob.deadline}
+                    onChange={(e) => setNewJob({ ...newJob, deadline: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Required Skills (comma separated)
+                  </label>
+                  <input
+                    type="text"
+                    value={newJob.skillsStr}
+                    onChange={(e) => setNewJob({ ...newJob, skillsStr: e.target.value })}
+                    placeholder="e.g. Java, Spring Boot, MySQL"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
 
               <div>

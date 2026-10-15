@@ -66,6 +66,31 @@ def get_headers(prefer_return: str = "representation") -> dict:
     }
 
 
+_http_client: Optional[httpx.Client] = None
+
+
+def get_http_client(timeout: float = 10.0) -> httpx.Client:
+    """Retrieve or initialize a persistent httpx.Client with connection pooling."""
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.Client(
+            timeout=httpx.Timeout(timeout, connect=5.0),
+            limits=httpx.Limits(max_keepalive_connections=20, max_connections=50, keepalive_expiry=30.0),
+        )
+    return _http_client
+
+
+def close_http_client():
+    """Explicitly close persistent connection pool if initialized."""
+    global _http_client
+    if _http_client is not None and not _http_client.is_closed:
+        try:
+            _http_client.close()
+        except Exception:
+            pass
+        _http_client = None
+
+
 def test_supabase_connection() -> bool:
     """Test connectivity to the remote Supabase PostgreSQL database."""
     if os.getenv("DATABASE_MODE", "").lower() == "mock":
@@ -73,15 +98,16 @@ def test_supabase_connection() -> bool:
 
     try:
         cfg = get_supabase_config()
-        with httpx.Client(timeout=6.0) as client:
-            resp = client.get(
-                f"{cfg['rest_url']}/users?limit=1",
-                headers=get_headers(),
-            )
-            return resp.status_code == 200
+        client = get_http_client(6.0)
+        resp = client.get(
+            f"{cfg['rest_url']}/users?limit=1",
+            headers=get_headers(),
+        )
+        return resp.status_code == 200
     except Exception as e:
         print(f"SUPABASE CONNECTION ERROR: {type(e).__name__} - {e}")
         return False
+
 
 
 # ==============================================================================
@@ -187,8 +213,12 @@ class MockQueryBuilder:
         self.filters: List[tuple] = []
         self.order_by: Optional[tuple] = None
         self.limit_count: Optional[int] = None
+        self.count_mode: Optional[str] = None
+        self.select_columns: str = "*"
 
     def select(self, columns: str = "*", count: Optional[str] = None):
+        self.select_columns = columns
+        self.count_mode = count
         return self
 
     def eq(self, column: str, value: Any):
@@ -211,6 +241,11 @@ class MockQueryBuilder:
         self.limit_count = count
         return self
 
+    def count(self) -> int:
+        """Execute count-only query and return matching row count."""
+        res = self.select("id", count="exact").limit(0).execute()
+        return res.count if res.count is not None else 0
+
     def _matches(self, row: dict) -> bool:
         for col, op, val in self.filters:
             row_val = row.get(col)
@@ -232,12 +267,13 @@ class MockQueryBuilder:
     def execute(self) -> QueryResult:
         table_rows = _mock_store.setdefault(self.table_name, [])
         matched = [dict(r) for r in table_rows if self._matches(r)]
+        total_count = len(matched) if self.count_mode else None
         if self.order_by:
             col, desc = self.order_by
             matched.sort(key=lambda x: str(x.get(col, "") or ""), reverse=desc)
         if self.limit_count is not None:
             matched = matched[:self.limit_count]
-        return QueryResult(data=matched, status_code=200)
+        return QueryResult(data=matched, count=total_count, status_code=200)
 
     def insert(self, record_or_records: Union[dict, list]) -> MockInsertBuilder:
         table_rows = _mock_store.setdefault(self.table_name, [])
@@ -306,11 +342,11 @@ class SupabaseInsertBuilder:
         self.timeout = timeout
 
     def execute(self) -> QueryResult:
-        with httpx.Client(timeout=self.timeout) as client:
-            resp = client.post(self.base_url, headers=self.headers, json=self.record_or_records)
-            if not resp.is_success:
-                raise RuntimeError(f"Supabase insert failed ({resp.status_code}): {resp.text}")
-            return QueryResult(data=resp.json(), status_code=resp.status_code)
+        client = get_http_client(self.timeout)
+        resp = client.post(self.base_url, headers=self.headers, json=self.record_or_records)
+        if not resp.is_success:
+            raise RuntimeError(f"Supabase insert failed ({resp.status_code}): {resp.text}")
+        return QueryResult(data=resp.json(), status_code=resp.status_code)
 
 
 class SupabaseUpsertBuilder:
@@ -322,11 +358,11 @@ class SupabaseUpsertBuilder:
         self.timeout = timeout
 
     def execute(self) -> QueryResult:
-        with httpx.Client(timeout=self.timeout) as client:
-            resp = client.post(self.base_url, headers=self.headers, json=self.record_or_records)
-            if not resp.is_success:
-                raise RuntimeError(f"Supabase upsert failed ({resp.status_code}): {resp.text}")
-            return QueryResult(data=resp.json(), status_code=resp.status_code)
+        client = get_http_client(self.timeout)
+        resp = client.post(self.base_url, headers=self.headers, json=self.record_or_records)
+        if not resp.is_success:
+            raise RuntimeError(f"Supabase upsert failed ({resp.status_code}): {resp.text}")
+        return QueryResult(data=resp.json(), status_code=resp.status_code)
 
 
 class SupabaseUpdateBuilder:
@@ -342,11 +378,11 @@ class SupabaseUpdateBuilder:
         return self
 
     def execute(self) -> QueryResult:
-        with httpx.Client(timeout=self.timeout) as client:
-            resp = client.patch(self.base_url, headers=self.headers, params=self.params, json=self.values)
-            if not resp.is_success:
-                raise RuntimeError(f"Supabase update failed ({resp.status_code}): {resp.text}")
-            return QueryResult(data=resp.json(), status_code=resp.status_code)
+        client = get_http_client(self.timeout)
+        resp = client.patch(self.base_url, headers=self.headers, params=self.params, json=self.values)
+        if not resp.is_success:
+            raise RuntimeError(f"Supabase update failed ({resp.status_code}): {resp.text}")
+        return QueryResult(data=resp.json(), status_code=resp.status_code)
 
 
 class SupabaseDeleteBuilder:
@@ -365,11 +401,11 @@ class SupabaseDeleteBuilder:
         return self
 
     def execute(self) -> QueryResult:
-        with httpx.Client(timeout=self.timeout) as client:
-            resp = client.delete(self.base_url, headers=self.headers, params=self.params)
-            if not resp.is_success:
-                raise RuntimeError(f"Supabase delete failed ({resp.status_code}): {resp.text}")
-            return QueryResult(data=resp.json(), status_code=resp.status_code)
+        client = get_http_client(self.timeout)
+        resp = client.delete(self.base_url, headers=self.headers, params=self.params)
+        if not resp.is_success:
+            raise RuntimeError(f"Supabase delete failed ({resp.status_code}): {resp.text}")
+        return QueryResult(data=resp.json(), status_code=resp.status_code)
 
 
 class SupabaseQueryBuilder:
@@ -411,12 +447,30 @@ class SupabaseQueryBuilder:
         self.params["limit"] = str(count)
         return self
 
+    def count(self) -> int:
+        """Execute count-only query and return matching row count."""
+        res = self.select("id", count="exact").limit(0).execute()
+        return res.count if res.count is not None else len(res.data or [])
+
     def execute(self) -> QueryResult:
-        with httpx.Client(timeout=self.timeout) as client:
-            resp = client.get(self.base_url, headers=self.headers, params=self.params)
-            if not resp.is_success:
-                raise RuntimeError(f"Supabase query failed ({resp.status_code}): {resp.text}")
-            return QueryResult(data=resp.json(), status_code=resp.status_code)
+        client = get_http_client(self.timeout)
+        resp = client.get(self.base_url, headers=self.headers, params=self.params)
+        if not resp.is_success:
+            raise RuntimeError(f"Supabase query failed ({resp.status_code}): {resp.text}")
+
+        count = None
+        content_range = resp.headers.get("content-range") or resp.headers.get("Content-Range")
+        if content_range and "/" in content_range:
+            parts = content_range.split("/")
+            if len(parts) == 2 and parts[1].strip().isdigit():
+                count = int(parts[1].strip())
+
+        try:
+            data = resp.json() if resp.status_code != 204 else []
+        except Exception:
+            data = []
+
+        return QueryResult(data=data, count=count, status_code=resp.status_code)
 
     def insert(self, record_or_records: Union[dict, list]) -> SupabaseInsertBuilder:
         return SupabaseInsertBuilder(self.base_url, record_or_records, self.headers, self.timeout)
@@ -467,7 +521,12 @@ class SupabaseUsersCollection:
     and `alumni_profiles` tables.
     """
 
-    def _format_user_output(self, user_row: dict) -> Optional[dict]:
+    def _format_user_output(
+        self,
+        user_row: dict,
+        profile_data: Optional[dict] = None,
+        fetch_profile: bool = True
+    ) -> Optional[dict]:
         """Combine user record with linked student/alumni profile into expected application shape."""
         if not user_row:
             return None
@@ -493,56 +552,90 @@ class SupabaseUsersCollection:
 
         role = user_row.get("role")
         if role == "student":
-            try:
-                prof_res = supabase.table("student_profiles").select("*").eq("user_id", user_id).execute()
-                if prof_res.data:
-                    p = prof_res.data[0]
-                    doc["student_profile"] = {
-                        "student_id": p.get("student_id"),
-                        "department": p.get("department"),
-                        "course": p.get("course"),
-                        "academic_year": p.get("academic_year"),
-                        "graduation_year": p.get("graduation_year"),
-                        "phone": p.get("phone"),
-                    }
-                else:
+            if profile_data is not None:
+                p = profile_data
+                doc["student_profile"] = {
+                    "student_id": p.get("student_id"),
+                    "department": p.get("department"),
+                    "course": p.get("course"),
+                    "academic_year": p.get("academic_year"),
+                    "graduation_year": p.get("graduation_year"),
+                    "phone": p.get("phone"),
+                }
+            elif fetch_profile:
+                try:
+                    prof_res = supabase.table("student_profiles").select("*").eq("user_id", user_id).execute()
+                    if prof_res.data:
+                        p = prof_res.data[0]
+                        doc["student_profile"] = {
+                            "student_id": p.get("student_id"),
+                            "department": p.get("department"),
+                            "course": p.get("course"),
+                            "academic_year": p.get("academic_year"),
+                            "graduation_year": p.get("graduation_year"),
+                            "phone": p.get("phone"),
+                        }
+                    else:
+                        doc["student_profile"] = {}
+                except Exception:
                     doc["student_profile"] = {}
-            except Exception:
+            else:
                 doc["student_profile"] = {}
 
         elif role == "alumni":
-            try:
-                prof_res = supabase.table("alumni_profiles").select("*").eq("user_id", user_id).execute()
-                if prof_res.data:
-                    p = prof_res.data[0]
-                    doc["alumni_profile"] = {
-                        "alumni_id": p.get("alumni_id"),
-                        "department": p.get("department"),
-                        "degree": p.get("degree"),
-                        "graduation_year": p.get("graduation_year"),
-                        "company": p.get("company"),
-                        "designation": p.get("designation"),
-                        "industry": p.get("industry"),
-                        "location": p.get("location"),
-                        "skills": p.get("skills", []),
-                        "linkedin": p.get("linkedin"),
-                        "github": p.get("github"),
-                        "website": p.get("website"),
-                        "bio": p.get("bio"),
-                        "verification_status": user_row.get("verification_status", "pending"),
-                    }
-                else:
+            if profile_data is not None:
+                p = profile_data
+                doc["alumni_profile"] = {
+                    "alumni_id": p.get("alumni_id"),
+                    "department": p.get("department"),
+                    "degree": p.get("degree"),
+                    "graduation_year": p.get("graduation_year"),
+                    "company": p.get("company"),
+                    "designation": p.get("designation"),
+                    "industry": p.get("industry"),
+                    "location": p.get("location"),
+                    "skills": p.get("skills", []),
+                    "linkedin": p.get("linkedin"),
+                    "github": p.get("github"),
+                    "website": p.get("website"),
+                    "bio": p.get("bio"),
+                    "verification_status": user_row.get("verification_status", "pending"),
+                }
+            elif fetch_profile:
+                try:
+                    prof_res = supabase.table("alumni_profiles").select("*").eq("user_id", user_id).execute()
+                    if prof_res.data:
+                        p = prof_res.data[0]
+                        doc["alumni_profile"] = {
+                            "alumni_id": p.get("alumni_id"),
+                            "department": p.get("department"),
+                            "degree": p.get("degree"),
+                            "graduation_year": p.get("graduation_year"),
+                            "company": p.get("company"),
+                            "designation": p.get("designation"),
+                            "industry": p.get("industry"),
+                            "location": p.get("location"),
+                            "skills": p.get("skills", []),
+                            "linkedin": p.get("linkedin"),
+                            "github": p.get("github"),
+                            "website": p.get("website"),
+                            "bio": p.get("bio"),
+                            "verification_status": user_row.get("verification_status", "pending"),
+                        }
+                    else:
+                        doc["alumni_profile"] = {}
+                except Exception:
                     doc["alumni_profile"] = {}
-            except Exception:
+            else:
                 doc["alumni_profile"] = {}
 
         return doc
 
-    def find_one(self, filter_dict: dict) -> Optional[dict]:
+    def find_one(self, filter_dict: dict, include_profiles: bool = True) -> Optional[dict]:
         """Find a single user document matching the filter criteria."""
         if not filter_dict:
             res = supabase.table("users").select("*").limit(1).execute()
-            return self._format_user_output(res.data[0]) if res.data else None
+            return self._format_user_output(res.data[0], fetch_profile=include_profiles) if res.data else None
 
         # Filter by email
         if "email" in filter_dict:
@@ -551,7 +644,7 @@ class SupabaseUsersCollection:
             if "role" in filter_dict:
                 q = q.eq("role", filter_dict["role"])
             res = q.limit(1).execute()
-            return self._format_user_output(res.data[0]) if res.data else None
+            return self._format_user_output(res.data[0], fetch_profile=include_profiles) if res.data else None
 
         # Filter by _id or id
         id_val = filter_dict.get("_id") or filter_dict.get("id")
@@ -565,7 +658,7 @@ class SupabaseUsersCollection:
                 q1 = q1.eq("role", role_filter)
             res1 = q1.limit(1).execute()
             if res1.data:
-                return self._format_user_output(res1.data[0])
+                return self._format_user_output(res1.data[0], fetch_profile=include_profiles)
 
             # Try by legacy_mongo_id
             q2 = supabase.table("users").select("*").eq("legacy_mongo_id", id_str)
@@ -573,7 +666,7 @@ class SupabaseUsersCollection:
                 q2 = q2.eq("role", role_filter)
             res2 = q2.limit(1).execute()
             if res2.data:
-                return self._format_user_output(res2.data[0])
+                return self._format_user_output(res2.data[0], fetch_profile=include_profiles)
             return None
 
         # Filter by other fields
@@ -581,10 +674,10 @@ class SupabaseUsersCollection:
         for k, v in filter_dict.items():
             q = q.eq(k, v)
         res = q.limit(1).execute()
-        return self._format_user_output(res.data[0]) if res.data else None
+        return self._format_user_output(res.data[0], fetch_profile=include_profiles) if res.data else None
 
-    def find(self, filter_dict: Optional[dict] = None) -> list:
-        """Find user documents matching the filter criteria."""
+    def find(self, filter_dict: Optional[dict] = None, include_profiles: bool = True) -> list:
+        """Find user documents matching the filter criteria with batch profile resolution."""
         q = supabase.table("users").select("*")
 
         if filter_dict:
@@ -593,7 +686,47 @@ class SupabaseUsersCollection:
                     q = q.eq(k, v)
 
         res = q.execute()
-        return [self._format_user_output(row) for row in res.data or []]
+        users_data = res.data or []
+        if not users_data:
+            return []
+
+        if not include_profiles:
+            return [self._format_user_output(row, fetch_profile=False) for row in users_data]
+
+        # Batch resolve profiles using .in_() to eliminate per-user N+1 queries
+        student_user_ids = [str(r["id"]) for r in users_data if r.get("role") == "student" and r.get("id")]
+        alumni_user_ids = [str(r["id"]) for r in users_data if r.get("role") == "alumni" and r.get("id")]
+
+        student_profiles_map: Dict[str, dict] = {}
+        if student_user_ids:
+            try:
+                sp_res = supabase.table("student_profiles").select("*").in_("user_id", student_user_ids).execute()
+                for sp in sp_res.data or []:
+                    student_profiles_map[str(sp.get("user_id"))] = sp
+            except Exception:
+                pass
+
+        alumni_profiles_map: Dict[str, dict] = {}
+        if alumni_user_ids:
+            try:
+                ap_res = supabase.table("alumni_profiles").select("*").in_("user_id", alumni_user_ids).execute()
+                for ap in ap_res.data or []:
+                    alumni_profiles_map[str(ap.get("user_id"))] = ap
+            except Exception:
+                pass
+
+        results = []
+        for row in users_data:
+            uid = str(row.get("id"))
+            role = row.get("role")
+            prof = None
+            if role == "student":
+                prof = student_profiles_map.get(uid, {})
+            elif role == "alumni":
+                prof = alumni_profiles_map.get(uid, {})
+            results.append(self._format_user_output(row, profile_data=prof, fetch_profile=False))
+
+        return results
 
     def insert_one(self, doc: dict) -> InsertResult:
         """Insert a user document into users and linked profile tables."""

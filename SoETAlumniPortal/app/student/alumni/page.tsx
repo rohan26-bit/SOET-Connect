@@ -54,14 +54,14 @@ export default function AlumniDirectoryPage() {
     <DashboardLayout>
       {/* Breadcrumbs */}
       <div className="flex items-center text-xs font-semibold text-slate-400 mb-6 uppercase tracking-wider">
-        <span>Network</span>
+        <span>SOET Connect - Alumni Portal</span>
         <span className="mx-2 text-slate-300">/</span>
         <span className="text-blue-600">Alumni Directory</span>
       </div>
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">SOET Connect Directory</h1>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Alumni Directory</h1>
           <p className="text-xs text-slate-500 mt-1">
             Connect with verified graduates and industry professionals from our institution.
           </p>

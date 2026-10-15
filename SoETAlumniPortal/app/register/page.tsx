@@ -19,8 +19,8 @@ export default function RegisterSelectionPage() {
             className="w-full h-full object-contain"
           />
         </div>
-        <h2 className="text-3xl font-extrabold text-[#4A3832] tracking-tight">
-          Join SOET Connect
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-[#4A3832] tracking-tight">
+          SOET Connect - Alumni Portal
         </h2>
         <p className="mt-2 text-sm text-[#6B6B6B] font-medium">
           Select your account type to register
