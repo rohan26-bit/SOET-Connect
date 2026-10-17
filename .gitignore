@@ -27,3 +27,5 @@ supabase/.temp/
 # OS / Editor
 .DS_Store
 Thumbs.db
+.vercel
+.env*

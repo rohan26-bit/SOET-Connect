@@ -348,6 +348,77 @@ def send_trial_sms_connectivity_test(
         return False, None, f"Twilio connection check error: {str(e)[:150]}"
 
 
+def is_twilio_verify_configured() -> bool:
+    """Return True if Twilio Verify service is configured."""
+    return bool(
+        os.getenv("TWILIO_ACCOUNT_SID", "").strip()
+        and os.getenv("TWILIO_AUTH_TOKEN", "").strip()
+        and os.getenv("TWILIO_VERIFY_SERVICE_SID", "").strip()
+    )
+
+
+def send_twilio_verify_otp(to_phone: str) -> Tuple[bool, Optional[str], Optional[str]]:
+    """Send OTP via Twilio Verify API v2."""
+    account_sid = os.getenv("TWILIO_ACCOUNT_SID", "").strip()
+    auth_token = os.getenv("TWILIO_AUTH_TOKEN", "").strip()
+    service_sid = os.getenv("TWILIO_VERIFY_SERVICE_SID", "").strip()
+
+    if not (account_sid and auth_token and service_sid):
+        return False, None, "Twilio Verify service is not configured."
+
+    norm_to = normalize_phone_number(to_phone)
+    if not norm_to:
+        return False, None, "Invalid destination phone format."
+
+    url = f"https://verify.twilio.com/v2/Services/{service_sid}/Verifications"
+    data = {
+        "To": norm_to,
+        "Channel": "sms",
+    }
+    try:
+        with httpx.Client(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
+            resp = client.post(url, auth=(account_sid, auth_token), data=data)
+            if resp.status_code in (200, 201):
+                res_data = resp.json()
+                return True, res_data.get("sid"), None
+            try:
+                err_data = resp.json()
+                err_msg = err_data.get("message") or resp.text[:200]
+            except Exception:
+                err_msg = resp.text[:200]
+            return False, None, f"Twilio Verify error ({resp.status_code}): {err_msg}"
+    except Exception as e:
+        return False, None, f"Twilio Verify connection error: {str(e)[:150]}"
+
+
+def check_twilio_verify_otp(to_phone: str, code: str) -> Tuple[bool, str]:
+    """Check OTP code via Twilio Verify API v2."""
+    account_sid = os.getenv("TWILIO_ACCOUNT_SID", "").strip()
+    auth_token = os.getenv("TWILIO_AUTH_TOKEN", "").strip()
+    service_sid = os.getenv("TWILIO_VERIFY_SERVICE_SID", "").strip()
+
+    if not (account_sid and auth_token and service_sid):
+        return False, "Twilio Verify service is not configured."
+
+    norm_to = normalize_phone_number(to_phone)
+    url = f"https://verify.twilio.com/v2/Services/{service_sid}/VerificationCheck"
+    data = {
+        "To": norm_to,
+        "Code": code.strip(),
+    }
+    try:
+        with httpx.Client(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
+            resp = client.post(url, auth=(account_sid, auth_token), data=data)
+            if resp.status_code == 200:
+                res_data = resp.json()
+                if res_data.get("status") == "approved":
+                    return True, "Verification code confirmed."
+                return False, "Incorrect verification code."
+            return False, "Verification check failed."
+    except Exception as e:
+        return False, f"Twilio Verify connection error: {str(e)[:150]}"
+
+
 def update_delivery_status(
     delivery_id: Optional[str] = None,
     provider_message_id: Optional[str] = None,

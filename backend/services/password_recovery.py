@@ -181,7 +181,21 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
                     error_message="Email provider not configured (RESEND_API_KEY missing).",
                 )
         else:
-            if delivery.is_sms_configured():
+            if delivery.is_twilio_verify_configured():
+                success, msg_id, err = delivery.send_twilio_verify_otp(recipient)
+                delivery.record_delivery(
+                    user_id=user_id,
+                    channel="sms",
+                    recipient=recipient,
+                    status="accepted" if success else "failed",
+                    event_type="password_reset",
+                    provider="twilio_verify",
+                    provider_message_id=msg_id,
+                    error_message=err,
+                )
+                if not success:
+                    return False, f"SMS verification delivery failed: {err}. Please use Email recovery instead.", None
+            elif delivery.is_sms_configured():
                 success, msg_id, err = delivery.send_sms_message(recipient, message_text)
                 delivery.record_delivery(
                     user_id=user_id,
@@ -193,6 +207,8 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
                     provider_message_id=msg_id,
                     error_message=err,
                 )
+                if not success and ("572006" in (err or "") or "trial" in (err or "").lower()):
+                    return False, "SMS password recovery is currently unavailable due to Twilio trial restrictions (custom SMS messages are blocked). Please use Email recovery instead.", None
             else:
                 delivery.record_delivery(
                     user_id=user_id,
@@ -203,6 +219,7 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
                     provider="twilio",
                     error_message="SMS provider not configured (Twilio credentials missing).",
                 )
+                return False, "SMS recovery is currently unavailable. Please use Email recovery.", None
     except Exception as e:
         print(f"Error recording password reset delivery: {e}")
 

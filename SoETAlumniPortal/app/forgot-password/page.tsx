@@ -236,9 +236,13 @@ export default function ForgotPasswordPage() {
                     />
                   </div>
                   {channel === 'sms' && (
-                    <p className="text-[11px] text-[#888888] mt-1.5">
-                      SMS delivery requires that your phone number was previously verified in your account settings.
-                    </p>
+                    <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800 space-y-1">
+                      <p className="font-semibold flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        Notice regarding SMS recovery:
+                      </p>
+                      <p>SMS recovery requires a verified phone number and an upgraded SMS gateway. Trial Twilio accounts restrict custom message bodies. Please use <strong>Email</strong> recovery if SMS is unavailable.</p>
+                    </div>
                   )}
                 </div>
 

@@ -997,3 +997,45 @@ def test_validate_twilio_credentials_reports_unconfigured_from_number_without_fa
     assert ok is True
     assert "verified" in msg
     assert "TWILIO_FROM_NUMBER is not yet configured" in msg
+
+
+def test_twilio_verify_configured_helper(monkeypatch):
+    """Twilio verify detection helper recognizes presence and absence of service SID."""
+    from services.delivery import is_twilio_verify_configured
+
+    monkeypatch.delenv("TWILIO_VERIFY_SERVICE_SID", raising=False)
+    assert is_twilio_verify_configured() is False
+
+    monkeypatch.setenv("TWILIO_ACCOUNT_SID", "AC12345")
+    monkeypatch.setenv("TWILIO_AUTH_TOKEN", "token123")
+    monkeypatch.setenv("TWILIO_VERIFY_SERVICE_SID", "VA1234567890")
+    assert is_twilio_verify_configured() is True
+
+
+def test_password_recovery_sms_trial_error_guidance(monkeypatch, verified_alumni_user: dict):
+    """When SMS recovery fails due to trial error 572006, clear guidance directs user to email."""
+    from services.password_recovery import request_password_reset
+
+    user_id = str(verified_alumni_user["id"])
+    email = verified_alumni_user["email"]
+
+    # Configure user with verified phone
+    supabase.table("users").update({"phone": "+919876543210", "is_phone_verified": True}).eq("id", user_id).execute()
+
+    class MockTwilio572006:
+        status_code = 400
+        text = '{"code":572006,"message":"Trial accounts reject custom SMS bodies."}'
+        def json(self):
+            return {"code": 572006, "message": "Trial accounts reject custom SMS bodies."}
+
+    monkeypatch.setenv("TWILIO_ACCOUNT_SID", "AC12345")
+    monkeypatch.setenv("TWILIO_AUTH_TOKEN", "token123")
+    monkeypatch.setenv("TWILIO_FROM_NUMBER", "+15005550006")
+    monkeypatch.delenv("TWILIO_VERIFY_SERVICE_SID", raising=False)
+    monkeypatch.setattr("httpx.Client.post", lambda self, url, **kwargs: MockTwilio572006())
+
+    ok, msg, debug_code = request_password_reset("+919876543210", "sms")
+    assert ok is False
+    assert debug_code is None
+    assert "Twilio trial restrictions" in msg
+    assert "Email recovery" in msg
