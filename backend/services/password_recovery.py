@@ -79,6 +79,14 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
     """
     Initiate a password reset flow.
     Returns: (success: bool, generic_message: str, debug_code_in_mock: Optional[str])
+
+    Security: the generic_success_msg is returned for both existing and
+    non-existing accounts to prevent account enumeration.
+
+    Delivery-failure handling: if the provider rejects the message (e.g.
+    Resend testing-mode restriction, Twilio trial block), the challenge is
+    immediately invalidated so the user is not stranded with an unusable
+    code and no way to retry.
     """
     ident = identifier.strip()
     channel = channel.lower().strip()
@@ -156,6 +164,8 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
 
     # Dispatch code via selected channel
     message_text = f"Your SOET Connect password reset code is: {code}. It is valid for 10 minutes. Do not share this code with anyone."
+    delivery_failed = False
+    delivery_error_detail = ""
     try:
         if channel == "email":
             if delivery.is_email_configured():
@@ -170,6 +180,9 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
                     provider_message_id=msg_id,
                     error_message=err,
                 )
+                if not success:
+                    delivery_failed = True
+                    delivery_error_detail = err or "Email delivery failed"
             else:
                 delivery.record_delivery(
                     user_id=user_id,
@@ -180,6 +193,8 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
                     provider="resend",
                     error_message="Email provider not configured (RESEND_API_KEY missing).",
                 )
+                delivery_failed = True
+                delivery_error_detail = "Email provider not configured"
         else:
             if delivery.is_twilio_verify_configured():
                 success, msg_id, err = delivery.send_twilio_verify_otp(recipient)
@@ -194,6 +209,8 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
                     error_message=err,
                 )
                 if not success:
+                    # Invalidate the challenge – code was never delivered
+                    _invalidate_challenge(challenge_id, now)
                     return False, f"SMS verification delivery failed: {err}. Please use Email recovery instead.", None
             elif delivery.is_sms_configured():
                 success, msg_id, err = delivery.send_sms_message(recipient, message_text)
@@ -208,7 +225,12 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
                     error_message=err,
                 )
                 if not success and ("572006" in (err or "") or "trial" in (err or "").lower()):
+                    # Invalidate the challenge – code was never delivered
+                    _invalidate_challenge(challenge_id, now)
                     return False, "SMS password recovery is currently unavailable due to Twilio trial restrictions (custom SMS messages are blocked). Please use Email recovery instead.", None
+                if not success:
+                    delivery_failed = True
+                    delivery_error_detail = err or "SMS delivery failed"
             else:
                 delivery.record_delivery(
                     user_id=user_id,
@@ -219,14 +241,38 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
                     provider="twilio",
                     error_message="SMS provider not configured (Twilio credentials missing).",
                 )
+                # Invalidate the challenge – code was never delivered
+                _invalidate_challenge(challenge_id, now)
                 return False, "SMS recovery is currently unavailable. Please use Email recovery.", None
     except Exception as e:
-        print(f"Error recording password reset delivery: {e}")
+        delivery_failed = True
+        delivery_error_detail = f"Delivery exception: {str(e)[:100]}"
+        print(f"Error during password reset delivery: {e}")
+
+    # If the provider rejected the message, invalidate the challenge immediately
+    # so the user is not stranded for 10 minutes with an unusable code.
+    if delivery_failed:
+        _invalidate_challenge(challenge_id, now)
+        # Log for operators (never includes secrets, codes, or PII)
+        print(f"Password reset delivery failed for challenge {challenge_id}: {delivery_error_detail}")
 
     # In automated test suite mode strictly, provide code to test runner; NEVER in normal or production server runs
     debug_code = code if os.getenv("PYTEST_CURRENT_TEST") else None
 
+    # Anti-enumeration: always return the same generic message regardless of
+    # whether the account exists or delivery succeeded.
     return True, generic_success_msg, debug_code
+
+
+def _invalidate_challenge(challenge_id: str, now: datetime) -> None:
+    """Mark a challenge as used (invalidated) after delivery failure."""
+    try:
+        supabase.table("password_reset_challenges").update({
+            "is_used": True,
+            "used_at": now.isoformat(),
+        }).eq("id", challenge_id).execute()
+    except Exception:
+        pass
 
 
 def verify_password_reset_code(identifier: str, code: str) -> Tuple[bool, str, Optional[str]]:

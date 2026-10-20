@@ -453,8 +453,9 @@ def test_forgot_password_generic_response_for_unknown_user(client: TestClient):
     assert "code" in res.json().get("message", "").lower()
 
 
-def test_full_password_recovery_flow(client: TestClient):
+def test_full_password_recovery_flow(client: TestClient, monkeypatch):
     """Complete 4-step recovery flow: request code, verify code, set new password, login."""
+    monkeypatch.setattr("services.delivery.send_email_message", lambda to, subj, msg: (True, "mock_resend_recovery_01", None))
     # 1. Register a test user
     email = "recovery_test_user@example.com"
     old_password = "OldPassword123!"
@@ -521,9 +522,10 @@ def test_full_password_recovery_flow(client: TestClient):
 
 
 def test_password_recovery_preserves_verification_status(
-    client: TestClient, unverified_alumni_user: dict
+    client: TestClient, unverified_alumni_user: dict, monkeypatch
 ):
     """Password reset preserves the unverified status of an account (cannot bypass moderation)."""
+    monkeypatch.setattr("services.delivery.send_email_message", lambda to, subj, msg: (True, "mock_resend_preserve_01", None))
     email = unverified_alumni_user["email"]
     user_id = unverified_alumni_user["id"]
 
@@ -1039,3 +1041,127 @@ def test_password_recovery_sms_trial_error_guidance(monkeypatch, verified_alumni
     assert debug_code is None
     assert "Twilio trial restrictions" in msg
     assert "Email recovery" in msg
+
+
+def test_email_delivery_failure_invalidates_challenge(monkeypatch, verified_alumni_user: dict):
+    """When email delivery fails (e.g. Resend testing restriction), the challenge is
+    immediately invalidated so the user can retry without being stranded for 10 minutes."""
+    from services.password_recovery import request_password_reset
+
+    email = verified_alumni_user["email"]
+    user_id = str(verified_alumni_user["id"])
+
+    # Simulate Resend 403 testing restriction
+    monkeypatch.setattr(
+        "services.delivery.send_email_message",
+        lambda to, subj, msg: (False, None, "Resend API error (403): You can only send testing emails to your own email address"),
+    )
+
+    ok, msg, debug_code = request_password_reset(email, "email")
+
+    # The response is still the generic success message (anti-enumeration)
+    assert ok is True
+    assert "code" in msg.lower()
+
+    # But the challenge should be invalidated because the code was never delivered
+    challenges = supabase.table("password_reset_challenges").select("*").eq(
+        "user_id", user_id
+    ).execute().data
+    assert len(challenges) >= 1
+    latest = sorted(challenges, key=lambda c: c["created_at"], reverse=True)[0]
+    assert latest["is_used"] is True, "Challenge should be invalidated after delivery failure"
+
+
+def test_successful_delivery_keeps_challenge_active(monkeypatch, verified_alumni_user: dict):
+    """When email delivery succeeds, the challenge remains active so the user can verify."""
+    from services.password_recovery import request_password_reset
+
+    email = verified_alumni_user["email"]
+    user_id = str(verified_alumni_user["id"])
+
+    monkeypatch.setattr(
+        "services.delivery.send_email_message",
+        lambda to, subj, msg: (True, "msg_resend_success_001", None),
+    )
+
+    ok, msg, debug_code = request_password_reset(email, "email")
+    assert ok is True
+    assert debug_code is not None  # returned in test mode
+
+    challenges = supabase.table("password_reset_challenges").select("*").eq(
+        "user_id", user_id
+    ).execute().data
+    active = [c for c in challenges if not c["is_used"]]
+    assert len(active) == 1, "Challenge should remain active after successful delivery"
+
+
+def test_retry_after_failed_delivery_creates_fresh_challenge(monkeypatch, verified_alumni_user: dict):
+    """After a delivery failure invalidates the challenge, a retry creates a fresh active one."""
+    from services.password_recovery import request_password_reset
+
+    email = verified_alumni_user["email"]
+    user_id = str(verified_alumni_user["id"])
+
+    # First attempt: delivery fails
+    monkeypatch.setattr(
+        "services.delivery.send_email_message",
+        lambda to, subj, msg: (False, None, "Resend 403 testing restriction"),
+    )
+    ok1, _, _ = request_password_reset(email, "email")
+    assert ok1 is True
+
+    # All challenges should be invalidated
+    challenges_after_fail = supabase.table("password_reset_challenges").select("*").eq(
+        "user_id", user_id
+    ).execute().data
+    active_after_fail = [c for c in challenges_after_fail if not c["is_used"]]
+    assert len(active_after_fail) == 0
+
+    # Second attempt: delivery succeeds
+    monkeypatch.setattr(
+        "services.delivery.send_email_message",
+        lambda to, subj, msg: (True, "msg_retry_ok", None),
+    )
+    ok2, msg2, debug_code2 = request_password_reset(email, "email")
+    assert ok2 is True
+    assert debug_code2 is not None
+
+    # Now there should be exactly one active challenge (the fresh one from retry)
+    challenges_after_retry = supabase.table("password_reset_challenges").select("*").eq(
+        "user_id", user_id
+    ).execute().data
+    active_after_retry = [c for c in challenges_after_retry if not c["is_used"]]
+    assert len(active_after_retry) == 1
+
+
+def test_sms_trial_error_invalidates_challenge(monkeypatch, verified_alumni_user: dict):
+    """SMS trial error (572006) invalidates the challenge so the user is not stranded."""
+    from services.password_recovery import request_password_reset
+
+    user_id = str(verified_alumni_user["id"])
+
+    # Configure user with verified phone
+    supabase.table("users").update({"phone": "+919876543210", "is_phone_verified": True}).eq("id", user_id).execute()
+
+    class MockTwilio572006:
+        status_code = 400
+        text = '{"code":572006,"message":"Trial accounts reject custom SMS bodies."}'
+        def json(self):
+            return {"code": 572006, "message": "Trial accounts reject custom SMS bodies."}
+
+    monkeypatch.setenv("TWILIO_ACCOUNT_SID", "AC12345")
+    monkeypatch.setenv("TWILIO_AUTH_TOKEN", "token123")
+    monkeypatch.setenv("TWILIO_FROM_NUMBER", "+15005550006")
+    monkeypatch.delenv("TWILIO_VERIFY_SERVICE_SID", raising=False)
+    monkeypatch.setattr("httpx.Client.post", lambda self, url, **kwargs: MockTwilio572006())
+
+    ok, msg, _ = request_password_reset("+919876543210", "sms")
+    assert ok is False
+    assert "Twilio trial restrictions" in msg
+
+    # Challenge should be invalidated
+    challenges = supabase.table("password_reset_challenges").select("*").eq(
+        "user_id", user_id
+    ).execute().data
+    active = [c for c in challenges if not c["is_used"]]
+    assert len(active) == 0, "Challenge should be invalidated after SMS trial error"

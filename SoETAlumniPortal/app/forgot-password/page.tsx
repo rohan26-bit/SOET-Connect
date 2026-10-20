@@ -60,9 +60,8 @@ export default function ForgotPasswordPage() {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  // Step 1: Request Code
-  const handleRequestCode = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Core request logic – reusable for first request and resend
+  const doRequestCode = async () => {
     setError(null);
     setLoading(true);
 
@@ -77,6 +76,12 @@ export default function ForgotPasswordPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Step 1: Request Code (form submit)
+  const handleRequestCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await doRequestCode();
   };
 
   // Step 2: Verify Code
@@ -282,7 +287,7 @@ export default function ForgotPasswordPage() {
                     <div className="flex items-center gap-1 text-xs text-[#888888]">
                       <Clock className="w-3.5 h-3.5" />
                       <span className={timeLeft < 60 ? 'text-red-500 font-semibold' : ''}>
-                        {formatTimer(timeLeft)}
+                        {timeLeft > 0 ? formatTimer(timeLeft) : 'Expired'}
                       </span>
                     </div>
                   </div>
@@ -300,6 +305,23 @@ export default function ForgotPasswordPage() {
                   </p>
                 </div>
 
+                {/* Timer expired: show clear recovery path */}
+                {timeLeft === 0 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
+                    <p className="text-xs font-semibold text-amber-800 mb-2">
+                      Your verification code has expired.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={doRequestCode}
+                      disabled={loading}
+                      className="text-xs font-bold text-[#F28C38] hover:text-[#E07D2E] transition"
+                    >
+                      {loading ? 'Sending...' : 'Request a new code'}
+                    </button>
+                  </div>
+                )}
+
                 <button
                   type="submit"
                   disabled={loading || code.trim().length !== 6 || timeLeft === 0}
@@ -316,6 +338,7 @@ export default function ForgotPasswordPage() {
                       setStep(1);
                       setCode('');
                       setError(null);
+                      setTimerActive(false);
                     }}
                     className="flex items-center gap-1 text-xs font-semibold text-[#6B6B6B] hover:text-[#222222] transition"
                   >
@@ -325,13 +348,42 @@ export default function ForgotPasswordPage() {
 
                   <button
                     type="button"
-                    onClick={handleRequestCode}
-                    disabled={loading || timeLeft > 540}
+                    onClick={doRequestCode}
+                    disabled={loading || timeLeft > 580}
                     className="text-xs font-semibold text-[#F28C38] hover:text-[#E07D2E] disabled:opacity-40 transition"
                   >
                     Resend code
                   </button>
                 </div>
+
+                {/* Didn't receive guidance */}
+                {timeLeft > 0 && timeLeft < 570 && (
+                  <div className="bg-[#F7F4EF] rounded-xl p-3 space-y-1.5">
+                    <p className="text-[11px] font-semibold text-[#4A3832] flex items-center gap-1.5">
+                      <AlertCircle className="w-3 h-3 text-[#888888] shrink-0" />
+                      {"Didn't receive the code?"}
+                    </p>
+                    <ul className="text-[11px] text-[#6B6B6B] list-disc pl-5 space-y-0.5">
+                      <li>Check your spam / junk folder</li>
+                      <li>Make sure you entered the correct {channel === 'email' ? 'email address' : 'phone number'}</li>
+                      <li>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStep(1);
+                            setCode('');
+                            setError(null);
+                            setTimerActive(false);
+                          }}
+                          className="text-[#F28C38] font-semibold hover:underline"
+                        >
+                          Go back
+                        </button>{' '}
+                        to try a different recovery method
+                      </li>
+                    </ul>
+                  </div>
+                )}
               </form>
             </div>
           )}
