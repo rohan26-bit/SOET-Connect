@@ -481,3 +481,389 @@ def toggle_user_active(
         "user_id": user_id,
         "is_active": new_active,
     }
+
+
+# ============================================================
+# PARTICIPATION & REGISTRATIONS MANAGEMENT
+# ============================================================
+
+@router.get("/participation/events")
+def get_admin_event_participation(
+    search: str | None = None,
+    status: str | None = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Get aggregated event registration statistics and per-event participant counts.
+    Enforces admin-only access.
+    """
+    _require_admin(current_user)
+
+    events_raw = _read_data("events", EVENTS_FILE)
+    regs_raw = _read_data("event_registrations", REGISTRATIONS_FILE or EVENT_REGISTRATIONS_FILE)
+
+    total_registrations = len(regs_raw)
+    all_participant_user_ids = {
+        str(r.get("user_id")) for r in regs_raw if r.get("user_id")
+    }
+    unique_participants = len(all_participant_user_ids)
+
+    # Pre-aggregate registrations per event
+    event_reg_map: dict[str, list[dict]] = {}
+    for r in regs_raw:
+        eid = str(r.get("event_id") or "")
+        if eid:
+            event_reg_map.setdefault(eid, []).append(r)
+
+    event_list = []
+    search_lower = search.strip().lower() if search else None
+    status_filter = status.strip().lower() if status and status.lower() != "all" else None
+
+    for e in events_raw:
+        eid = str(e.get("id") or "")
+        e_title = e.get("title") or "Untitled Event"
+        e_status = (e.get("status") or "pending").lower()
+        e_date = e.get("event_date") or e.get("start_date") or e.get("date") or ""
+        e_type = e.get("event_type") or ""
+        e_location = e.get("location") or ""
+        e_deadline = e.get("registration_deadline") or ""
+
+        # Filter by status
+        if status_filter and e_status != status_filter:
+            continue
+
+        # Filter by search query
+        if search_lower:
+            haystack = f"{e_title} {e_type} {e_location}".lower()
+            if search_lower not in haystack:
+                continue
+
+        e_regs = event_reg_map.get(eid, [])
+        e_reg_count = len(e_regs)
+        e_unique_uids = {str(r.get("user_id")) for r in e_regs if r.get("user_id")}
+
+        event_list.append({
+            "id": eid,
+            "title": e_title,
+            "status": e_status,
+            "event_date": e_date,
+            "event_type": e_type,
+            "location": e_location,
+            "registration_deadline": e_deadline,
+            "registration_count": e_reg_count,
+            "unique_participant_count": len(e_unique_uids),
+            "created_at": e.get("created_at") or "",
+        })
+
+    # Sort events by date descending or created_at descending
+    event_list.sort(key=lambda x: x.get("event_date") or x.get("created_at") or "", reverse=True)
+
+    return {
+        "total_registrations": total_registrations,
+        "unique_participants": unique_participants,
+        "total_events": len(events_raw),
+        "events": event_list,
+    }
+
+
+@router.get("/participation/events/{event_id}/participants")
+def get_admin_event_participants(
+    event_id: str,
+    search: str | None = None,
+    role: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Get detailed list of participants registered for a specific event.
+    Hydrates safe identity fields (name, email, role, student/alumni identifier, department).
+    Enforces admin-only access.
+    """
+    _require_admin(current_user)
+
+    events_raw = _read_data("events", EVENTS_FILE)
+    target_event = next((e for e in events_raw if str(e.get("id")) == str(event_id)), None)
+    if not target_event:
+        try:
+            ev_res = supabase.table("events").select("id,title,event_date,status").eq("id", str(event_id)).execute()
+            if ev_res.data:
+                target_event = ev_res.data[0]
+        except Exception:
+            pass
+
+    if not target_event:
+        raise HTTPException(status_code=404, detail="Event not found.")
+
+    regs_raw = _read_data("event_registrations", REGISTRATIONS_FILE or EVENT_REGISTRATIONS_FILE)
+    event_regs = [r for r in regs_raw if str(r.get("event_id")) == str(event_id)]
+
+    uids = list({str(r.get("user_id")) for r in event_regs if r.get("user_id")})
+    user_map: dict[str, dict] = {}
+
+    if uids:
+        try:
+            users_res = users_collection.find({"_id": {"$in": uids}}, include_profiles=True)
+            for u in users_res:
+                user_map[str(u.get("_id") or u.get("id"))] = u
+        except Exception:
+            pass
+
+    participants = []
+    search_lower = search.strip().lower() if search else None
+    role_filter = role.strip().lower() if role and role.lower() != "all" else None
+
+    for r in event_regs:
+        uid = str(r.get("user_id") or "")
+        u = user_map.get(uid, {})
+
+        u_name = u.get("name") or r.get("user_name") or r.get("name") or "Participant"
+        u_email = u.get("email") or r.get("user_email") or r.get("email") or ""
+        u_role = (u.get("role") or r.get("user_role") or "student").lower()
+
+        student_prof = u.get("student_profile") if isinstance(u.get("student_profile"), dict) else {}
+        alumni_prof = u.get("alumni_profile") if isinstance(u.get("alumni_profile"), dict) else {}
+
+        identifier = student_prof.get("student_id") or alumni_prof.get("alumni_id") or ""
+        department = student_prof.get("department") or alumni_prof.get("department") or ""
+
+        if role_filter and u_role != role_filter:
+            continue
+
+        if search_lower:
+            haystack = f"{u_name} {u_email} {identifier} {department}".lower()
+            if search_lower not in haystack:
+                continue
+
+        reg_date = r.get("created_at") or r.get("registered_at") or ""
+        reg_status = r.get("status") or "registered"
+
+        participants.append({
+            "registration_id": str(r.get("id") or ""),
+            "user_id": uid,
+            "name": u_name,
+            "email": u_email,
+            "role": u_role,
+            "identifier": identifier,
+            "department": department,
+            "registration_date": reg_date,
+            "status": reg_status,
+        })
+
+    participants.sort(key=lambda x: x.get("registration_date") or "", reverse=True)
+
+    total_count = len(participants)
+    bounded_limit = max(1, min(limit, 200))
+    paginated = participants[offset : offset + bounded_limit]
+
+    return {
+        "event_id": str(event_id),
+        "event_title": target_event.get("title", ""),
+        "total_count": total_count,
+        "limit": bounded_limit,
+        "offset": offset,
+        "participants": paginated,
+    }
+
+
+@router.get("/participation/jobs")
+def get_admin_job_participation(
+    search: str | None = None,
+    status: str | None = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Get aggregated job application statistics and per-job applicant counts.
+    Enforces admin-only access.
+    """
+    _require_admin(current_user)
+
+    jobs_raw = _read_data("jobs", JOBS_FILE)
+    apps_raw = _read_data("job_applications", APPLICATIONS_FILE)
+
+    total_applications = len(apps_raw)
+    all_applicant_ids = {
+        str(a.get("applicant_id") or a.get("student_id"))
+        for a in apps_raw
+        if (a.get("applicant_id") or a.get("student_id"))
+    }
+    unique_applicants = len(all_applicant_ids)
+
+    job_apps_map: dict[str, list[dict]] = {}
+    for a in apps_raw:
+        jid = str(a.get("job_id") or "")
+        if jid:
+            job_apps_map.setdefault(jid, []).append(a)
+
+    job_list = []
+    search_lower = search.strip().lower() if search else None
+    status_filter = status.strip().lower() if status and status.lower() != "all" else None
+
+    for j in jobs_raw:
+        jid = str(j.get("id") or "")
+        j_title = j.get("title") or "Untitled Job"
+        j_company = j.get("company") or ""
+        j_location = j.get("location") or ""
+        j_type = j.get("job_type") or j.get("type") or ""
+        j_status = (j.get("status") or "active").lower()
+        j_deadline = j.get("deadline") or ""
+
+        if status_filter and j_status != status_filter:
+            continue
+
+        if search_lower:
+            haystack = f"{j_title} {j_company} {j_location} {j_type}".lower()
+            if search_lower not in haystack:
+                continue
+
+        j_apps = job_apps_map.get(jid, [])
+        j_app_count = len(j_apps)
+        j_unique_applicants = len({
+            str(a.get("applicant_id") or a.get("student_id"))
+            for a in j_apps
+            if (a.get("applicant_id") or a.get("student_id"))
+        })
+
+        status_counts: dict[str, int] = {}
+        for a in j_apps:
+            s = (a.get("status") or "applied").lower()
+            if s == "submitted":
+                s = "applied"
+            elif s == "accepted":
+                s = "selected"
+            status_counts[s] = status_counts.get(s, 0) + 1
+
+        job_list.append({
+            "id": jid,
+            "title": j_title,
+            "company": j_company,
+            "location": j_location,
+            "job_type": j_type,
+            "status": j_status,
+            "deadline": j_deadline,
+            "application_count": j_app_count,
+            "unique_applicant_count": j_unique_applicants,
+            "applications_by_status": status_counts,
+            "created_at": j.get("created_at") or "",
+        })
+
+    job_list.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+
+    return {
+        "total_jobs": len(jobs_raw),
+        "total_applications": total_applications,
+        "unique_applicants": unique_applicants,
+        "jobs": job_list,
+    }
+
+
+@router.get("/participation/jobs/{job_id}/applicants")
+def get_admin_job_applicants(
+    job_id: str,
+    search: str | None = None,
+    status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Get detailed list of applicants for a specific job.
+    Hydrates safe identity fields (name, email, role, student/alumni identifier, department).
+    Enforces admin-only access.
+    """
+    _require_admin(current_user)
+
+    jobs_raw = _read_data("jobs", JOBS_FILE)
+    target_job = next((j for j in jobs_raw if str(j.get("id")) == str(job_id)), None)
+    if not target_job:
+        try:
+            j_res = supabase.table("jobs").select("id,title,company,status").eq("id", str(job_id)).execute()
+            if j_res.data:
+                target_job = j_res.data[0]
+        except Exception:
+            pass
+
+    if not target_job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
+    apps_raw = _read_data("job_applications", APPLICATIONS_FILE)
+    job_apps = [a for a in apps_raw if str(a.get("job_id")) == str(job_id)]
+
+    uids = list({
+        str(a.get("applicant_id") or a.get("student_id"))
+        for a in job_apps
+        if (a.get("applicant_id") or a.get("student_id"))
+    })
+    user_map: dict[str, dict] = {}
+
+    if uids:
+        try:
+            users_res = users_collection.find({"_id": {"$in": uids}}, include_profiles=True)
+            for u in users_res:
+                user_map[str(u.get("_id") or u.get("id"))] = u
+        except Exception:
+            pass
+
+    applicants = []
+    search_lower = search.strip().lower() if search else None
+    status_filter = status.strip().lower() if status and status.lower() != "all" else None
+
+    for a in job_apps:
+        uid = str(a.get("applicant_id") or a.get("student_id") or "")
+        u = user_map.get(uid, {})
+
+        u_name = u.get("name") or a.get("student_name") or a.get("applicant_name") or "Applicant"
+        u_email = u.get("email") or a.get("student_email") or a.get("applicant_email") or ""
+        u_role = (u.get("role") or "student").lower()
+
+        student_prof = u.get("student_profile") if isinstance(u.get("student_profile"), dict) else {}
+        alumni_prof = u.get("alumni_profile") if isinstance(u.get("alumni_profile"), dict) else {}
+
+        identifier = student_prof.get("student_id") or alumni_prof.get("alumni_id") or ""
+        department = student_prof.get("department") or alumni_prof.get("department") or a.get("department") or ""
+
+        app_status = (a.get("status") or "applied").lower()
+        if app_status == "submitted":
+            app_status = "applied"
+        elif app_status == "accepted":
+            app_status = "selected"
+
+        if status_filter and app_status != status_filter:
+            continue
+
+        if search_lower:
+            haystack = f"{u_name} {u_email} {identifier} {department}".lower()
+            if search_lower not in haystack:
+                continue
+
+        app_date = a.get("applied_at") or a.get("created_at") or ""
+
+        applicants.append({
+            "application_id": str(a.get("id") or ""),
+            "applicant_id": uid,
+            "name": u_name,
+            "email": u_email,
+            "role": u_role,
+            "identifier": identifier,
+            "department": department,
+            "status": app_status,
+            "resume_url": a.get("resume_url") or "",
+            "cover_letter": a.get("cover_letter") or "",
+            "applied_at": app_date,
+        })
+
+    applicants.sort(key=lambda x: x.get("applied_at") or "", reverse=True)
+
+    total_count = len(applicants)
+    bounded_limit = max(1, min(limit, 200))
+    paginated = applicants[offset : offset + bounded_limit]
+
+    return {
+        "job_id": str(job_id),
+        "job_title": target_job.get("title", ""),
+        "company": target_job.get("company", ""),
+        "total_count": total_count,
+        "limit": bounded_limit,
+        "offset": offset,
+        "applicants": paginated,
+    }

@@ -64,6 +64,92 @@ export interface UserManagementItem {
   created_at?: string;
 }
 
+export interface EventParticipationItem {
+  id: string;
+  title: string;
+  status: string;
+  event_date: string;
+  event_type: string;
+  location: string;
+  registration_deadline: string;
+  registration_count: number;
+  unique_participant_count: number;
+  created_at: string;
+}
+
+export interface EventParticipationOverview {
+  total_registrations: number;
+  unique_participants: number;
+  total_events: number;
+  events: EventParticipationItem[];
+}
+
+export interface EventParticipantDetail {
+  registration_id: string;
+  user_id: string;
+  name: string;
+  email: string;
+  role: string;
+  identifier: string;
+  department: string;
+  registration_date: string;
+  status: string;
+}
+
+export interface EventParticipantsResponse {
+  event_id: string;
+  event_title: string;
+  total_count: number;
+  limit: number;
+  offset: number;
+  participants: EventParticipantDetail[];
+}
+
+export interface JobParticipationItem {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  job_type: string;
+  status: string;
+  deadline: string;
+  application_count: number;
+  unique_applicant_count: number;
+  applications_by_status: Record<string, number>;
+  created_at: string;
+}
+
+export interface JobParticipationOverview {
+  total_jobs: number;
+  total_applications: number;
+  unique_applicants: number;
+  jobs: JobParticipationItem[];
+}
+
+export interface JobApplicantDetail {
+  application_id: string;
+  applicant_id: string;
+  name: string;
+  email: string;
+  role: string;
+  identifier: string;
+  department: string;
+  status: string;
+  resume_url: string;
+  cover_letter: string;
+  applied_at: string;
+}
+
+export interface JobApplicantsResponse {
+  job_id: string;
+  job_title: string;
+  company: string;
+  total_count: number;
+  limit: number;
+  offset: number;
+  applicants: JobApplicantDetail[];
+}
+
 function getToken(): string {
   const token = localStorage.getItem('soet_access_token');
 
@@ -320,6 +406,102 @@ export const adminService = {
         headers: {
           Authorization: `Bearer ${getToken()}`,
           'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    return parseResponse(response);
+  },
+
+  // ============================================================
+  // PARTICIPATION & REGISTRATION MANAGEMENT
+  // ============================================================
+
+  async getEventParticipation(filters?: {
+    search?: string;
+    status?: string;
+  }): Promise<EventParticipationOverview> {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.status && filters.status !== 'all') params.append('status', filters.status);
+
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const response = await fetch(`${API_URL}/admin/participation/events${query}`, {
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+      },
+    });
+
+    return parseResponse(response);
+  },
+
+  async getEventParticipants(
+    eventId: string,
+    filters?: {
+      search?: string;
+      role?: string;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<EventParticipantsResponse> {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.role && filters.role !== 'all') params.append('role', filters.role);
+    if (filters?.limit) params.append('limit', String(filters.limit));
+    if (filters?.offset) params.append('offset', String(filters.offset));
+
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const response = await fetch(
+      `${API_URL}/admin/participation/events/${encodeURIComponent(eventId)}/participants${query}`,
+      {
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+        },
+      }
+    );
+
+    return parseResponse(response);
+  },
+
+  async getJobParticipation(filters?: {
+    search?: string;
+    status?: string;
+  }): Promise<JobParticipationOverview> {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.status && filters.status !== 'all') params.append('status', filters.status);
+
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const response = await fetch(`${API_URL}/admin/participation/jobs${query}`, {
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+      },
+    });
+
+    return parseResponse(response);
+  },
+
+  async getJobApplicantsDetailed(
+    jobId: string,
+    filters?: {
+      search?: string;
+      status?: string;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<JobApplicantsResponse> {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.status && filters.status !== 'all') params.append('status', filters.status);
+    if (filters?.limit) params.append('limit', String(filters.limit));
+    if (filters?.offset) params.append('offset', String(filters.offset));
+
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const response = await fetch(
+      `${API_URL}/admin/participation/jobs/${encodeURIComponent(jobId)}/applicants${query}`,
+      {
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
         },
       }
     );

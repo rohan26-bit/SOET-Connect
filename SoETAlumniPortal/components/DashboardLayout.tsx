@@ -9,7 +9,7 @@ import {
   Home, Users, Briefcase, Calendar, 
   Bell, User, Settings, Info, 
   LogOut, Shield, BarChart3, Megaphone,
-  Menu, X, ShieldCheck, GraduationCap, Bug,
+  Menu, X, ShieldCheck, GraduationCap, Bug, UserCheck,
   Image as ImageIcon
 } from 'lucide-react';
 
@@ -50,6 +50,7 @@ const adminNavItems = [
   { name: 'Student Management', icon: GraduationCap, href: '/admin/student-management' },
   { name: 'Alumni Management', icon: Users, href: '/admin/alumni' },
   { name: 'Job Approvals', icon: Briefcase, href: '/admin/jobs' },
+  { name: 'Participation & Registrations', icon: UserCheck, href: '/admin/participation' },
   { name: 'Events', icon: Calendar, href: '/admin/events' },
   { name: 'Gallery Moderation', icon: ImageIcon, href: '/admin/gallery' },
   { name: 'Announcements', icon: Megaphone, href: '/admin/announcements' },
