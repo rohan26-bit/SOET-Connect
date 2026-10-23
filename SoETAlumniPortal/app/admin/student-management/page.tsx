@@ -7,7 +7,7 @@ import LoadingState from '@/components/LoadingState';
 import { adminService, UserManagementItem } from '@/lib/services/adminService';
 import { 
   GraduationCap, Search, Ban, CheckCircle2, 
-  Clock, XCircle, AlertCircle, ArrowRight, RefreshCw
+  Clock, XCircle, AlertCircle, ArrowRight, RefreshCw, Download
 } from 'lucide-react';
 
 export default function AdminStudentManagementPage() {
@@ -17,6 +17,24 @@ export default function AdminStudentManagementPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'approved' | 'pending' | 'rejected' | 'suspended'>('all');
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<boolean>(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  const handleExportStudents = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      await adminService.exportStudentsCsv({
+        search: search || undefined,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+      });
+    } catch (err: any) {
+      console.error('Failed to export students:', err);
+      setExportError(err?.message || 'Failed to export students to CSV.');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const loadStudents = async () => {
     setLoading(true);
@@ -209,6 +227,22 @@ export default function AdminStudentManagementPage() {
         </div>
       )}
 
+      {/* Export Error Banner */}
+      {exportError && (
+        <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center justify-between text-xs text-rose-800 font-medium">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{exportError}</span>
+          </div>
+          <button
+            onClick={() => setExportError(null)}
+            className="text-rose-600 hover:text-rose-800 p-1 rounded-lg hover:bg-rose-100 transition"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Students Table Card */}
       <div className="bg-white rounded-3xl border border-[#DDD7D2] shadow-sm overflow-hidden">
         {/* Search Header */}
@@ -223,9 +257,27 @@ export default function AdminStudentManagementPage() {
               className="w-full pl-10 pr-4 py-2 bg-[#FBFAF8] border border-[#DDD7D2] rounded-xl text-xs outline-none focus:ring-2 focus:ring-[#F28C38] focus:bg-white text-[#4A3832] transition"
             />
           </div>
-          <span className="text-xs font-semibold text-[#6B6B6B]">
-            Showing: {filtered.length} Students
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-semibold text-[#6B6B6B]">
+              Showing: {filtered.length} Students
+            </span>
+            <button
+              type="button"
+              onClick={handleExportStudents}
+              disabled={exporting || students.length === 0}
+              className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#F28C38] hover:bg-[#E07D2E] text-white rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50 cursor-pointer"
+              title={statusFilter !== 'all' || search.trim() ? `Export ${filtered.length} filtered students` : `Export all ${students.length} students`}
+            >
+              <Download className={`w-3.5 h-3.5 ${exporting ? 'animate-bounce' : ''}`} />
+              <span>
+                {exporting
+                  ? 'Preparing CSV...'
+                  : (statusFilter !== 'all' || search.trim())
+                  ? `Export CSV (${filtered.length})`
+                  : `Export All CSV`}
+              </span>
+            </button>
+          </div>
         </div>
 
         {loading ? (

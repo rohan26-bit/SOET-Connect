@@ -1,3 +1,5 @@
+import { downloadAdminCsvEndpoint, getTodayDateString } from '@/lib/utils/csvExport';
+
 const API_URL = '/api';
 
 export interface AdminMetrics {
@@ -507,5 +509,111 @@ export const adminService = {
     );
 
     return parseResponse(response);
+  },
+
+  // ============================================================
+  // CSV EXPORTS
+  // ============================================================
+
+  async exportEventParticipantsCsv(
+    eventId: string,
+    filters?: {
+      search?: string;
+      role?: string;
+    }
+  ): Promise<void> {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append("search", filters.search);
+    if (filters?.role && filters.role !== "all") params.append("role", filters.role);
+
+    const query = params.toString() ? `?${params.toString()}` : "";
+    const today = getTodayDateString();
+    return downloadAdminCsvEndpoint(
+      `${API_URL}/admin/participation/events/${encodeURIComponent(eventId)}/export${query}`,
+      `event_participants_${today}.csv`
+    );
+  },
+
+  async exportAllEventRegistrationsCsv(filters?: {
+    search?: string;
+    status?: string;
+  }): Promise<void> {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append("search", filters.search);
+    if (filters?.status && filters.status !== "all") params.append("status", filters.status);
+
+    const query = params.toString() ? `?${params.toString()}` : "";
+    const today = getTodayDateString();
+    return downloadAdminCsvEndpoint(
+      `${API_URL}/admin/participation/events/export${query}`,
+      `event_registrations_${today}.csv`
+    );
+  },
+
+  async exportJobApplicantsCsv(
+    jobId: string,
+    filters?: {
+      search?: string;
+      status?: string;
+    }
+  ): Promise<void> {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append("search", filters.search);
+    if (filters?.status && filters.status !== "all") params.append("status", filters.status);
+
+    const query = params.toString() ? `?${params.toString()}` : "";
+    const today = getTodayDateString();
+    return downloadAdminCsvEndpoint(
+      `${API_URL}/admin/participation/jobs/${encodeURIComponent(jobId)}/export${query}`,
+      `job_applicants_${today}.csv`
+    );
+  },
+
+  async exportAllJobApplicationsCsv(filters?: {
+    search?: string;
+    status?: string;
+  }): Promise<void> {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append("search", filters.search);
+    if (filters?.status && filters.status !== "all") params.append("status", filters.status);
+
+    const query = params.toString() ? `?${params.toString()}` : "";
+    const today = getTodayDateString();
+    return downloadAdminCsvEndpoint(
+      `${API_URL}/admin/participation/jobs/export${query}`,
+      `job_applications_${today}.csv`
+    );
+  },
+
+  async exportStudentsCsv(filters?: {
+    search?: string;
+    status?: string;
+  }): Promise<void> {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append("search", filters.search);
+    if (filters?.status && filters.status !== "all") params.append("status", filters.status);
+
+    const query = params.toString() ? `?${params.toString()}` : "";
+    const today = getTodayDateString();
+    return downloadAdminCsvEndpoint(
+      `${API_URL}/admin/students/export${query}`,
+      `students_${today}.csv`
+    );
+  },
+
+  async exportAlumniCsv(filters?: {
+    search?: string;
+    status?: string;
+  }): Promise<void> {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append("search", filters.search);
+    if (filters?.status && filters.status !== "all") params.append("status", filters.status);
+
+    const query = params.toString() ? `?${params.toString()}` : "";
+    const today = getTodayDateString();
+    return downloadAdminCsvEndpoint(
+      `${API_URL}/admin/alumni/export${query}`,
+      `alumni_${today}.csv`
+    );
   },
 };

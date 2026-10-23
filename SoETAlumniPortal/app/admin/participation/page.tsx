@@ -37,6 +37,7 @@ import {
   Mail,
   Eye,
   X,
+  Download,
 } from 'lucide-react';
 
 export default function AdminParticipationPage() {
@@ -49,6 +50,10 @@ export default function AdminParticipationPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  // CSV Export states
+  const [exporting, setExporting] = useState<boolean>(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   // Events participation data
   const [eventData, setEventData] = useState<EventParticipationOverview | null>(null);
@@ -226,6 +231,79 @@ export default function AdminParticipationPage() {
     });
   }, [applicantsList, applicantSearch, applicantStatusFilter]);
 
+  // Active filter detection flags
+  const isParticipantFiltered = Boolean(participantSearch.trim()) || participantRoleFilter !== 'all';
+  const isEventFiltered = Boolean(eventSearch.trim()) || eventStatusFilter !== 'all';
+  const isApplicantFiltered = Boolean(applicantSearch.trim()) || applicantStatusFilter !== 'all';
+  const isJobFiltered = Boolean(jobSearch.trim()) || jobStatusFilter !== 'all';
+
+  // Export handlers
+  const handleExportEventParticipants = async (filteredOnly: boolean) => {
+    if (!selectedEvent) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      await adminService.exportEventParticipantsCsv(selectedEvent.id, {
+        search: filteredOnly ? participantSearch : undefined,
+        role: filteredOnly ? participantRoleFilter : undefined,
+      });
+    } catch (err: any) {
+      console.error('Failed to export event participants:', err);
+      setExportError(err?.message || 'Failed to export participants to CSV.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportAllEvents = async (filteredOnly: boolean) => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      await adminService.exportAllEventRegistrationsCsv({
+        search: filteredOnly ? eventSearch : undefined,
+        status: filteredOnly ? eventStatusFilter : undefined,
+      });
+    } catch (err: any) {
+      console.error('Failed to export all event registrations:', err);
+      setExportError(err?.message || 'Failed to export event registrations to CSV.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportJobApplicants = async (filteredOnly: boolean) => {
+    if (!selectedJob) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      await adminService.exportJobApplicantsCsv(selectedJob.id, {
+        search: filteredOnly ? applicantSearch : undefined,
+        status: filteredOnly ? applicantStatusFilter : undefined,
+      });
+    } catch (err: any) {
+      console.error('Failed to export job applicants:', err);
+      setExportError(err?.message || 'Failed to export applicants to CSV.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportAllJobs = async (filteredOnly: boolean) => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      await adminService.exportAllJobApplicationsCsv({
+        search: filteredOnly ? jobSearch : undefined,
+        status: filteredOnly ? jobStatusFilter : undefined,
+      });
+    } catch (err: any) {
+      console.error('Failed to export all job applications:', err);
+      setExportError(err?.message || 'Failed to export job applications to CSV.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   // Status badge styling helpers
   const getStatusBadge = (status: string) => {
     const s = status.toLowerCase();
@@ -328,6 +406,23 @@ export default function AdminParticipationPage() {
               className="px-3 py-1 bg-white border border-rose-200 rounded-lg text-rose-700 hover:bg-rose-50 text-xs font-bold"
             >
               Retry
+            </button>
+          </div>
+        )}
+
+        {/* EXPORT ERROR ALERT */}
+        {exportError && (
+          <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center justify-between gap-3 text-rose-800 text-xs font-medium">
+            <div className="flex items-center gap-2.5">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{exportError}</span>
+            </div>
+            <button
+              onClick={() => setExportError(null)}
+              className="text-rose-600 hover:text-rose-800 p-1 rounded-lg hover:bg-rose-100 transition"
+              title="Dismiss error"
+            >
+              <X className="w-4 h-4" />
             </button>
           </div>
         )}
@@ -511,30 +606,65 @@ export default function AdminParticipationPage() {
                   </div>
                 </div>
 
-                {/* Filters for participants */}
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="relative flex-1">
-                    <Search className="w-4 h-4 text-[#888888] absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={participantSearch}
-                      onChange={(e) => setParticipantSearch(e.target.value)}
-                      placeholder="Search participants by name, email, student ID, department..."
-                      className="w-full pl-9 pr-4 py-2 bg-white border border-[#DDD7D2] rounded-xl text-xs text-[#222222] placeholder-[#888888] focus:outline-none focus:ring-2 focus:ring-[#F28C38]"
-                    />
+                {/* Filters and CSV export for participants */}
+                <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+                  <div className="flex flex-col sm:flex-row gap-3 flex-1">
+                    <div className="relative flex-1">
+                      <Search className="w-4 h-4 text-[#888888] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={participantSearch}
+                        onChange={(e) => setParticipantSearch(e.target.value)}
+                        placeholder="Search participants by name, email, student ID, department..."
+                        className="w-full pl-9 pr-4 py-2 bg-white border border-[#DDD7D2] rounded-xl text-xs text-[#222222] placeholder-[#888888] focus:outline-none focus:ring-2 focus:ring-[#F28C38]"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Filter className="w-4 h-4 text-[#888888]" />
+                      <select
+                        value={participantRoleFilter}
+                        onChange={(e) => setParticipantRoleFilter(e.target.value)}
+                        className="py-2 px-3 bg-white border border-[#DDD7D2] rounded-xl text-xs text-[#222222] focus:outline-none focus:ring-2 focus:ring-[#F28C38]"
+                      >
+                        <option value="all">All Roles</option>
+                        <option value="student">Students Only</option>
+                        <option value="alumni">Alumni Only</option>
+                      </select>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <Filter className="w-4 h-4 text-[#888888]" />
-                    <select
-                      value={participantRoleFilter}
-                      onChange={(e) => setParticipantRoleFilter(e.target.value)}
-                      className="py-2 px-3 bg-white border border-[#DDD7D2] rounded-xl text-xs text-[#222222] focus:outline-none focus:ring-2 focus:ring-[#F28C38]"
+                  {/* CSV Export controls */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleExportEventParticipants(isParticipantFiltered)}
+                      disabled={exporting || participantsLoading || (isParticipantFiltered ? filteredParticipants.length === 0 : selectedEvent.registration_count === 0)}
+                      className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#F28C38] hover:bg-[#E07D2E] text-white rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50 cursor-pointer"
+                      title={isParticipantFiltered ? `Download CSV of ${filteredParticipants.length} filtered participants` : `Download CSV of all ${selectedEvent.registration_count} participants`}
                     >
-                      <option value="all">All Roles</option>
-                      <option value="student">Students Only</option>
-                      <option value="alumni">Alumni Only</option>
-                    </select>
+                      <Download className={`w-3.5 h-3.5 ${exporting ? 'animate-bounce' : ''}`} />
+                      <span>
+                        {exporting
+                          ? 'Preparing CSV...'
+                          : isParticipantFiltered
+                          ? `Download CSV (${filteredParticipants.length} Filtered)`
+                          : `Download CSV (${selectedEvent.registration_count})`}
+                      </span>
+                    </button>
+
+                    {isParticipantFiltered && (
+                      <button
+                        type="button"
+                        onClick={() => handleExportEventParticipants(false)}
+                        disabled={exporting || selectedEvent.registration_count === 0}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-[#DDD7D2] hover:border-[#F28C38] text-[#4A3832] hover:text-[#F28C38] rounded-xl text-xs font-semibold transition disabled:opacity-50 cursor-pointer"
+                        title="Download all participants without filter"
+                      >
+                        <Download className="w-3.5 h-3.5 text-[#888888]" />
+                        <span>All ({selectedEvent.registration_count})</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -622,32 +752,67 @@ export default function AdminParticipationPage() {
             ) : (
               /* VIEW B: EVENTS OVERVIEW LIST */
               <div className="space-y-4">
-                {/* Search & Filter Bar */}
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="relative flex-1">
-                    <Search className="w-4 h-4 text-[#888888] absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={eventSearch}
-                      onChange={(e) => setEventSearch(e.target.value)}
-                      placeholder="Search events by title, location, type..."
-                      className="w-full pl-9 pr-4 py-2 bg-white border border-[#DDD7D2] rounded-xl text-xs text-[#222222] placeholder-[#888888] focus:outline-none focus:ring-2 focus:ring-[#F28C38]"
-                    />
+                {/* Search, Filter & Export Bar */}
+                <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+                  <div className="flex flex-col sm:flex-row gap-3 flex-1">
+                    <div className="relative flex-1">
+                      <Search className="w-4 h-4 text-[#888888] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={eventSearch}
+                        onChange={(e) => setEventSearch(e.target.value)}
+                        placeholder="Search events by title, location, type..."
+                        className="w-full pl-9 pr-4 py-2 bg-white border border-[#DDD7D2] rounded-xl text-xs text-[#222222] placeholder-[#888888] focus:outline-none focus:ring-2 focus:ring-[#F28C38]"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Filter className="w-4 h-4 text-[#888888]" />
+                      <select
+                        value={eventStatusFilter}
+                        onChange={(e) => setEventStatusFilter(e.target.value)}
+                        className="py-2 px-3 bg-white border border-[#DDD7D2] rounded-xl text-xs text-[#222222] focus:outline-none focus:ring-2 focus:ring-[#F28C38]"
+                      >
+                        <option value="all">All Statuses</option>
+                        <option value="approved">Approved</option>
+                        <option value="pending">Pending</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                      </select>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <Filter className="w-4 h-4 text-[#888888]" />
-                    <select
-                      value={eventStatusFilter}
-                      onChange={(e) => setEventStatusFilter(e.target.value)}
-                      className="py-2 px-3 bg-white border border-[#DDD7D2] rounded-xl text-xs text-[#222222] focus:outline-none focus:ring-2 focus:ring-[#F28C38]"
+                  {/* CSV Export controls — Events overview */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleExportAllEvents(isEventFiltered)}
+                      disabled={exporting || (eventData?.total_events ?? 0) === 0}
+                      className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#F28C38] hover:bg-[#E07D2E] text-white rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50 cursor-pointer"
+                      title={isEventFiltered ? `Export ${filteredEvents.length} filtered events` : `Export all ${eventData?.total_events ?? 0} events`}
                     >
-                      <option value="all">All Statuses</option>
-                      <option value="approved">Approved</option>
-                      <option value="pending">Pending</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
+                      <Download className={`w-3.5 h-3.5 ${exporting ? 'animate-bounce' : ''}`} />
+                      <span>
+                        {exporting
+                          ? 'Preparing CSV...'
+                          : isEventFiltered
+                          ? `Export CSV (${filteredEvents.length} Filtered)`
+                          : `Export All Events CSV`}
+                      </span>
+                    </button>
+
+                    {isEventFiltered && (
+                      <button
+                        type="button"
+                        onClick={() => handleExportAllEvents(false)}
+                        disabled={exporting || (eventData?.total_events ?? 0) === 0}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-[#DDD7D2] hover:border-[#F28C38] text-[#4A3832] hover:text-[#F28C38] rounded-xl text-xs font-semibold transition disabled:opacity-50 cursor-pointer"
+                        title="Export all events without filter"
+                      >
+                        <Download className="w-3.5 h-3.5 text-[#888888]" />
+                        <span>All ({eventData?.total_events ?? 0})</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -805,33 +970,68 @@ export default function AdminParticipationPage() {
                   </div>
                 </div>
 
-                {/* Filters for applicants */}
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="relative flex-1">
-                    <Search className="w-4 h-4 text-[#888888] absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={applicantSearch}
-                      onChange={(e) => setApplicantSearch(e.target.value)}
-                      placeholder="Search applicants by name, email, student ID, department..."
-                      className="w-full pl-9 pr-4 py-2 bg-white border border-[#DDD7D2] rounded-xl text-xs text-[#222222] placeholder-[#888888] focus:outline-none focus:ring-2 focus:ring-[#F28C38]"
-                    />
+                {/* Filters & CSV Export for applicants */}
+                <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+                  <div className="flex flex-col sm:flex-row gap-3 flex-1">
+                    <div className="relative flex-1">
+                      <Search className="w-4 h-4 text-[#888888] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={applicantSearch}
+                        onChange={(e) => setApplicantSearch(e.target.value)}
+                        placeholder="Search applicants by name, email, student ID, department..."
+                        className="w-full pl-9 pr-4 py-2 bg-white border border-[#DDD7D2] rounded-xl text-xs text-[#222222] placeholder-[#888888] focus:outline-none focus:ring-2 focus:ring-[#F28C38]"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Filter className="w-4 h-4 text-[#888888]" />
+                      <select
+                        value={applicantStatusFilter}
+                        onChange={(e) => setApplicantStatusFilter(e.target.value)}
+                        className="py-2 px-3 bg-white border border-[#DDD7D2] rounded-xl text-xs text-[#222222] focus:outline-none focus:ring-2 focus:ring-[#F28C38]"
+                      >
+                        <option value="all">All Application Statuses</option>
+                        <option value="applied">Applied</option>
+                        <option value="under_review">Under Review</option>
+                        <option value="shortlisted">Shortlisted</option>
+                        <option value="selected">Selected</option>
+                        <option value="rejected">Rejected</option>
+                      </select>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <Filter className="w-4 h-4 text-[#888888]" />
-                    <select
-                      value={applicantStatusFilter}
-                      onChange={(e) => setApplicantStatusFilter(e.target.value)}
-                      className="py-2 px-3 bg-white border border-[#DDD7D2] rounded-xl text-xs text-[#222222] focus:outline-none focus:ring-2 focus:ring-[#F28C38]"
+                  {/* CSV Export controls — Job applicants detail */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleExportJobApplicants(isApplicantFiltered)}
+                      disabled={exporting || applicantsLoading || (isApplicantFiltered ? filteredApplicants.length === 0 : selectedJob.application_count === 0)}
+                      className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#F28C38] hover:bg-[#E07D2E] text-white rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50 cursor-pointer"
+                      title={isApplicantFiltered ? `Download CSV of ${filteredApplicants.length} filtered applicants` : `Download CSV of all ${selectedJob.application_count} applicants`}
                     >
-                      <option value="all">All Application Statuses</option>
-                      <option value="applied">Applied</option>
-                      <option value="under_review">Under Review</option>
-                      <option value="shortlisted">Shortlisted</option>
-                      <option value="selected">Selected</option>
-                      <option value="rejected">Rejected</option>
-                    </select>
+                      <Download className={`w-3.5 h-3.5 ${exporting ? 'animate-bounce' : ''}`} />
+                      <span>
+                        {exporting
+                          ? 'Preparing CSV...'
+                          : isApplicantFiltered
+                          ? `Download CSV (${filteredApplicants.length} Filtered)`
+                          : `Download CSV (${selectedJob.application_count})`}
+                      </span>
+                    </button>
+
+                    {isApplicantFiltered && (
+                      <button
+                        type="button"
+                        onClick={() => handleExportJobApplicants(false)}
+                        disabled={exporting || selectedJob.application_count === 0}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-[#DDD7D2] hover:border-[#F28C38] text-[#4A3832] hover:text-[#F28C38] rounded-xl text-xs font-semibold transition disabled:opacity-50 cursor-pointer"
+                        title="Download all applicants without filter"
+                      >
+                        <Download className="w-3.5 h-3.5 text-[#888888]" />
+                        <span>All ({selectedJob.application_count})</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -941,32 +1141,67 @@ export default function AdminParticipationPage() {
             ) : (
               /* VIEW B: JOBS OVERVIEW LIST */
               <div className="space-y-4">
-                {/* Search & Filter Bar */}
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="relative flex-1">
-                    <Search className="w-4 h-4 text-[#888888] absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={jobSearch}
-                      onChange={(e) => setJobSearch(e.target.value)}
-                      placeholder="Search jobs by title, company, location..."
-                      className="w-full pl-9 pr-4 py-2 bg-white border border-[#DDD7D2] rounded-xl text-xs text-[#222222] placeholder-[#888888] focus:outline-none focus:ring-2 focus:ring-[#F28C38]"
-                    />
+                {/* Search, Filter & Export Bar */}
+                <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+                  <div className="flex flex-col sm:flex-row gap-3 flex-1">
+                    <div className="relative flex-1">
+                      <Search className="w-4 h-4 text-[#888888] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={jobSearch}
+                        onChange={(e) => setJobSearch(e.target.value)}
+                        placeholder="Search jobs by title, company, location..."
+                        className="w-full pl-9 pr-4 py-2 bg-white border border-[#DDD7D2] rounded-xl text-xs text-[#222222] placeholder-[#888888] focus:outline-none focus:ring-2 focus:ring-[#F28C38]"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Filter className="w-4 h-4 text-[#888888]" />
+                      <select
+                        value={jobStatusFilter}
+                        onChange={(e) => setJobStatusFilter(e.target.value)}
+                        className="py-2 px-3 bg-white border border-[#DDD7D2] rounded-xl text-xs text-[#222222] focus:outline-none focus:ring-2 focus:ring-[#F28C38]"
+                      >
+                        <option value="all">All Posting Statuses</option>
+                        <option value="approved">Approved / Active</option>
+                        <option value="pending">Pending</option>
+                        <option value="closed">Closed / Expired</option>
+                        <option value="rejected">Rejected</option>
+                      </select>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <Filter className="w-4 h-4 text-[#888888]" />
-                    <select
-                      value={jobStatusFilter}
-                      onChange={(e) => setJobStatusFilter(e.target.value)}
-                      className="py-2 px-3 bg-white border border-[#DDD7D2] rounded-xl text-xs text-[#222222] focus:outline-none focus:ring-2 focus:ring-[#F28C38]"
+                  {/* CSV Export controls — Jobs overview */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleExportAllJobs(isJobFiltered)}
+                      disabled={exporting || (jobData?.total_jobs ?? 0) === 0}
+                      className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#F28C38] hover:bg-[#E07D2E] text-white rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50 cursor-pointer"
+                      title={isJobFiltered ? `Export ${filteredJobs.length} filtered jobs` : `Export all ${jobData?.total_jobs ?? 0} jobs`}
                     >
-                      <option value="all">All Posting Statuses</option>
-                      <option value="approved">Approved / Active</option>
-                      <option value="pending">Pending</option>
-                      <option value="closed">Closed / Expired</option>
-                      <option value="rejected">Rejected</option>
-                    </select>
+                      <Download className={`w-3.5 h-3.5 ${exporting ? 'animate-bounce' : ''}`} />
+                      <span>
+                        {exporting
+                          ? 'Preparing CSV...'
+                          : isJobFiltered
+                          ? `Export CSV (${filteredJobs.length} Filtered)`
+                          : `Export All Jobs CSV`}
+                      </span>
+                    </button>
+
+                    {isJobFiltered && (
+                      <button
+                        type="button"
+                        onClick={() => handleExportAllJobs(false)}
+                        disabled={exporting || (jobData?.total_jobs ?? 0) === 0}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-[#DDD7D2] hover:border-[#F28C38] text-[#4A3832] hover:text-[#F28C38] rounded-xl text-xs font-semibold transition disabled:opacity-50 cursor-pointer"
+                        title="Export all jobs without filter"
+                      >
+                        <Download className="w-3.5 h-3.5 text-[#888888]" />
+                        <span>All ({jobData?.total_jobs ?? 0})</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 

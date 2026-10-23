@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
 import { adminService, UserManagementItem } from '@/lib/services/adminService';
-import { GraduationCap, Search, Ban, CheckCircle2, UserCheck, Clock, XCircle, AlertCircle } from 'lucide-react';
+import { GraduationCap, Search, Ban, CheckCircle2, UserCheck, Clock, XCircle, AlertCircle, Download } from 'lucide-react';
 
 export default function AdminStudentsPage() {
   const [students, setStudents] = useState<UserManagementItem[]>([]);
@@ -12,6 +12,8 @@ export default function AdminStudentsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<boolean>(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const loadStudents = async () => {
     setLoading(true);
@@ -109,6 +111,20 @@ export default function AdminStudentsPage() {
     );
   };
 
+
+  const handleExportStudents = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      await adminService.exportStudentsCsv({ search: search || undefined, status: statusFilter !== 'all' ? statusFilter : undefined });
+    } catch (err: any) {
+      console.error('Failed to export students:', err);
+      setExportError(err?.message || 'Failed to export students to CSV.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <DashboardLayout>
       {/* Breadcrumbs */}
@@ -118,6 +134,17 @@ export default function AdminStudentsPage() {
         <span className="text-blue-600">Student Verification</span>
       </div>
 
+      {/* Export error alert */}
+      {exportError && (
+        <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-2xl flex items-center justify-between gap-3 text-rose-800 text-xs font-medium">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{exportError}</span>
+          </div>
+          <button onClick={() => setExportError(null)} className="text-rose-600 hover:text-rose-800 p-1 rounded-lg hover:bg-rose-100 transition">✕</button>
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">Student Verification</h1>
@@ -126,7 +153,26 @@ export default function AdminStudentsPage() {
           </p>
         </div>
 
-        {/* Quick Filter Tabs */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          {/* Export CSV button */}
+          <button
+            type="button"
+            onClick={handleExportStudents}
+            disabled={exporting || students.length === 0}
+            className="inline-flex items-center gap-2 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50 cursor-pointer"
+            title={statusFilter !== 'all' || search ? `Export ${filtered.length} filtered students` : `Export all ${students.length} students`}
+          >
+            <Download className={`w-3.5 h-3.5 ${exporting ? 'animate-bounce' : ''}`} />
+            <span>
+              {exporting
+                ? 'Preparing CSV...'
+                : (statusFilter !== 'all' || search.trim())
+                ? `Export CSV (${filtered.length})`
+                : `Export All Students CSV`}
+            </span>
+          </button>
+
+          {/* Quick Filter Tabs */}
         <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-2xl self-start md:self-auto">
           <button
             onClick={() => setStatusFilter('all')}
@@ -168,6 +214,7 @@ export default function AdminStudentsPage() {
           >
             Rejected
           </button>
+        </div>
         </div>
       </div>
 
