@@ -1,7 +1,12 @@
 import os
 import re
+import smtplib
+import socket
 import uuid
 from datetime import datetime, timezone
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.utils import formatdate, make_msgid
 from typing import Optional, Dict, Any, Tuple, List
 import httpx
 
@@ -32,9 +37,33 @@ def normalize_phone_number(phone: str, default_country: str = "+91") -> str:
     return f"+{cleaned}"
 
 
-def is_email_configured() -> bool:
+def is_smtp_configured() -> bool:
+    """Return True if Gmail SMTP credentials are fully configured."""
+    user = (os.getenv("SMTP_USER", "").strip() or os.getenv("GMAIL_USER", "").strip())
+    password = (os.getenv("SMTP_PASSWORD", "").strip() or os.getenv("GMAIL_APP_PASSWORD", "").strip())
+    return bool(user and password)
+
+
+def is_resend_configured() -> bool:
     """Return True if Resend email provider credentials are fully configured."""
     return bool(os.getenv("RESEND_API_KEY", "").strip())
+
+
+def is_email_configured() -> bool:
+    """Return True if either Gmail SMTP or Resend email credentials are configured."""
+    return is_smtp_configured() or is_resend_configured()
+
+
+def get_email_provider_name() -> str:
+    """
+    Return the active email provider identifier.
+    Prioritizes Gmail SMTP when configured; falls back to Resend API.
+    """
+    if is_smtp_configured():
+        return "smtp_gmail"
+    if is_resend_configured():
+        return "resend"
+    return "unconfigured"
 
 
 def is_sms_configured() -> bool:
@@ -143,7 +172,115 @@ def record_delivery(
     return record
 
 
-def send_email_message(to_email: str, subject: str, message: str) -> Tuple[bool, Optional[str], Optional[str]]:
+def send_email_via_smtp(to_email: str, subject: str, message: str) -> Tuple[bool, Optional[str], Optional[str]]:
+    """
+    Send email via Gmail SMTP with TLS.
+    Returns: (success: bool, provider_message_id: Optional[str], error_message: Optional[str])
+    """
+    smtp_user = (os.getenv("SMTP_USER", "").strip() or os.getenv("GMAIL_USER", "").strip())
+    raw_password = (os.getenv("SMTP_PASSWORD", "").strip() or os.getenv("GMAIL_APP_PASSWORD", "").strip())
+    smtp_password = raw_password.replace(" ", "")
+
+    if not (smtp_user and smtp_password):
+        return False, None, "SMTP credentials are not configured (SMTP_USER or SMTP_PASSWORD missing)."
+
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com").strip() or "smtp.gmail.com"
+    port_str = os.getenv("SMTP_PORT", "587").strip()
+    try:
+        smtp_port = int(port_str)
+    except ValueError:
+        smtp_port = 587
+
+    raw_from = (
+        os.getenv("SMTP_FROM_EMAIL", "").strip()
+        or os.getenv("GMAIL_FROM_EMAIL", "").strip()
+        or smtp_user
+    )
+    from_header = raw_from if ("<" in raw_from and ">" in raw_from) else f"SOET Connect - Alumni Portal <{raw_from}>"
+
+    # Guard against accidental external network calls during automated tests with mock emails
+    if (os.getenv("PYTEST_CURRENT_TEST") or os.getenv("DATABASE_MODE", "").lower() == "mock") and (
+        to_email.endswith("@example.com") or to_email.endswith(".test")
+    ):
+        return True, "mock_smtp_test_msg", None
+
+    if any(ord(c) < 32 for c in smtp_password):
+        return False, None, "Invalid Google App Password: input contains terminal control characters (e.g. raw Ctrl+V). Please re-enter the 16-character App Password."
+    if len(smtp_password) < 8:
+        return False, None, f"Invalid Google App Password: length is too short ({len(smtp_password)} chars). Google App Passwords are 16 characters."
+
+    html_body = f"""
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+      <div style="border-bottom: 2px solid #f28c38; padding-bottom: 12px; margin-bottom: 16px;">
+        <h2 style="color: #1e3a8a; margin: 0; font-size: 20px;">SOET Connect - Alumni Portal</h2>
+      </div>
+      <p style="color: #334155; font-size: 15px; line-height: 1.6; white-space: pre-line;">{message}</p>
+      <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 24px 0;" />
+      <p style="color: #94a3b8; font-size: 12px; line-height: 1.4;">
+        This is an automated notification from SOET Connect - Alumni Portal. Please do not reply directly to this email.
+      </p>
+    </div>
+    """
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = from_header
+    msg["To"] = to_email
+    msg["Date"] = formatdate(localtime=True)
+    msg_id = make_msgid(domain=smtp_host if "." in smtp_host else "soet-connect.local")
+    msg["Message-ID"] = msg_id
+
+    part_text = MIMEText(message, "plain", "utf-8")
+    part_html = MIMEText(html_body, "html", "utf-8")
+    msg.attach(part_text)
+    msg.attach(part_html)
+
+    server = None
+    try:
+        if smtp_port == 465:
+            server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=10.0)
+            server.ehlo()
+        else:
+            server = smtplib.SMTP(smtp_host, smtp_port, timeout=10.0)
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+
+        server.login(smtp_user, smtp_password)
+        server.send_message(msg)
+        return True, msg_id, None
+    except smtplib.SMTPAuthenticationError as e:
+        err_str = (
+            "Gmail SMTP authentication failed. "
+            "Please ensure 2-Step Verification is enabled and a 16-character App Password is used. "
+            f"Details: {str(e)[:150]}"
+        )
+        return False, None, err_str
+    except smtplib.SMTPServerDisconnected as e:
+        err_str = (
+            "Gmail SMTP connection closed by server during authentication. "
+            "Google automatically terminates SMTP connections when credentials are not accepted (535 Bad Credentials). "
+            "Please verify 2-Step Verification is enabled and use a 16-character App Password."
+        )
+        return False, None, err_str
+    except (smtplib.SMTPConnectError, socket.timeout, TimeoutError) as e:
+        err_str = f"SMTP connection error to {smtp_host}:{smtp_port}: {str(e)[:150]}"
+        return False, None, err_str
+    except smtplib.SMTPRecipientsRefused as e:
+        err_str = f"SMTP recipient rejected: {str(e)[:150]}"
+        return False, None, err_str
+    except Exception as e:
+        err_str = f"SMTP delivery error: {str(e)[:150]}"
+        return False, None, err_str
+    finally:
+        if server is not None:
+            try:
+                server.quit()
+            except Exception:
+                pass
+
+
+def send_email_via_resend(to_email: str, subject: str, message: str) -> Tuple[bool, Optional[str], Optional[str]]:
     """
     Send email via Resend API.
     Returns: (success: bool, provider_message_id: Optional[str], error_message: Optional[str])
@@ -199,6 +336,19 @@ def send_email_message(to_email: str, subject: str, message: str) -> Tuple[bool,
             return False, None, f"Resend API error ({resp.status_code}): {err_msg}"
     except Exception as e:
         return False, None, f"Email delivery connection error: {str(e)[:150]}"
+
+
+def send_email_message(to_email: str, subject: str, message: str) -> Tuple[bool, Optional[str], Optional[str]]:
+    """
+    Send email via the active email provider.
+    Prioritizes Gmail SMTP when configured; falls back to Resend API.
+    Returns: (success: bool, provider_message_id: Optional[str], error_message: Optional[str])
+    """
+    if is_smtp_configured():
+        return send_email_via_smtp(to_email, subject, message)
+    if is_resend_configured():
+        return send_email_via_resend(to_email, subject, message)
+    return False, None, "No email provider configured (SMTP or Resend credentials missing)."
 
 
 def mask_phone_number(phone: str) -> str:
@@ -495,6 +645,7 @@ def dispatch_external_notification(
 
         # 1. Process Email
         if email_enabled and email:
+            provider_name = get_email_provider_name()
             # Check duplicate delivery: suppress duplicate if already accepted, sent, or delivered
             if notification_id:
                 try:
@@ -520,7 +671,7 @@ def dispatch_external_notification(
                         status=status,
                         event_type=event_type,
                         notification_id=notification_id,
-                        provider="resend",
+                        provider=provider_name,
                         provider_message_id=msg_id,
                         error_message=err,
                     )
@@ -533,8 +684,8 @@ def dispatch_external_notification(
                         status="skipped",
                         event_type=event_type,
                         notification_id=notification_id,
-                        provider="resend",
-                        error_message="Email provider not configured (RESEND_API_KEY missing).",
+                        provider=provider_name,
+                        error_message="Email provider not configured (SMTP or Resend credentials missing).",
                     )
                     results["email"] = "skipped_unconfigured"
 

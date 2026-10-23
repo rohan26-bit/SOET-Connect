@@ -168,6 +168,7 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
     delivery_error_detail = ""
     try:
         if channel == "email":
+            provider_name = delivery.get_email_provider_name()
             if delivery.is_email_configured():
                 success, msg_id, err = delivery.send_email_message(recipient, "SOET Connect - Password Reset Code", message_text)
                 delivery.record_delivery(
@@ -176,7 +177,7 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
                     recipient=recipient,
                     status="accepted" if success else "failed",
                     event_type="password_reset",
-                    provider="resend",
+                    provider=provider_name,
                     provider_message_id=msg_id,
                     error_message=err,
                 )
@@ -190,8 +191,8 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
                     recipient=recipient,
                     status="skipped",
                     event_type="password_reset",
-                    provider="resend",
-                    error_message="Email provider not configured (RESEND_API_KEY missing).",
+                    provider=provider_name,
+                    error_message="Email provider not configured (SMTP or Resend credentials missing).",
                 )
                 delivery_failed = True
                 delivery_error_detail = "Email provider not configured"

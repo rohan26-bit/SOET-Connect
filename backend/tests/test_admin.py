@@ -54,7 +54,7 @@ def _get_or_create_user(
 def setup_test_users():
     _get_or_create_user(
         "demo-student-id", "Demo Student",
-        "test@student.com", "student",
+        "test@example.com", "student",
     )
     _get_or_create_user(
         "demo-alumni-id", "Demo Alumni",
@@ -562,7 +562,7 @@ def test_admin_can_toggle_real_objectid_user_deactivation_and_reactivation():
     user_doc = {
         "_id": real_oid,
         "name": "Real Mongo Student",
-        "email": "realmongo@student.com",
+        "email": "realmongo@example.com",
         "role": "student",
         "is_active": True,
         "is_verified": True,
@@ -612,7 +612,7 @@ def test_toggle_real_objectid_user_rbac_and_invalid_ids():
     users_collection.insert_one({
         "_id": real_oid,
         "name": "Target Student",
-        "email": "target@student.com",
+        "email": "target@example.com",
         "role": "student",
         "is_active": True,
         "is_verified": True,
@@ -668,7 +668,7 @@ def test_admin_can_get_pending_students_and_metrics():
     users_collection.insert_one({
         "_id": student_id,
         "name": "Pending Queue Student",
-        "email": "pending.queue@student.com",
+        "email": "pending.queue@example.com",
         "role": "student",
         "is_active": True,
         "is_verified": False,
@@ -698,7 +698,7 @@ def test_admin_can_approve_student():
     users_collection.insert_one({
         "_id": student_id,
         "name": "Approval Student",
-        "email": "approve.me@student.com",
+        "email": "approve.me@example.com",
         "role": "student",
         "is_active": True,
         "is_verified": False,
@@ -731,7 +731,7 @@ def test_admin_can_reject_student():
     users_collection.insert_one({
         "_id": student_id,
         "name": "Reject Student",
-        "email": "reject.me@student.com",
+        "email": "reject.me@example.com",
         "role": "student",
         "is_active": True,
         "is_verified": False,
@@ -761,7 +761,7 @@ def test_non_admin_cannot_approve_reject_students():
     users_collection.insert_one({
         "_id": student_id,
         "name": "Security Student",
-        "email": "sec@student.com",
+        "email": "sec@example.com",
         "role": "student",
         "is_active": True,
         "is_verified": False,

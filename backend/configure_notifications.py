@@ -14,7 +14,12 @@ import argparse
 import getpass
 import os
 import re
+import smtplib
+import socket
 import sys
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.utils import formatdate, make_msgid
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
@@ -107,6 +112,137 @@ def save_env_entries(env_path: Path, new_values: Dict[str, str]) -> None:
 
     with open(env_path, "w", encoding="utf-8") as f:
         f.writelines(updated_lines)
+
+
+def validate_gmail_smtp_credentials(
+    user: str,
+    password: str,
+    host: str = "smtp.gmail.com",
+    port: int = 587,
+) -> Tuple[bool, str]:
+    """
+    Verify Gmail SMTP credentials by connecting, establishing TLS, and authenticating.
+    Does NOT send an email.
+    Safely strips spaces from Google App Passwords.
+    Returns: (is_valid: bool, status_message: str)
+    """
+    if not user:
+        return False, "Missing Gmail/SMTP username or email."
+    if not password:
+        return False, "Missing Gmail/SMTP password or App Password."
+
+    clean_user = user.strip()
+    clean_password = password.strip().replace(" ", "")
+    clean_host = host.strip() or "smtp.gmail.com"
+
+    if any(ord(c) < 32 for c in clean_password):
+        return False, (
+            "Invalid Google App Password: input contains terminal control characters (e.g. raw Ctrl+V). "
+            "In Windows PowerShell/CMD, right-click to paste or type your 16-character App Password."
+        )
+    if len(clean_password) < 8:
+        return False, (
+            f"Invalid Google App Password: length is too short ({len(clean_password)} chars). "
+            "A Google App Password must be 16 characters (e.g. 'abcd efgh ijkl mnop')."
+        )
+
+    server = None
+    try:
+        if port == 465:
+            server = smtplib.SMTP_SSL(clean_host, port, timeout=10.0)
+            server.ehlo()
+        else:
+            server = smtplib.SMTP(clean_host, port, timeout=10.0)
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+
+        server.login(clean_user, clean_password)
+        return True, f"Gmail SMTP credentials verified successfully for {clean_user} (Host: {clean_host}:{port})."
+    except smtplib.SMTPAuthenticationError as e:
+        err = (
+            "Gmail SMTP authentication failed. "
+            "Please ensure 2-Step Verification is enabled on your Google Account and you are using a 16-character App Password (not your normal Google account password). "
+            "Create an App Password at: https://myaccount.google.com/apppasswords"
+        )
+        return False, err
+    except smtplib.SMTPServerDisconnected as e:
+        err = (
+            "Gmail SMTP connection closed by server during authentication. "
+            "Google automatically terminates SMTP connections when credentials are not accepted (535 Bad Credentials). "
+            "Please ensure 2-Step Verification is enabled and a valid 16-character Google App Password is used. "
+            "Create an App Password at: https://myaccount.google.com/apppasswords"
+        )
+        return False, err
+    except (smtplib.SMTPConnectError, socket.timeout, TimeoutError) as e:
+        return False, f"Failed to connect to SMTP server {clean_host}:{port}: {e}"
+    except Exception as e:
+        return False, f"SMTP verification error: {e}"
+    finally:
+        if server is not None:
+            try:
+                server.quit()
+            except Exception:
+                pass
+
+
+def send_test_email_smtp(
+    to_email: str,
+    user: str,
+    password: str,
+    host: str = "smtp.gmail.com",
+    port: int = 587,
+    from_email: Optional[str] = None,
+) -> Tuple[bool, str]:
+    """Send a controlled test email via Gmail SMTP."""
+    clean_user = user.strip()
+    clean_password = password.strip().replace(" ", "")
+    clean_host = host.strip() or "smtp.gmail.com"
+    raw_from = from_email or clean_user
+    formatted_from = raw_from if ("<" in raw_from and ">" in raw_from) else f"SOET Connect - Alumni Portal <{raw_from}>"
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "SOET Connect - Gmail SMTP Verification Test"
+    msg["From"] = formatted_from
+    msg["To"] = to_email
+    msg["Date"] = formatdate(localtime=True)
+    msg_id = make_msgid(domain=clean_host if "." in clean_host else "soet-connect.local")
+    msg["Message-ID"] = msg_id
+
+    text_content = "This is a controlled verification message from SOET Connect to verify your Gmail SMTP configuration."
+    html_content = f"""
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
+      <h2 style="color: #1e3a8a; margin-top: 0;">SOET Connect - Alumni Portal</h2>
+      <p style="color: #334155; font-size: 15px;">Your Gmail SMTP configuration has been successfully verified.</p>
+      <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 20px 0;" />
+      <p style="color: #94a3b8; font-size: 12px;">Automated test notification from {clean_user}.</p>
+    </div>
+    """
+    msg.attach(MIMEText(text_content, "plain", "utf-8"))
+    msg.attach(MIMEText(html_content, "html", "utf-8"))
+
+    server = None
+    try:
+        if port == 465:
+            server = smtplib.SMTP_SSL(clean_host, port, timeout=10.0)
+            server.ehlo()
+        else:
+            server = smtplib.SMTP(clean_host, port, timeout=10.0)
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+
+        server.login(clean_user, clean_password)
+        server.send_message(msg)
+        return True, f"Gmail SMTP sent test email successfully (Message-ID: {msg_id})."
+    except Exception as e:
+        return False, f"Gmail SMTP test send failed: {e}"
+    finally:
+        if server is not None:
+            try:
+                server.quit()
+            except Exception:
+                pass
 
 
 def validate_resend_api_key(api_key: str) -> Tuple[bool, str]:
@@ -385,6 +521,26 @@ def send_trial_connectivity_test(
         return False, f"Trial test connection error: {e}"
 
 
+def prompt_for_app_password(prompt_text: str = "  Enter 16-character Google App Password (masked): ") -> str:
+    """Safely prompt for Google App Password with terminal paste / control character detection."""
+    while True:
+        entered = getpass.getpass(prompt_text).strip()
+        if not entered:
+            return ""
+        if any(ord(c) < 32 for c in entered):
+            print("  [!] Warning: Raw control character detected (often caused by pressing Ctrl+V in this console).")
+            print("      To paste in this console, please right-click the console window, or type the 16 characters.")
+            continue
+        cleaned = entered.replace(" ", "")
+        if len(cleaned) < 8:
+            print(f"  [!] Warning: Entered password is too short ({len(cleaned)} chars). A Google App Password has 16 characters.")
+            choice = input("      Re-enter password? [Y/n]: ").strip().lower()
+            if choice == "n":
+                return cleaned
+            continue
+        return cleaned
+
+
 def interactive_setup() -> None:
     """Run interactive terminal setup asking only for missing or requested credentials."""
     print("=" * 64)
@@ -397,6 +553,12 @@ def interactive_setup() -> None:
 
     _, current_env = load_env_entries(ENV_FILE)
 
+    smtp_user = current_env.get("SMTP_USER", "") or current_env.get("GMAIL_USER", "")
+    smtp_pass = current_env.get("SMTP_PASSWORD", "") or current_env.get("GMAIL_APP_PASSWORD", "")
+    smtp_host = current_env.get("SMTP_HOST", "smtp.gmail.com") or "smtp.gmail.com"
+    smtp_port = current_env.get("SMTP_PORT", "587") or "587"
+    smtp_from = current_env.get("SMTP_FROM_EMAIL", "") or current_env.get("GMAIL_FROM_EMAIL", "")
+
     resend_key = current_env.get("RESEND_API_KEY", "")
     resend_from = current_env.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
     twilio_sid = current_env.get("TWILIO_ACCOUNT_SID", "")
@@ -406,8 +568,47 @@ def interactive_setup() -> None:
 
     new_config: Dict[str, str] = {}
 
-    # --- Resend Configuration ---
-    print("\n[1/2] Resend Email Configuration")
+    # --- Gmail SMTP Configuration (Priority 1) ---
+    print("\n[1/3] Gmail SMTP Configuration (Free, Recommended)")
+    if smtp_user and smtp_pass and not smtp_pass.startswith("your_"):
+        print(f"  Status: Gmail SMTP is currently configured for user: {smtp_user}")
+        update_s = input("  Do you want to replace Gmail SMTP credentials? [y/N]: ").strip().lower()
+        if update_s == "y":
+            entered_user = input(f"  Enter Gmail Address [{smtp_user}]: ").strip()
+            if entered_user:
+                smtp_user = entered_user
+                new_config["SMTP_USER"] = smtp_user
+            entered_pass = prompt_for_app_password("  Enter 16-character Google App Password (masked): ")
+            if entered_pass:
+                smtp_pass = entered_pass
+                new_config["SMTP_PASSWORD"] = smtp_pass
+            entered_from = input(f"  Sender Display Name / From Email [{smtp_from or smtp_user}]: ").strip()
+            if entered_from:
+                smtp_from = entered_from
+                new_config["SMTP_FROM_EMAIL"] = smtp_from
+    else:
+        print("  Status: Gmail SMTP is unconfigured.")
+        print("  To use free Gmail SMTP:")
+        print("    1. Enable 2-Step Verification in your Google Account:")
+        print("       https://myaccount.google.com/signinoptions/two-step-verification")
+        print("    2. Generate a 16-character App Password at:")
+        print("       https://myaccount.google.com/apppasswords")
+        entered_user = input("  Enter Gmail Address (or press Enter to skip): ").strip()
+        if entered_user:
+            smtp_user = entered_user
+            new_config["SMTP_USER"] = smtp_user
+            entered_pass = prompt_for_app_password("  Enter 16-character Google App Password (masked): ")
+            if entered_pass:
+                smtp_pass = entered_pass
+                new_config["SMTP_PASSWORD"] = smtp_pass
+                new_config["SMTP_HOST"] = "smtp.gmail.com"
+                new_config["SMTP_PORT"] = "587"
+                entered_from = input(f"  Sender Display Name / From Email [{smtp_user}]: ").strip()
+                smtp_from = entered_from or smtp_user
+                new_config["SMTP_FROM_EMAIL"] = smtp_from
+
+    # --- Resend Configuration (Fallback) ---
+    print("\n[2/3] Resend Email Configuration (Fallback)")
     if resend_key and not resend_key.startswith("your_"):
         print("  Status: Resend API Key is currently configured.")
         update_r = input("  Do you want to replace the current Resend API Key? [y/N]: ").strip().lower()
@@ -434,7 +635,7 @@ def interactive_setup() -> None:
         new_config["RESEND_FROM_EMAIL"] = resend_from
 
     # --- Twilio Configuration ---
-    print("\n[2/2] Twilio SMS Configuration")
+    print("\n[3/3] Twilio SMS Configuration")
     if twilio_sid and twilio_token and not twilio_sid.startswith("your_"):
         print("  Status: Twilio credentials (SID and Auth Token) are configured.")
         update_t = input("  Do you want to replace Twilio SID or Auth Token? [y/N]: ").strip().lower()
@@ -498,6 +699,31 @@ def interactive_setup() -> None:
     print(" Credential Validation & Live Verification")
     print("=" * 64)
 
+    # Validate Gmail SMTP
+    if smtp_user and smtp_pass and not smtp_pass.startswith("your_"):
+        print("\nValidating Gmail SMTP credentials (isolated connection & TLS check)...")
+        port_num = 587
+        try:
+            port_num = int(smtp_port)
+        except ValueError:
+            pass
+        valid_s, msg_s = validate_gmail_smtp_credentials(smtp_user, smtp_pass, smtp_host, port_num)
+        if valid_s:
+            print(f"  ✓ {msg_s}")
+            test_opt = input("  Send a controlled test email via Gmail SMTP now? [y/N]: ").strip().lower()
+            if test_opt == "y":
+                test_recipient = input("  Enter destination email address: ").strip()
+                if test_recipient:
+                    ok, send_msg = send_test_email_smtp(test_recipient, smtp_user, smtp_pass, smtp_host, port_num, smtp_from)
+                    if ok:
+                        print(f"  ✓ {send_msg}")
+                    else:
+                        print(f"  ✗ Test email send failed: {send_msg}")
+        else:
+            print(f"  ✗ Gmail SMTP validation failed: {msg_s}")
+    else:
+        print("\n[SKIP] Gmail SMTP is not configured.")
+
     # Validate Resend
     if resend_key and not resend_key.startswith("your_"):
         print("\nValidating Resend API key...")
@@ -559,6 +785,10 @@ def interactive_setup() -> None:
 def validate_only() -> int:
     """Validate currently configured credentials non-interactively."""
     _, current_env = load_env_entries(ENV_FILE)
+    smtp_user = current_env.get("SMTP_USER", "") or current_env.get("GMAIL_USER", "")
+    smtp_pass = current_env.get("SMTP_PASSWORD", "") or current_env.get("GMAIL_APP_PASSWORD", "")
+    smtp_host = current_env.get("SMTP_HOST", "smtp.gmail.com") or "smtp.gmail.com"
+    smtp_port = current_env.get("SMTP_PORT", "587") or "587"
     resend_key = current_env.get("RESEND_API_KEY", "")
     twilio_sid = current_env.get("TWILIO_ACCOUNT_SID", "")
     twilio_token = current_env.get("TWILIO_AUTH_TOKEN", "")
@@ -566,6 +796,20 @@ def validate_only() -> int:
 
     all_valid = True
     print(f"Checking credentials in {ENV_FILE}...")
+
+    if smtp_user and smtp_pass and not smtp_pass.startswith("your_"):
+        port_num = 587
+        try:
+            port_num = int(smtp_port)
+        except ValueError:
+            pass
+        ok, msg = validate_gmail_smtp_credentials(smtp_user, smtp_pass, smtp_host, port_num)
+        status = "PASSED" if ok else "FAILED"
+        print(f"Gmail SMTP:   [{status}] {msg}")
+        if not ok:
+            all_valid = False
+    else:
+        print("Gmail SMTP:   [UNCONFIGURED]")
 
     if resend_key and not resend_key.startswith("your_"):
         ok, msg = validate_resend_api_key(resend_key)
@@ -592,8 +836,14 @@ def main():
     parser = argparse.ArgumentParser(description="Configure and validate Email and SMS provider credentials.")
     parser.add_argument("--validate-only", action="store_true", help="Validate existing credentials in .env without prompting.")
     parser.add_argument("--test-email", type=str, metavar="EMAIL", help="Send a test email using configured Resend credentials.")
+    parser.add_argument("--test-smtp-email", type=str, metavar="EMAIL", help="Send a test email using configured Gmail SMTP credentials.")
     parser.add_argument("--test-sms", type=str, metavar="PHONE", help="Send a custom test SMS using configured Twilio credentials.")
     parser.add_argument("--test-trial-sms", type=str, nargs="?", const="", metavar="PHONE", help="Run a controlled trial-connectivity test using predefined template 'sms_2fa'.")
+    parser.add_argument("--smtp-user", type=str, help="Configure Gmail/SMTP username or email.")
+    parser.add_argument("--smtp-password", type=str, help="Configure Gmail/SMTP App Password.")
+    parser.add_argument("--smtp-host", type=str, help="Configure SMTP host (default: smtp.gmail.com).")
+    parser.add_argument("--smtp-port", type=str, help="Configure SMTP port (default: 587).")
+    parser.add_argument("--smtp-from", type=str, help="Configure SMTP sender/display address.")
     parser.add_argument("--resend-key", type=str, help="Configure Resend API key directly.")
     parser.add_argument("--resend-from", type=str, help="Configure Resend sender address.")
     parser.add_argument("--twilio-sid", type=str, help="Configure Twilio Account SID directly.")
@@ -605,6 +855,16 @@ def main():
 
     # Handle direct flag configuration
     direct_updates: Dict[str, str] = {}
+    if args.smtp_user:
+        direct_updates["SMTP_USER"] = args.smtp_user.strip()
+    if args.smtp_password:
+        direct_updates["SMTP_PASSWORD"] = args.smtp_password.strip().replace(" ", "")
+    if args.smtp_host:
+        direct_updates["SMTP_HOST"] = args.smtp_host.strip()
+    if args.smtp_port:
+        direct_updates["SMTP_PORT"] = args.smtp_port.strip()
+    if args.smtp_from:
+        direct_updates["SMTP_FROM_EMAIL"] = args.smtp_from.strip()
     if args.resend_key:
         direct_updates["RESEND_API_KEY"] = args.resend_key.strip()
     if args.resend_from:
@@ -624,6 +884,20 @@ def main():
 
     if args.validate_only:
         sys.exit(validate_only())
+
+    if args.test_smtp_email:
+        _, env = load_env_entries(ENV_FILE)
+        user = env.get("SMTP_USER", "") or env.get("GMAIL_USER", "")
+        pwd = env.get("SMTP_PASSWORD", "") or env.get("GMAIL_APP_PASSWORD", "")
+        host = env.get("SMTP_HOST", "smtp.gmail.com") or "smtp.gmail.com"
+        port = int(env.get("SMTP_PORT", "587") or "587")
+        sender = env.get("SMTP_FROM_EMAIL", "") or env.get("GMAIL_FROM_EMAIL", "") or user
+        if not (user and pwd):
+            print("Error: SMTP credentials (SMTP_USER and SMTP_PASSWORD) are not configured.")
+            sys.exit(1)
+        ok, msg = send_test_email_smtp(args.test_smtp_email, user, pwd, host, port, sender)
+        print(f"Gmail SMTP Test Result: {msg}")
+        sys.exit(0 if ok else 1)
 
     if args.test_email:
         _, env = load_env_entries(ENV_FILE)
