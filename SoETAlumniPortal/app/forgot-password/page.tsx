@@ -36,23 +36,25 @@ export default function ForgotPasswordPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Countdown timer for 10-minute code validity
-  const [timeLeft, setTimeLeft] = useState<number>(600);
-  const [timerActive, setTimerActive] = useState<boolean>(false);
+  // Constants for timers
+  const CODE_VALIDITY_SECONDS = 600; // 10 minutes OTP validity
+  const RESEND_COOLDOWN_SECONDS = 20; // 20 seconds resend cooldown
+
+  // 10-minute OTP validity timer (separate from resend cooldown)
+  const [validityTimeLeft, setValidityTimeLeft] = useState<number>(CODE_VALIDITY_SECONDS);
+  // 20-second resend cooldown timer (separate from 10-minute validity)
+  const [resendCooldown, setResendCooldown] = useState<number>(0);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-    if (timerActive && timeLeft > 0) {
-      interval = setInterval(() => {
-        setTimeLeft((prev) => prev - 1);
-      }, 1000);
-    } else if (timeLeft === 0) {
-      setTimerActive(false);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [timerActive, timeLeft]);
+    if (step !== 2) return;
+
+    const interval = setInterval(() => {
+      setValidityTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [step]);
 
   const formatTimer = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -67,12 +69,17 @@ export default function ForgotPasswordPage() {
 
     try {
       const res = await authService.requestPasswordReset(identifier.trim(), channel);
-      setSuccessMessage(res.message);
-      setTimeLeft(600);
-      setTimerActive(true);
+      setSuccessMessage(res.message || 'Verification code sent successfully.');
+      // 1. Keep OTP validity at 10 minutes (600s)
+      setValidityTimeLeft(res.expires_in || CODE_VALIDITY_SECONDS);
+      // 2. Make Resend Code button available 20 seconds after a successful request
+      setResendCooldown(res.cooldown_seconds || RESEND_COOLDOWN_SECONDS);
+      setCode('');
       setStep(2);
     } catch (err: any) {
       setError(err.message || 'Failed to send recovery code. Please try again.');
+      // 4. When delivery or request fails, allow immediate retry without waiting for cooldown
+      setResendCooldown(0);
     } finally {
       setLoading(false);
     }
@@ -278,16 +285,24 @@ export default function ForgotPasswordPage() {
                 </p>
               </div>
 
+              {/* Success notification banner on resend */}
+              {successMessage && !error && (
+                <div className="mb-5 bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 flex items-start gap-2.5 text-emerald-800 text-xs font-medium">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span>{successMessage}</span>
+                </div>
+              )}
+
               <form onSubmit={handleVerifyCode} className="space-y-5">
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="block text-xs font-semibold text-[#4A3832] uppercase tracking-wider">
                       Verification Code
                     </label>
-                    <div className="flex items-center gap-1 text-xs text-[#888888]">
+                    <div className="flex items-center gap-1.5 text-xs text-[#888888]">
                       <Clock className="w-3.5 h-3.5" />
-                      <span className={timeLeft < 60 ? 'text-red-500 font-semibold' : ''}>
-                        {timeLeft > 0 ? formatTimer(timeLeft) : 'Expired'}
+                      <span className={validityTimeLeft < 60 ? 'text-red-500 font-semibold' : 'text-[#6B6B6B]'}>
+                        {validityTimeLeft > 0 ? `Expires in ${formatTimer(validityTimeLeft)}` : 'Expired'}
                       </span>
                     </div>
                   </div>
@@ -301,12 +316,12 @@ export default function ForgotPasswordPage() {
                     className="block w-full py-3 px-4 text-center tracking-[0.5em] font-mono text-xl font-bold bg-[#FBFAF8] border border-[#DDD7D2] rounded-xl text-[#222222] placeholder-[#CCCCCC] focus:outline-none focus:ring-2 focus:ring-[#F28C38] focus:border-[#F28C38] focus:bg-white transition"
                   />
                   <p className="text-[11px] text-[#888888] mt-1.5 text-center">
-                    Codes are valid for 10 minutes and expire after 5 incorrect attempts.
+                    Codes remain valid for 10 minutes and expire after 5 incorrect attempts.
                   </p>
                 </div>
 
                 {/* Timer expired: show clear recovery path */}
-                {timeLeft === 0 && (
+                {validityTimeLeft === 0 && (
                   <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
                     <p className="text-xs font-semibold text-amber-800 mb-2">
                       Your verification code has expired.
@@ -314,17 +329,21 @@ export default function ForgotPasswordPage() {
                     <button
                       type="button"
                       onClick={doRequestCode}
-                      disabled={loading}
-                      className="text-xs font-bold text-[#F28C38] hover:text-[#E07D2E] transition"
+                      disabled={loading || resendCooldown > 0}
+                      className="text-xs font-bold text-[#F28C38] hover:text-[#E07D2E] disabled:opacity-50 transition"
                     >
-                      {loading ? 'Sending...' : 'Request a new code'}
+                      {loading
+                        ? 'Sending...'
+                        : resendCooldown > 0
+                        ? `Request a new code (${resendCooldown}s)`
+                        : 'Request a new code'}
                     </button>
                   </div>
                 )}
 
                 <button
                   type="submit"
-                  disabled={loading || code.trim().length !== 6 || timeLeft === 0}
+                  disabled={loading || code.trim().length !== 6 || validityTimeLeft === 0}
                   className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold text-white bg-[#F28C38] hover:bg-[#E07D2E] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#F28C38] shadow-lg shadow-[#F28C38]/25 transition-all disabled:opacity-50 cursor-pointer"
                 >
                   {loading ? 'Verifying...' : 'Verify Code'}
@@ -338,7 +357,8 @@ export default function ForgotPasswordPage() {
                       setStep(1);
                       setCode('');
                       setError(null);
-                      setTimerActive(false);
+                      setSuccessMessage(null);
+                      setResendCooldown(0);
                     }}
                     className="flex items-center gap-1 text-xs font-semibold text-[#6B6B6B] hover:text-[#222222] transition"
                   >
@@ -349,15 +369,19 @@ export default function ForgotPasswordPage() {
                   <button
                     type="button"
                     onClick={doRequestCode}
-                    disabled={loading || timeLeft > 580}
-                    className="text-xs font-semibold text-[#F28C38] hover:text-[#E07D2E] disabled:opacity-40 transition"
+                    disabled={loading || resendCooldown > 0}
+                    className="text-xs font-semibold text-[#F28C38] hover:text-[#E07D2E] disabled:opacity-40 disabled:cursor-not-allowed transition"
                   >
-                    Resend code
+                    {loading
+                      ? 'Sending...'
+                      : resendCooldown > 0
+                      ? `Resend code (${resendCooldown}s)`
+                      : 'Resend code'}
                   </button>
                 </div>
 
-                {/* Didn't receive guidance */}
-                {timeLeft > 0 && timeLeft < 570 && (
+                {/* Didn't receive guidance: show once initial 20s cooldown elapses */}
+                {validityTimeLeft > 0 && resendCooldown === 0 && (
                   <div className="bg-[#F7F4EF] rounded-xl p-3 space-y-1.5">
                     <p className="text-[11px] font-semibold text-[#4A3832] flex items-center gap-1.5">
                       <AlertCircle className="w-3 h-3 text-[#888888] shrink-0" />
@@ -373,7 +397,8 @@ export default function ForgotPasswordPage() {
                             setStep(1);
                             setCode('');
                             setError(null);
-                            setTimerActive(false);
+                            setSuccessMessage(null);
+                            setResendCooldown(0);
                           }}
                           className="text-[#F28C38] font-semibold hover:underline"
                         >

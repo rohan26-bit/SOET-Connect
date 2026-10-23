@@ -344,7 +344,7 @@ export const authService = {
   async requestPasswordReset(
     identifier: string,
     channel: 'email' | 'sms' = 'email'
-  ): Promise<{ message: string; channel: string }> {
+  ): Promise<{ message: string; channel?: string; cooldown_seconds?: number; expires_in?: number }> {
     const response = await fetch(`${API_URL}/auth/forgot-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -1165,3 +1165,30 @@ def test_sms_trial_error_invalidates_challenge(monkeypatch, verified_alumni_user
     ).execute().data
     active = [c for c in challenges if not c["is_used"]]
     assert len(active) == 0, "Challenge should be invalidated after SMS trial error"
+
+
+def test_forgot_password_endpoint_cooldown_and_validity_metadata(client: TestClient, verified_alumni_user: dict):
+    """Forgot password endpoint returns 20s cooldown and 10min (600s) validity metadata."""
+    email = verified_alumni_user["email"]
+    resp = client.post(
+        "/api/auth/forgot-password",
+        json={"identifier": email, "channel": "email"}
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["cooldown_seconds"] == 20
+    assert data["expires_in"] == 600
+    assert "message" in data
+
+
+def test_forgot_password_endpoint_nonexistent_user_anti_enumeration(client: TestClient):
+    """Non-existent accounts return generic message and cooldown metadata without leaking existence."""
+    resp = client.post(
+        "/api/auth/forgot-password",
+        json={"identifier": "nonexistent_ghost_user@example.com", "channel": "email"}
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["cooldown_seconds"] == 20
+    assert data["expires_in"] == 600
+    assert "If an account matching" in data["message"]

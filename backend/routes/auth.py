@@ -290,7 +290,11 @@ def forgot_password_endpoint(payload: ForgotPasswordRequest):
     if not success:
         raise HTTPException(status_code=400, detail=message)
 
-    resp = {"message": message}
+    resp = {
+        "message": message,
+        "cooldown_seconds": 20,
+        "expires_in": 600,
+    }
     # Expose debug code strictly in automated test suite runner
     if debug_code is not None and os.getenv("PYTEST_CURRENT_TEST"):
         resp["_debug_code"] = debug_code
@@ -348,7 +352,11 @@ def send_phone_verification_endpoint(
     if not success:
         raise HTTPException(status_code=400, detail=message)
 
-    resp = {"message": message}
+    resp = {
+        "message": message,
+        "cooldown_seconds": 20,
+        "expires_in": 600,
+    }
     if debug_code is not None and os.getenv("PYTEST_CURRENT_TEST"):
         resp["_debug_code"] = debug_code
     return resp
