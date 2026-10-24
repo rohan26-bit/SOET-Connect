@@ -4,8 +4,8 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#F7F4EF] flex flex-col font-sans text-[#222222] overflow-x-hidden">
       {/* Navigation */}
-      <nav className="h-16 flex items-center justify-between px-6 sm:px-8 bg-white/95 backdrop-blur-md border-b border-[#DDD7D2] sticky top-0 z-40 shadow-sm">
-        <div className="flex items-center gap-3 font-semibold text-base sm:text-lg text-[#4A3832]">
+      <nav className="py-2.5 sm:py-3 px-6 sm:px-8 bg-white/95 backdrop-blur-md border-b border-[#DDD7D2] sticky top-0 z-40 shadow-sm flex items-center">
+        <div className="flex items-center gap-3 sm:gap-3.5">
           <div className="w-10 h-10 sm:w-11 sm:h-11 bg-white rounded-xl flex items-center justify-center p-1 shadow-sm border border-[#DDD7D2] shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -14,15 +14,25 @@ export default function LandingPage() {
               className="w-full h-full object-contain"
             />
           </div>
-          <span className="truncate">SOET Connect - Alumni Portal</span>
-        </div>
-        <div className="flex items-center gap-3 sm:gap-4 shrink-0">
-          <Link href="/login" className="text-[#6B6B6B] hover:text-[#4A3832] font-medium text-sm transition">
-            Sign in
-          </Link>
-          <Link href="/register" className="bg-[#F28C38] hover:bg-[#E07D2E] text-white px-4 sm:px-5 py-2 rounded-lg font-semibold text-sm shadow-sm transition">
-            Create account
-          </Link>
+          <div className="flex flex-col gap-1">
+            <span className="font-semibold text-base sm:text-lg text-[#4A3832] leading-tight">
+              SOET Connect - Alumni Portal
+            </span>
+            <div className="flex items-center gap-3 sm:gap-4">
+              <Link
+                href="/login"
+                className="text-[#6B6B6B] hover:text-[#4A3832] font-medium text-xs sm:text-sm transition"
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/register"
+                className="bg-[#F28C38] hover:bg-[#E07D2E] text-white px-3 sm:px-4 py-1 sm:py-1.5 rounded-lg font-semibold text-xs sm:text-sm shadow-sm transition"
+              >
+                Create account
+              </Link>
+            </div>
+          </div>
         </div>
       </nav>
 
