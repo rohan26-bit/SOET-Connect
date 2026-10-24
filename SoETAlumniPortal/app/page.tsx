@@ -1,11 +1,12 @@
 import Link from 'next/link';
+import { ArrowRight } from 'lucide-react';
 
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#F7F4EF] flex flex-col font-sans text-[#222222] overflow-x-hidden">
       {/* Navigation */}
-      <nav className="py-2.5 sm:py-3 px-6 sm:px-8 bg-white/95 backdrop-blur-md border-b border-[#DDD7D2] sticky top-0 z-40 shadow-sm flex items-center">
-        <div className="flex items-center gap-3 sm:gap-3.5">
+      <nav className="h-16 flex items-center px-6 sm:px-8 bg-white/95 backdrop-blur-md border-b border-[#DDD7D2] sticky top-0 z-40 shadow-sm">
+        <div className="flex items-center gap-3 font-semibold text-base sm:text-lg text-[#4A3832]">
           <div className="w-10 h-10 sm:w-11 sm:h-11 bg-white rounded-xl flex items-center justify-center p-1 shadow-sm border border-[#DDD7D2] shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -14,25 +15,7 @@ export default function LandingPage() {
               className="w-full h-full object-contain"
             />
           </div>
-          <div className="flex flex-col gap-1">
-            <span className="font-semibold text-base sm:text-lg text-[#4A3832] leading-tight">
-              SOET Connect - Alumni Portal
-            </span>
-            <div className="flex items-center gap-3 sm:gap-4">
-              <Link
-                href="/login"
-                className="text-[#6B6B6B] hover:text-[#4A3832] font-medium text-xs sm:text-sm transition"
-              >
-                Sign in
-              </Link>
-              <Link
-                href="/register"
-                className="bg-[#F28C38] hover:bg-[#E07D2E] text-white px-3 sm:px-4 py-1 sm:py-1.5 rounded-lg font-semibold text-xs sm:text-sm shadow-sm transition"
-              >
-                Create account
-              </Link>
-            </div>
-          </div>
+          <span className="truncate">SOET Connect - Alumni Portal</span>
         </div>
       </nav>
 
@@ -77,7 +60,7 @@ export default function LandingPage() {
             <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[#211510]/60 to-transparent pointer-events-none" />
           </div>
 
-          {/* Hero Typography */}
+          {/* Hero Typography & CTAs */}
           <div className="relative z-10 w-full max-w-6xl mx-auto px-6 sm:px-8 py-16 lg:py-24">
             <div className="max-w-xl space-y-5">
               <h1 className="text-3xl sm:text-5xl lg:text-5xl font-extrabold text-white leading-tight tracking-tight drop-shadow-md">
@@ -87,6 +70,21 @@ export default function LandingPage() {
               <p className="text-base sm:text-lg text-[#F7F4EF]/95 max-w-xl leading-relaxed">
                 Connecting SOET students and alumni through opportunities, events, and career updates.
               </p>
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5 sm:gap-4 pt-3">
+                <Link
+                  href="/register"
+                  className="bg-[#F28C38] hover:bg-[#E07D2E] text-white px-7 py-3.5 rounded-xl font-bold shadow-md shadow-black/20 flex items-center justify-center gap-2 transition hover:-translate-y-0.5 text-center"
+                >
+                  Create account <ArrowRight className="w-4 h-4" />
+                </Link>
+                <Link
+                  href="/login"
+                  className="bg-white/90 hover:bg-white text-[#4A3832] border border-white/60 backdrop-blur-md px-7 py-3.5 rounded-xl font-bold shadow-md shadow-black/15 transition hover:-translate-y-0.5 text-center flex items-center justify-center"
+                >
+                  Sign in
+                </Link>
+              </div>
             </div>
           </div>
         </section>
