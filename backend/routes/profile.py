@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from typing import Optional, List
-from bson import ObjectId
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from urllib.parse import urlparse
 from pydantic import BaseModel, Field, field_validator
@@ -42,23 +42,19 @@ class AvatarUploadRequest(BaseModel):
 # ============================================================
 
 def get_user_by_id(user_id: str):
-    """Find a user by ObjectId, string _id, or iterate through collection."""
+    """Find a user by id string in Supabase PostgreSQL."""
+    if not user_id:
+        return None
+    user_id_str = str(user_id).strip()
     try:
-        user = users_collection.find_one({"_id": ObjectId(user_id)})
-        if user:
-            return user
-    except Exception:
-        pass
-
-    try:
-        user = users_collection.find_one({"_id": user_id})
+        user = users_collection.find_one({"_id": user_id_str})
         if user:
             return user
     except Exception:
         pass
 
     for candidate in users_collection.find({}):
-        if str(candidate.get("_id")) == str(user_id):
+        if str(candidate.get("_id")) == user_id_str:
             return candidate
 
     return None

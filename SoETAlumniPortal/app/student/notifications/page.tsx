@@ -5,6 +5,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { useAuth } from '@/components/AuthProvider';
 import { notificationService, NotificationItem } from '@/lib/services/notificationService';
 import { Bell, CheckCircle2, Briefcase, Calendar, Info, CheckCheck } from 'lucide-react';
+import LoadingState from '@/components/LoadingState';
 
 export default function NotificationsPage() {
   const { user } = useAuth();
@@ -81,7 +82,7 @@ export default function NotificationsPage() {
           </div>
 
           {loading ? (
-            <div className="py-12 text-center text-xs text-slate-400">Loading notifications...</div>
+            <LoadingState message="Loading notifications" className="py-12" />
           ) : notifications.length === 0 ? (
             <div className="text-center py-12">
               <Bell className="w-12 h-12 text-slate-300 mx-auto mb-3" />

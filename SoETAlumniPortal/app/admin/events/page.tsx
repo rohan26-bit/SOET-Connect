@@ -2,12 +2,17 @@
 
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import LoadingState from '@/components/LoadingState';
 import { eventService, EventItem } from '@/lib/services/eventService';
 import { useAuth } from '@/components/AuthProvider';
 import {
   Calendar, Plus, Trash2, MapPin, Clock, Users, X, Edit3,
   CheckCircle2, XCircle, Eye, EyeOff, Search, Filter
 } from 'lucide-react';
+import DocumentAttachment, {
+  DocumentAttachmentData,
+  DocumentAttachmentView,
+} from '@/components/DocumentAttachment';
 
 const EVENT_TYPES = [
   'Seminar', 'Workshop', 'Webinar', 'Meetup', 'Hackathon',
@@ -26,6 +31,7 @@ interface EventFormData {
   event_type: string;
   registration_deadline: string;
   visibility: string;
+  attachment: DocumentAttachmentData | null;
 }
 
 const emptyForm: EventFormData = {
@@ -38,13 +44,14 @@ const emptyForm: EventFormData = {
   event_type: '',
   registration_deadline: '',
   visibility: 'Everyone',
+  attachment: null,
 };
 
 export default function AdminEventsPage() {
   const { user } = useAuth();
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'past'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Modal state
@@ -108,6 +115,7 @@ export default function AdminEventsPage() {
       event_type: '',
       registration_deadline: event.registration_deadline || '',
       visibility: 'Everyone',
+      attachment: event.attachment || null,
     });
     setFormError(null);
     setShowModal(true);
@@ -129,6 +137,7 @@ export default function AdminEventsPage() {
           location: formData.location,
           event_type: formData.event_type || undefined,
           registration_deadline: formData.registration_deadline || undefined,
+          attachment: formData.attachment,
         });
       } else {
         // Create new event
@@ -141,6 +150,7 @@ export default function AdminEventsPage() {
           location: formData.location,
           event_type: formData.event_type || undefined,
           registration_deadline: formData.registration_deadline || undefined,
+          attachment: formData.attachment,
         });
       }
 
@@ -154,7 +164,11 @@ export default function AdminEventsPage() {
   };
 
   const filteredEvents = events
-    .filter((e) => (filter === 'all' ? true : e.status === filter))
+    .filter((e) => {
+      if (filter === 'all') return true;
+      if (filter === 'past') return e.is_past;
+      return e.status === filter;
+    })
     .filter((e) =>
       searchQuery === '' ||
       e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -167,6 +181,7 @@ export default function AdminEventsPage() {
     approved: events.filter(e => e.status === 'approved').length,
     pending: events.filter(e => e.status === 'pending').length,
     rejected: events.filter(e => e.status === 'rejected').length,
+    past: events.filter(e => e.is_past).length,
   };
 
   return (
@@ -195,12 +210,13 @@ export default function AdminEventsPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
         {[
           { label: 'Total Events', value: stats.total, color: 'blue' },
           { label: 'Approved', value: stats.approved, color: 'emerald' },
           { label: 'Pending', value: stats.pending, color: 'amber' },
           { label: 'Rejected', value: stats.rejected, color: 'red' },
+          { label: 'Past Events', value: stats.past, color: 'slate' },
         ].map((stat) => (
           <div key={stat.label} className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
             <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">{stat.label}</p>
@@ -221,8 +237,8 @@ export default function AdminEventsPage() {
             className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/50 transition"
           />
         </div>
-        <div className="flex gap-2">
-          {(['all', 'pending', 'approved', 'rejected'] as const).map((tab) => (
+        <div className="flex gap-2 flex-wrap">
+          {(['all', 'pending', 'approved', 'rejected', 'past'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setFilter(tab)}
@@ -240,7 +256,7 @@ export default function AdminEventsPage() {
 
       {/* Events List */}
       {loading ? (
-        <div className="py-16 text-center text-slate-400 text-sm">Loading events...</div>
+        <LoadingState message="Loading events" className="py-16" />
       ) : filteredEvents.length === 0 ? (
         <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm">
           <Calendar className="w-12 h-12 text-slate-300 mx-auto mb-3" />
@@ -273,15 +289,32 @@ export default function AdminEventsPage() {
                     <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
                       <MapPin className="w-3.5 h-3.5 text-slate-400" /> {event.location}
                     </p>
+                    {event.registration_deadline && (
+                      <p className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-slate-400" /> Reg. Deadline: {new Date(event.registration_deadline).toLocaleDateString()}
+                      </p>
+                    )}
                   </div>
-                  <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full uppercase shrink-0 ${
-                    event.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
-                    event.status === 'rejected' ? 'bg-red-100 text-red-700' :
-                    event.status === 'cancelled' ? 'bg-slate-100 text-slate-600' :
-                    'bg-amber-100 text-amber-700'
-                  }`}>
-                    {event.status}
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                    {event.is_past && (
+                      <span className="px-2.5 py-1 text-[10px] font-bold rounded-full uppercase bg-slate-200 text-slate-700">
+                        Past
+                      </span>
+                    )}
+                    {event.is_registration_closed && !event.is_past && (
+                      <span className="px-2.5 py-1 text-[10px] font-bold rounded-full uppercase bg-amber-100 text-amber-800">
+                        Reg. Closed
+                      </span>
+                    )}
+                    <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full uppercase shrink-0 ${
+                      event.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                      event.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                      event.status === 'cancelled' ? 'bg-slate-100 text-slate-600' :
+                      'bg-amber-100 text-amber-700'
+                    }`}>
+                      {event.status}
+                    </span>
+                  </div>
                 </div>
 
                 <p className="text-xs text-slate-600 line-clamp-2 my-3 bg-slate-50 p-3 rounded-xl leading-relaxed">
@@ -296,6 +329,16 @@ export default function AdminEventsPage() {
                     <Users className="w-3 h-3" /> {event.registration_count || 0} registered
                   </span>
                 </div>
+
+                {/* Document Attachment Display */}
+                {event.attachment && event.attachment.name && (
+                  <div className="mt-3">
+                    <DocumentAttachmentView
+                      attachment={event.attachment}
+                      label="Event Document"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Actions */}
@@ -482,6 +525,13 @@ export default function AdminEventsPage() {
                   </select>
                 </div>
               </div>
+
+              {/* Document Attachment */}
+              <DocumentAttachment
+                label="Event Document (Optional)"
+                value={formData.attachment}
+                onChange={(attachment) => setFormData({ ...formData, attachment })}
+              />
 
               {/* Actions */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">

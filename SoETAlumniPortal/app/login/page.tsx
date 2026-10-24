@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { authService } from '@/lib/services/authService';
 import { Shield, GraduationCap, Users, AlertCircle, ArrowRight, Lock, Mail } from 'lucide-react';
+import { ButtonSpinner } from '@/components/LoadingState';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -30,8 +31,8 @@ export default function LoginPage() {
       } else {
         router.push('/student');
       }
-    } catch (err: any) {
-      setError(err.message || 'Login failed. Please check your credentials.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }
@@ -45,7 +46,8 @@ export default function LoginPage() {
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
         <div className="flex justify-center">
-          <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center p-2 shadow-md shadow-[#4A3832]/5 border border-[#DDD7D2]">
+          <div className="w-[72px] h-[72px] bg-white rounded-2xl flex items-center justify-center p-2 shadow-md shadow-[#4A3832]/5 border border-[#DDD7D2]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/mgm-university-logo.svg"
               alt="MGM University Logo"
@@ -53,11 +55,11 @@ export default function LoginPage() {
             />
           </div>
         </div>
-        <h2 className="mt-5 text-center text-3xl font-extrabold text-[#4A3832] tracking-tight">
-          SOET Connect
+        <h2 className="mt-5 text-center text-2xl sm:text-3xl font-extrabold text-[#4A3832] tracking-tight">
+          SOET Connect - Alumni Portal
         </h2>
         <p className="mt-2 text-center text-sm text-[#6B6B6B] font-medium">
-          Sign in to access your enterprise dashboard
+          Sign in to your account
         </p>
       </div>
 
@@ -135,9 +137,17 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-[#4A3832] uppercase tracking-wider mb-2">
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs font-semibold text-[#4A3832] uppercase tracking-wider">
+                  Password
+                </label>
+                <Link
+                  href="/forgot-password"
+                  className="text-xs font-semibold text-[#F28C38] hover:text-[#E07D2E] transition"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <div className="relative">
                 <Lock className="w-4 h-4 text-[#888888] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
@@ -156,8 +166,17 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold text-white bg-[#F28C38] hover:bg-[#E07D2E] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#F28C38] shadow-lg shadow-[#F28C38]/25 transition-all disabled:opacity-50 cursor-pointer"
             >
-              {loading ? 'Authenticating...' : `Sign in as ${role.charAt(0).toUpperCase() + role.slice(1)}`}
-              {!loading && <ArrowRight className="w-4 h-4" />}
+              {loading ? (
+                <>
+                  <ButtonSpinner className="text-white" />
+                  <span>Authenticating...</span>
+                </>
+              ) : (
+                <>
+                  <span>Sign in as {role.charAt(0).toUpperCase() + role.slice(1)}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </form>
 

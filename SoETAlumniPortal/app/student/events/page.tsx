@@ -2,9 +2,14 @@
 
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import LoadingState from '@/components/LoadingState';
 import { useAuth } from '@/components/AuthProvider';
 import { eventService, EventItem, EventAttendeeItem } from '@/lib/services/eventService';
 import { Calendar, MapPin, Clock, Plus, Users, CheckCircle2, AlertCircle, X } from 'lucide-react';
+import DocumentAttachment, {
+  DocumentAttachmentData,
+  DocumentAttachmentView,
+} from '@/components/DocumentAttachment';
 
 export default function EventsPage() {
   const { user } = useAuth();
@@ -23,6 +28,7 @@ export default function EventsPage() {
     start_time: '',
     end_time: '',
     location: '',
+    attachment: null as DocumentAttachmentData | null,
   });
 
   // Attendees Modal
@@ -87,6 +93,7 @@ export default function EventsPage() {
         start_time: newEvent.start_time || undefined,
         end_time: newEvent.end_time || undefined,
         location: newEvent.location,
+        attachment: newEvent.attachment,
       });
 
       setShowCreateModal(false);
@@ -97,6 +104,7 @@ export default function EventsPage() {
         start_time: '',
         end_time: '',
         location: '',
+        attachment: null,
       });
       alert('Event submitted! It will be listed once reviewed by the administrator.');
     } catch (err: any) {
@@ -150,7 +158,7 @@ export default function EventsPage() {
       </div>
 
       {loading ? (
-        <div className="py-16 text-center text-slate-400 text-sm">Loading events from database...</div>
+        <LoadingState message="Loading events" className="py-16" />
       ) : events.length === 0 ? (
         <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm">
           <Calendar className="w-12 h-12 text-slate-300 mx-auto mb-3" />
@@ -165,10 +173,19 @@ export default function EventsPage() {
               className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition flex flex-col justify-between"
             >
               <div>
-                <div className="flex items-center gap-2 text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-xl w-fit mb-4">
+                <div className="flex items-center gap-2 text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-xl w-fit mb-2">
                   <Clock className="w-3.5 h-3.5" />
                   <span>{new Date(event.event_date).toLocaleDateString()} {event.start_time ? `• ${event.start_time}` : ''}</span>
                 </div>
+
+                {event.registration_deadline && (
+                  <p className="text-[11px] text-slate-500 mb-3 flex items-center gap-1 font-medium">
+                    <Clock className="w-3 h-3 text-slate-400" />
+                    Reg. Deadline: <strong className={event.is_registration_closed ? 'text-red-600' : 'text-slate-700'}>
+                      {new Date(event.registration_deadline).toLocaleDateString()}
+                    </strong>
+                  </p>
+                )}
 
                 <h3 className="text-base font-bold text-slate-900 leading-snug mb-2">{event.title}</h3>
                 <p className="text-xs text-slate-500 flex items-center gap-1.5 mb-3">
@@ -179,6 +196,16 @@ export default function EventsPage() {
                 <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed mb-4">
                   {event.description}
                 </p>
+
+                {/* Document Attachment Display */}
+                {event.attachment && event.attachment.name && (
+                  <div className="mb-4">
+                    <DocumentAttachmentView
+                      attachment={event.attachment}
+                      label="Details Document"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
@@ -204,6 +231,13 @@ export default function EventsPage() {
                       className="px-3 py-1.5 bg-emerald-100 hover:bg-red-100 text-emerald-700 hover:text-red-700 text-xs font-bold rounded-lg transition flex items-center gap-1"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" /> Registered
+                    </button>
+                  ) : event.is_registration_closed ? (
+                    <button
+                      disabled
+                      className="px-3.5 py-1.5 bg-slate-200 text-slate-500 text-xs font-bold rounded-lg cursor-not-allowed"
+                    >
+                      Registration Closed
                     </button>
                   ) : (
                     <button
@@ -236,7 +270,7 @@ export default function EventsPage() {
             <p className="text-xs text-slate-500 mb-4">Total: {attendees.length} people</p>
 
             {loadingAttendees ? (
-              <div className="py-8 text-center text-xs text-slate-400">Loading attendee list...</div>
+              <LoadingState message="Loading attendees" className="py-8" />
             ) : attendees.length === 0 ? (
               <div className="py-8 text-center text-xs text-slate-400">No registrations yet.</div>
             ) : (
@@ -358,6 +392,13 @@ export default function EventsPage() {
                   className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+
+              {/* Document Attachment */}
+              <DocumentAttachment
+                label="Event Document (Optional)"
+                value={newEvent.attachment}
+                onChange={(attachment) => setNewEvent({ ...newEvent, attachment })}
+              />
 
               <div className="pt-2 flex justify-end gap-2">
                 <button

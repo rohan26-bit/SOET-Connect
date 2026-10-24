@@ -40,6 +40,20 @@ export interface UserProfile {
 
 const API_URL = '/api';
 
+async function safeJsonParse(response: Response): Promise<any> {
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    if (!response.ok) {
+      throw new Error(
+        `Server error (${response.status}): ${text.slice(0, 100) || response.statusText || 'Backend server returned an error.'}`
+      );
+    }
+    throw new Error('Received an invalid response from the server.');
+  }
+}
+
 export const authService = {
   // ============================================================
   // LOGIN
@@ -62,7 +76,7 @@ export const authService = {
       }),
     });
 
-    const data = await response.json();
+    const data = await safeJsonParse(response);
 
     if (!response.ok) {
       throw new Error(
@@ -149,7 +163,7 @@ export const authService = {
       }),
     });
 
-    const result = await response.json();
+    const result = await safeJsonParse(response);
 
     if (!response.ok) {
       throw new Error(
@@ -210,7 +224,7 @@ export const authService = {
       }),
     });
 
-    const result = await response.json();
+    const result = await safeJsonParse(response);
 
     if (!response.ok) {
       console.error(
@@ -256,7 +270,7 @@ export const authService = {
       }),
     });
 
-    const result = await response.json();
+    const result = await safeJsonParse(response);
 
     if (!response.ok) {
       throw new Error(
@@ -321,5 +335,138 @@ export const authService = {
 
       return null;
     }
+  },
+
+  // ============================================================
+  // PASSWORD RECOVERY (FORGOT PASSWORD)
+  // ============================================================
+
+  async requestPasswordReset(
+    identifier: string,
+    channel: 'email' | 'sms' = 'email'
+  ): Promise<{ message: string; channel?: string; cooldown_seconds?: number; expires_in?: number }> {
+    const response = await fetch(`${API_URL}/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier, channel }),
+    });
+
+    const result = await safeJsonParse(response);
+    if (!response.ok) {
+      throw new Error(result.detail || 'Failed to request password reset.');
+    }
+    return result;
+  },
+
+  async verifyResetCode(
+    identifier: string,
+    code: string
+  ): Promise<{ reset_token: string; message: string }> {
+    const response = await fetch(`${API_URL}/auth/verify-reset-code`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier, code }),
+    });
+
+    const result = await safeJsonParse(response);
+    if (!response.ok) {
+      throw new Error(result.detail || 'Invalid or expired verification code.');
+    }
+    return result;
+  },
+
+  async resetPassword(
+    reset_token: string,
+    new_password: string
+  ): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset_token, new_password }),
+    });
+
+    const result = await safeJsonParse(response);
+    if (!response.ok) {
+      throw new Error(result.detail || 'Failed to reset password.');
+    }
+    return result;
+  },
+
+  // ============================================================
+  // PHONE VERIFICATION (ACCOUNT SETTINGS)
+  // ============================================================
+
+  async sendPhoneVerification(phone: string): Promise<{ message: string }> {
+    const token = localStorage.getItem('soet_access_token');
+    if (!token) {
+      throw new Error('Your session has expired. Please log in again.');
+    }
+
+    const response = await fetch(`${API_URL}/auth/phone/send-code`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ phone }),
+    });
+
+    const result = await safeJsonParse(response);
+    if (!response.ok) {
+      throw new Error(result.detail || 'Failed to send phone verification code.');
+    }
+    return result;
+  },
+
+  async verifyPhoneVerification(phone: string, code: string): Promise<{ message: string }> {
+    const token = localStorage.getItem('soet_access_token');
+    if (!token) {
+      throw new Error('Your session has expired. Please log in again.');
+    }
+
+    const response = await fetch(`${API_URL}/auth/phone/verify-code`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ phone, code }),
+    });
+
+    const result = await safeJsonParse(response);
+    if (!response.ok) {
+      throw new Error(result.detail || 'Invalid or expired phone verification code.');
+    }
+    return result;
+  },
+
+  // ============================================================
+  // CHANGE PASSWORD
+  // ============================================================
+
+  async changePassword(data: {
+    current_password: string;
+    new_password: string;
+    confirm_new_password: string;
+  }): Promise<{ message: string }> {
+    const token = localStorage.getItem('soet_access_token');
+    if (!token) {
+      throw new Error('Your session has expired. Please log in again.');
+    }
+
+    const response = await fetch(`${API_URL}/auth/change-password`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    const result = await safeJsonParse(response);
+    if (!response.ok) {
+      throw new Error(result.detail || 'Failed to change password.');
+    }
+    return result;
   },
 };

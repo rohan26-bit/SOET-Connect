@@ -1,3 +1,9 @@
+import {
+  DocumentAttachmentData,
+  serializeAttachmentIntoText,
+  parseAttachmentFromText,
+} from '@/components/DocumentAttachment';
+
 export interface EventItem {
   id: string;
   created_by: string;
@@ -18,6 +24,14 @@ export interface EventItem {
   creator_avatar?: string;
   registration_count?: number;
   is_registered?: boolean;
+  is_past?: boolean;
+  is_registration_closed?: boolean;
+  attachment?: {
+    name: string;
+    type: string;
+    size: number;
+    url?: string;
+  } | null;
 }
 
 export interface EventAttendeeItem {
@@ -46,6 +60,31 @@ function getAuthHeaders() {
   };
 }
 
+function normalizeEvent(e: any): EventItem {
+  const parsed = parseAttachmentFromText(e.description);
+  return {
+    id: e.id,
+    created_by: e.created_by,
+    title: e.title,
+    description: parsed.cleanText,
+    event_date: e.event_date || e.start_date || '',
+    start_time: e.start_time,
+    end_time: e.end_time,
+    location: e.location,
+    image_url: e.image_url,
+    registration_deadline: e.registration_deadline,
+    event_type: e.event_type,
+    tags: e.tags,
+    status: e.status,
+    created_at: e.created_at,
+    updated_at: e.updated_at,
+    creator_name: e.creator_name,
+    registration_count: e.registration_count || 0,
+    is_registered: !!e.is_registered,
+    attachment: e.attachment || parsed.attachment || null,
+  };
+}
+
 export const eventService = {
   // ============================================================
   // GET APPROVED EVENTS
@@ -63,26 +102,7 @@ export const eventService = {
 
     return (data || [])
       .filter((e: any) => e.status === 'approved')
-      .map((e: any) => ({
-        id: e.id,
-        created_by: e.created_by,
-        title: e.title,
-        description: e.description,
-        event_date: e.event_date || e.start_date || '',
-        start_time: e.start_time,
-        end_time: e.end_time,
-        location: e.location,
-        image_url: e.image_url,
-        registration_deadline: e.registration_deadline,
-        event_type: e.event_type,
-        tags: e.tags,
-        status: e.status,
-        created_at: e.created_at,
-        updated_at: e.updated_at,
-        creator_name: e.creator_name,
-        registration_count: e.registration_count || 0,
-        is_registered: !!e.is_registered,
-      }));
+      .map(normalizeEvent);
   },
 
   // ============================================================
@@ -99,33 +119,15 @@ export const eventService = {
       throw new Error(data.detail || 'Failed to load events for admin.');
     }
 
-    return (data || []).map((e: any) => ({
-      id: e.id,
-      created_by: e.created_by,
-      title: e.title,
-      description: e.description,
-      event_date: e.event_date || e.start_date || '',
-      start_time: e.start_time,
-      end_time: e.end_time,
-      location: e.location,
-      image_url: e.image_url,
-      registration_deadline: e.registration_deadline,
-      event_type: e.event_type,
-      tags: e.tags,
-      status: e.status,
-      created_at: e.created_at,
-      updated_at: e.updated_at,
-      creator_name: e.creator_name,
-      registration_count: e.registration_count || 0,
-      is_registered: !!e.is_registered,
-    }));
+    return (data || []).map(normalizeEvent);
   },
 
   // ============================================================
   // GET MY EVENTS (CREATOR)
   // ============================================================
   async getMyEvents(userId: string): Promise<EventItem[]> {
-    const response = await fetch(`${API_URL}/events`, {
+    const url = userId ? `${API_URL}/events?created_by=${encodeURIComponent(userId)}` : `${API_URL}/events`;
+    const response = await fetch(url, {
       headers: getAuthHeaders(),
     });
 
@@ -136,28 +138,10 @@ export const eventService = {
     }
 
     return (data || [])
-      .filter((e: any) => String(e.created_by) === String(userId))
-      .map((e: any) => ({
-        id: e.id,
-        created_by: e.created_by,
-        title: e.title,
-        description: e.description,
-        event_date: e.event_date || e.start_date || '',
-        start_time: e.start_time,
-        end_time: e.end_time,
-        location: e.location,
-        image_url: e.image_url,
-        registration_deadline: e.registration_deadline,
-        event_type: e.event_type,
-        tags: e.tags,
-        status: e.status,
-        created_at: e.created_at,
-        updated_at: e.updated_at,
-        creator_name: e.creator_name,
-        registration_count: e.registration_count || 0,
-        is_registered: !!e.is_registered,
-      }));
+      .filter((e: any) => !userId || String(e.created_by) === String(userId))
+      .map(normalizeEvent);
   },
+
 
   // ============================================================
   // CREATE EVENT
@@ -175,15 +159,19 @@ export const eventService = {
     registration_deadline?: string;
     event_type?: string;
     tags?: string[];
+    attachment?: DocumentAttachmentData | null;
   }) {
-    // Note on image upload: FastAPI events API accepts image_url string directly.
-    // Preserving image_url string if provided.
+    const serializedDescription = serializeAttachmentIntoText(
+      eventData.description,
+      eventData.attachment
+    );
+
     const response = await fetch(`${API_URL}/events`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({
         title: eventData.title,
-        description: eventData.description,
+        description: serializedDescription,
         event_date: eventData.event_date,
         start_time: eventData.start_time || '',
         end_time: eventData.end_time || '',
@@ -192,6 +180,12 @@ export const eventService = {
         image_url: eventData.image_url || '',
         registration_deadline: eventData.registration_deadline || null,
         tags: eventData.tags || [],
+        attachment: eventData.attachment ? {
+          name: eventData.attachment.name,
+          type: eventData.attachment.type,
+          size: eventData.attachment.size,
+          url: eventData.attachment.url,
+        } : null,
       }),
     });
 
@@ -211,12 +205,20 @@ export const eventService = {
     eventId: string,
     eventData: Partial<EventItem>
   ) {
+    const payload: any = { ...eventData };
+    if (eventData.attachment !== undefined && eventData.description !== undefined) {
+      payload.description = serializeAttachmentIntoText(
+        eventData.description,
+        eventData.attachment
+      );
+    }
+
     const response = await fetch(
       `${API_URL}/events/${encodeURIComponent(eventId)}`,
       {
         method: 'PATCH',
         headers: getAuthHeaders(),
-        body: JSON.stringify(eventData),
+        body: JSON.stringify(payload),
       }
     );
 

@@ -4,11 +4,13 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
+import LoadingState from '@/components/LoadingState';
 import { 
   Home, Users, Briefcase, Calendar, 
   Bell, User, Settings, Info, 
-  LogOut, Shield, BarChart3, GraduationCap, Megaphone,
-  Menu, X, MessageSquare, Award
+  LogOut, Shield, BarChart3, Megaphone,
+  Menu, X, ShieldCheck, GraduationCap, Bug, UserCheck,
+  Image as ImageIcon, MessageSquare, Award
 } from 'lucide-react';
 
 const mainNavItems = [
@@ -17,6 +19,7 @@ const mainNavItems = [
   { name: 'Jobs & Internships', icon: Briefcase, href: '/student/jobs' },
   { name: 'Events', icon: Calendar, href: '/student/events' },
   { name: 'Messages & Chat', icon: MessageSquare, href: '/student/chat' },
+  { name: 'Gallery', icon: ImageIcon, href: '/gallery' },
   { name: 'Notifications', icon: Bell, href: '/student/notifications' },
   { name: 'My Profile', icon: User, href: '/student/profile' },
 ];
@@ -33,6 +36,7 @@ const alumniNavItems = [
   { name: 'Events', icon: Calendar, href: '/student/events' },
   { name: 'Achievements', icon: Award, href: '/alumni/achievements' },
   { name: 'Messages & Chat', icon: MessageSquare, href: '/student/chat' },
+  { name: 'Gallery', icon: ImageIcon, href: '/gallery' },
   { name: 'Notifications', icon: Bell, href: '/student/notifications' },
   { name: 'My Profile', icon: User, href: '/student/profile' },
 ];
@@ -45,15 +49,20 @@ const alumniMoreNavItems = [
 const adminNavItems = [
   { name: 'Dashboard', icon: Home, href: '/admin' },
   { name: 'Alumni Verification', icon: Shield, href: '/admin/verify' },
-  { name: 'Students Management', icon: GraduationCap, href: '/admin/students' },
+  { name: 'Student Verification', icon: ShieldCheck, href: '/admin/students' },
+  { name: 'Student Management', icon: GraduationCap, href: '/admin/student-management' },
   { name: 'Alumni Management', icon: Users, href: '/admin/alumni' },
   { name: 'Job Approvals', icon: Briefcase, href: '/admin/jobs' },
+  { name: 'Participation & Registrations', icon: UserCheck, href: '/admin/participation' },
   { name: 'Events', icon: Calendar, href: '/admin/events' },
+  { name: 'Gallery Moderation', icon: ImageIcon, href: '/admin/gallery' },
   { name: 'Announcements', icon: Megaphone, href: '/admin/announcements' },
   { name: 'Reports & Analytics', icon: BarChart3, href: '/admin/reports' },
 ];
 
 const adminMoreNavItems = [
+  { name: 'Public Gallery', icon: ImageIcon, href: '/gallery' },
+  { name: 'Issue Reports', icon: Bug, href: '/admin/bug-reports' },
   { name: 'Settings', icon: Settings, href: '/admin/settings' },
 ];
 
@@ -93,11 +102,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F7F4EF] text-[#6B5147] font-medium">
-        Loading SOET Portal...
-      </div>
-    );
+    return <LoadingState message="Checking your session" fullPage />;
   }
 
   const userName = user?.full_name || 'User';
@@ -211,8 +216,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   />
                 </div>
                 <div>
-                  <h1 className="text-white font-bold leading-tight tracking-wide">Alumni Portal</h1>
-                  <p className="text-xs text-[#F6A15A] font-medium uppercase tracking-wider">{user?.role || 'Student'}</p>
+                  <h1 className="text-white font-bold leading-tight tracking-wide text-sm">SOET Connect</h1>
+                  <p className="text-xs text-[#F6A15A] font-medium tracking-wide">Alumni Portal</p>
                 </div>
               </div>
               <button
@@ -246,8 +251,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             />
           </div>
           <div>
-            <h1 className="text-white font-bold leading-tight tracking-wide">Alumni Portal</h1>
-            <p className="text-xs text-[#F6A15A] font-medium uppercase tracking-wider">{user?.role || 'Student'}</p>
+            <h1 className="text-white font-bold leading-tight tracking-wide text-sm">SOET Connect</h1>
+            <p className="text-xs text-[#F6A15A] font-medium tracking-wide">Alumni Portal</p>
           </div>
         </div>
 
@@ -272,7 +277,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             >
               {isMobileNavOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
-            <span className="font-semibold text-[#4A3832] text-sm">SOET Connect</span>
+            <span className="font-semibold text-[#4A3832] text-sm truncate">SOET Connect - Alumni Portal</span>
           </div>
           <div className="flex items-center space-x-4 sm:space-x-6">
             <Link href="/student/notifications" className="text-[#6B6B6B] hover:text-[#4A3832] relative p-1" aria-label="Notifications">

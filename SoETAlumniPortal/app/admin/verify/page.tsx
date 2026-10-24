@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import LoadingState from '@/components/LoadingState';
 import { adminService, PendingAlumni } from '@/lib/services/adminService';
 import {
   ShieldCheck,
@@ -98,9 +99,7 @@ export default function AdminVerifyPage() {
         </div>
 
         {loading ? (
-          <div className="p-12 text-center text-xs text-slate-400">
-            Loading pending alumni...
-          </div>
+          <LoadingState message="Loading alumni profiles" className="p-16" />
         ) : pendingAlumni.length === 0 ? (
           <div className="p-12 text-center">
             <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />

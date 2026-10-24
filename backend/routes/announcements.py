@@ -1,12 +1,10 @@
 from datetime import datetime, timezone
-import json
 import uuid
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from database import users_collection
+from database import users_collection, supabase
 from security.dependencies import get_current_user
 from services.notifications import NOTIFICATION_TYPES, create_notification_once
 
@@ -14,11 +12,6 @@ from services.notifications import NOTIFICATION_TYPES, create_notification_once
 router = APIRouter(
     prefix="/announcements",
     tags=["Announcements"]
-)
-
-
-ANNOUNCEMENTS_FILE = (
-    Path(__file__).resolve().parent.parent / "announcements_data.json"
 )
 
 
@@ -37,35 +30,62 @@ class AnnouncementCreateRequest(BaseModel):
     title: str
     content: str
     target_audience: str = "all"
+    expires_at: str | None = None
 
 
 class AnnouncementUpdateRequest(BaseModel):
     title: str | None = None
     content: str | None = None
     target_audience: str | None = None
+    expires_at: str | None = None
 
 
 # ============================================================
 # HELPERS
 # ============================================================
 
-def load_announcements() -> list[dict]:
+def parse_iso_datetime(dt_str: str | None) -> datetime | None:
+    if not dt_str:
+        return None
+    s = str(dt_str).strip()
+    if not s:
+        return None
     try:
-        if ANNOUNCEMENTS_FILE.exists():
-            return json.loads(
-                ANNOUNCEMENTS_FILE.read_text(encoding="utf-8")
-            )
+        if len(s) == 10 and s[4] == '-' and s[7] == '-':
+            # Treat date-only deadline as end of that day in UTC
+            return datetime.fromisoformat(s).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
     except Exception:
-        pass
-
-    return []
+        return None
 
 
-def save_announcements(announcements: list[dict]):
-    ANNOUNCEMENTS_FILE.write_text(
-        json.dumps(announcements, indent=2),
-        encoding="utf-8"
-    )
+def is_announcement_expired(ann: dict) -> bool:
+    """Return True if the announcement has an expires_at timestamp that has passed in UTC."""
+    exp = ann.get("expires_at")
+    if not exp:
+        return False
+    dt = parse_iso_datetime(exp)
+    if dt is None:
+        return False
+    return datetime.now(timezone.utc) > dt
+
+
+def load_announcements() -> list[dict]:
+    """Load announcements directly from Supabase PostgreSQL."""
+    try:
+        res = supabase.table("announcements").select("*").order("created_at", desc=True).execute()
+        announcements = res.data or []
+        for ann in announcements:
+            ann["is_expired"] = is_announcement_expired(ann)
+        return announcements
+    except Exception as e:
+        print("Error loading announcements from Supabase:", e)
+        return []
 
 
 def _audience_visible_to_role(target_audience: str, role: str) -> bool:
@@ -79,7 +99,6 @@ def _audience_visible_to_role(target_audience: str, role: str) -> bool:
     if target_audience == "alumni" and role == "alumni":
         return True
 
-    # Admin sees everything
     if role == "admin":
         return True
 
@@ -97,14 +116,13 @@ def get_announcements(
     role = current_user.get("role")
     announcements = load_announcements()
 
-    # Admin sees all announcements
     if role == "admin":
         return announcements
 
-    # Other users see only announcements targeting their role or "all"
     return [
         ann for ann in announcements
         if _audience_visible_to_role(ann.get("target_audience", "all"), role)
+        and not ann.get("is_expired", False)
     ]
 
 
@@ -132,18 +150,35 @@ def create_announcement(
             )
         )
 
-    announcement = {
-        "id": str(uuid.uuid4()),
+    if body.expires_at:
+        dt = parse_iso_datetime(body.expires_at)
+        if dt and dt <= datetime.now(timezone.utc):
+            raise HTTPException(
+                status_code=400,
+                detail="Expiration date must be in the future."
+            )
+
+    ann_id = str(uuid.uuid4())
+    author_id = str(current_user.get("user_id"))
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    ann_row = {
+        "id": ann_id,
+        "author_id": author_id,
         "title": body.title,
         "content": body.content,
         "target_audience": body.target_audience,
-        "created_by": str(current_user.get("user_id")),
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "expires_at": body.expires_at,
+        "created_at": now_iso,
+        "updated_at": now_iso,
     }
 
-    announcements = load_announcements()
-    announcements.append(announcement)
-    save_announcements(announcements)
+    supabase.table("announcements").insert(ann_row).execute()
+
+    announcement = {
+        **ann_row,
+        "created_by": author_id,
+    }
 
     # Broadcast notifications to eligible active users
     try:
@@ -201,45 +236,51 @@ def update_announcement(
             detail="Only admin users can update announcements."
         )
 
-    # Validate target_audience if provided
-    if body.target_audience is not None:
-        if body.target_audience not in VALID_AUDIENCES:
+    if body.target_audience is not None and body.target_audience not in VALID_AUDIENCES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid target audience. Must be one of: "
+                f"{', '.join(sorted(VALID_AUDIENCES))}."
+            )
+        )
+
+    res = supabase.table("announcements").select("*").eq("id", str(announcement_id)).limit(1).execute()
+    if not res.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Announcement not found."
+        )
+
+    ann = res.data[0]
+    update_data = body.model_dump(exclude_none=True)
+    if not update_data:
+        raise HTTPException(
+            status_code=400,
+            detail="No changes were provided."
+        )
+
+    if "expires_at" in update_data and update_data["expires_at"]:
+        dt = parse_iso_datetime(update_data["expires_at"])
+        if dt and dt <= datetime.now(timezone.utc):
             raise HTTPException(
                 status_code=400,
-                detail=(
-                    f"Invalid target audience. Must be one of: "
-                    f"{', '.join(sorted(VALID_AUDIENCES))}."
-                )
+                detail="Expiration date must be in the future."
             )
 
-    announcements = load_announcements()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    db_updates = {**update_data, "updated_at": now_iso}
 
-    for ann in announcements:
-        if str(ann.get("id")) == str(announcement_id):
-            update_data = body.model_dump(exclude_none=True)
+    supabase.table("announcements").update(db_updates).eq("id", str(announcement_id)).execute()
 
-            if not update_data:
-                raise HTTPException(
-                    status_code=400,
-                    detail="No changes were provided."
-                )
+    ann.update(db_updates)
+    ann["is_expired"] = is_announcement_expired(ann)
+    ann["created_by"] = str(ann.get("author_id", ""))
 
-            for key, value in update_data.items():
-                ann[key] = value
-
-            ann["updated_at"] = datetime.now(timezone.utc).isoformat()
-
-            save_announcements(announcements)
-
-            return {
-                "message": "Announcement updated successfully.",
-                "announcement": ann,
-            }
-
-    raise HTTPException(
-        status_code=404,
-        detail="Announcement not found."
-    )
+    return {
+        "message": "Announcement updated successfully.",
+        "announcement": ann,
+    }
 
 
 # ============================================================
@@ -257,19 +298,18 @@ def delete_announcement(
             detail="Only admin users can delete announcements."
         )
 
-    announcements = load_announcements()
+    res = supabase.table("announcements").select("*").eq("id", str(announcement_id)).limit(1).execute()
+    if not res.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Announcement not found."
+        )
 
-    for index, ann in enumerate(announcements):
-        if str(ann.get("id")) == str(announcement_id):
-            deleted = announcements.pop(index)
-            save_announcements(announcements)
+    deleted = res.data[0]
+    supabase.table("announcements").delete().eq("id", str(announcement_id)).execute()
 
-            return {
-                "message": "Announcement deleted successfully.",
-                "announcement": deleted,
-            }
+    return {
+        "message": "Announcement deleted successfully.",
+        "announcement": deleted,
+    }
 
-    raise HTTPException(
-        status_code=404,
-        detail="Announcement not found."
-    )

@@ -2,9 +2,9 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { authService } from '@/lib/services/authService';
-import { GraduationCap, AlertCircle, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, ArrowRight, ShieldAlert } from 'lucide-react';
+import { ButtonSpinner } from '@/components/LoadingState';
 
 const DEPARTMENTS = [
   'Computer Engineering',
@@ -17,7 +17,6 @@ const DEPARTMENTS = [
 ];
 
 export default function StudentRegisterPage() {
-  const router = useRouter();
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -32,7 +31,7 @@ export default function StudentRegisterPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,12 +50,9 @@ export default function StudentRegisterPage() {
         ...formData,
         fullName: trimmedName,
       });
-      setSuccess(true);
-      setTimeout(() => {
-        router.push('/login');
-      }, 2000);
-    } catch (err: any) {
-      setError(err.message || 'Registration failed.');
+      setSubmitted(true);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Registration failed.');
     } finally {
       setLoading(false);
     }
@@ -66,11 +62,21 @@ export default function StudentRegisterPage() {
     <div className="min-h-screen bg-[#F7F4EF] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 font-sans relative overflow-hidden">
       <div className="sm:mx-auto sm:w-full sm:max-w-xl relative z-10">
         <div className="flex justify-center mb-4">
-          <div className="w-12 h-12 bg-[#F28C38]/15 border border-[#F28C38]/30 rounded-2xl flex items-center justify-center text-[#F28C38]">
-            <GraduationCap className="w-6 h-6" />
+          <div className="w-[72px] h-[72px] bg-white rounded-2xl flex items-center justify-center p-2 shadow-md shadow-[#4A3832]/5 border border-[#DDD7D2]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/mgm-university-logo.svg"
+              alt="MGM University Logo"
+              className="w-full h-full object-contain"
+            />
           </div>
         </div>
-        <h2 className="text-center text-3xl font-extrabold text-[#4A3832] tracking-tight">
+        <div className="text-center mb-1">
+          <span className="text-xs font-bold text-[#F28C38] uppercase tracking-wider">
+            SOET Connect - Alumni Portal
+          </span>
+        </div>
+        <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-[#4A3832] tracking-tight">
           Student Registration
         </h2>
         <p className="mt-2 text-center text-sm text-[#6B6B6B]">
@@ -88,18 +94,20 @@ export default function StudentRegisterPage() {
             </div>
           )}
 
-          {success ? (
+          {submitted ? (
             <div className="text-center py-8">
-              <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto mb-4 animate-bounce" />
-              <h3 className="text-xl font-bold text-[#4A3832] mb-2">Account Created Successfully!</h3>
-              <p className="text-sm text-[#6B6B6B] mb-6">
-                Your student profile has been registered. Redirecting to login...
+              <div className="w-16 h-16 bg-amber-500/10 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-amber-500/20">
+                <ShieldAlert className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-bold text-[#4A3832] mb-2">Registration Submitted for Verification</h3>
+              <p className="text-sm text-[#6B6B6B] max-w-md mx-auto mb-6 leading-relaxed">
+                Thank you for registering! Your student account is currently <span className="text-amber-600 font-bold">Pending Admin Verification</span>. Once verified by the department administrator, you will be able to sign in and access the SOET Connect - Alumni Portal.
               </p>
               <Link
                 href="/login"
                 className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#F28C38] hover:bg-[#E07D2E] text-white text-sm font-bold rounded-xl shadow-lg shadow-[#F28C38]/25 transition"
               >
-                Go to Sign In <ArrowRight className="w-4 h-4" />
+                Return to Sign In <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
           ) : (
@@ -242,8 +250,17 @@ export default function StudentRegisterPage() {
                   disabled={loading}
                   className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold text-white bg-[#F28C38] hover:bg-[#E07D2E] focus:ring-2 focus:ring-[#F28C38] shadow-lg shadow-[#F28C38]/25 transition disabled:opacity-50 cursor-pointer"
                 >
-                  {loading ? 'Creating Student Account...' : 'Complete Student Registration'}
-                  {!loading && <ArrowRight className="w-4 h-4" />}
+                  {loading ? (
+                    <>
+                      <ButtonSpinner className="text-white" />
+                      <span>Creating Student Account...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Complete Student Registration</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
                 </button>
               </div>
             </form>

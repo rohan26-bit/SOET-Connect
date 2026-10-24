@@ -5,11 +5,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { authService } from '@/lib/services/authService';
 import {
-  Shield,
   AlertCircle,
   ArrowRight,
   CheckCircle2,
 } from 'lucide-react';
+import { ButtonSpinner } from '@/components/LoadingState';
 
 export default function AdminRegisterPage() {
   const router = useRouter();
@@ -50,8 +50,8 @@ export default function AdminRegisterPage() {
       setTimeout(() => {
         router.push('/login');
       }, 2000);
-    } catch (err: any) {
-      setError(err.message || 'Admin registration failed.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Admin registration failed.');
     } finally {
       setLoading(false);
     }
@@ -64,12 +64,22 @@ export default function AdminRegisterPage() {
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
         <div className="flex justify-center mb-4">
-          <div className="w-12 h-12 bg-[#4A3832]/10 border border-[#4A3832]/20 rounded-2xl flex items-center justify-center text-[#4A3832]">
-            <Shield className="w-6 h-6" />
+          <div className="w-[72px] h-[72px] bg-white rounded-2xl flex items-center justify-center p-2 shadow-md shadow-[#4A3832]/5 border border-[#DDD7D2]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/mgm-university-logo.svg"
+              alt="MGM University Logo"
+              className="w-full h-full object-contain"
+            />
           </div>
         </div>
 
-        <h2 className="text-center text-3xl font-extrabold text-[#4A3832] tracking-tight">
+        <div className="text-center mb-1">
+          <span className="text-xs font-bold text-[#F28C38] uppercase tracking-wider">
+            SOET Connect - Alumni Portal
+          </span>
+        </div>
+        <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-[#4A3832] tracking-tight">
           Admin Registration
         </h2>
 
@@ -202,11 +212,17 @@ export default function AdminRegisterPage() {
                 disabled={loading}
                 className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-sm font-bold text-white bg-[#F28C38] hover:bg-[#E07D2E] focus:ring-2 focus:ring-[#F28C38] transition-all shadow-lg shadow-[#F28C38]/25 disabled:opacity-50 cursor-pointer"
               >
-                {loading
-                  ? 'Creating Admin Account...'
-                  : 'Create Admin Account'}
-
-                {!loading && <ArrowRight className="w-4 h-4" />}
+                {loading ? (
+                  <>
+                    <ButtonSpinner className="text-white" />
+                    <span>Creating Admin Account...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Create Admin Account</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
 
             </form>

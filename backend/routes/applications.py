@@ -1,38 +1,37 @@
 from datetime import datetime, timezone
-import json
 import uuid
-from pathlib import Path
 
-from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from database import users_collection
+from database import users_collection, supabase
 from security.dependencies import get_current_user
 from services.notifications import NOTIFICATION_TYPES, create_notification_once
+from routes.jobs import load_jobs, is_job_expired
 
 
 router = APIRouter(
     tags=["Applications"]
 )
 
-
-BACKEND_DIR = Path(__file__).resolve().parent.parent
-
-APPLICATIONS_FILE = BACKEND_DIR / "applications_data.json"
-JOBS_FILE = BACKEND_DIR / "jobs_data.json"
+# Legacy file attribute for test monkeypatch compatibility
+APPLICATIONS_FILE = None
 
 
 # ============================================================
-# VALID STATUSES
+# ALLOWED ROLES & VALID STATUSES
 # ============================================================
+
+ALLOWED_APPLICATION_ROLES = {"student", "alumni", "admin"}
 
 VALID_APPLICATION_STATUSES = {
     "applied",
+    "submitted",
     "under_review",
     "shortlisted",
     "interview",
     "selected",
+    "accepted",
     "rejected",
 }
 
@@ -68,38 +67,25 @@ class ApplicationStatusUpdateRequest(BaseModel):
 # ============================================================
 
 def load_applications() -> list[dict]:
+    """Load job applications from Supabase PostgreSQL."""
     try:
-        if APPLICATIONS_FILE.exists():
-            return json.loads(
-                APPLICATIONS_FILE.read_text(encoding="utf-8")
-            )
-    except Exception:
-        pass
-
-    return []
-
-
-def save_applications(applications: list[dict]):
-    APPLICATIONS_FILE.write_text(
-        json.dumps(applications, indent=2),
-        encoding="utf-8"
-    )
-
-
-def load_jobs() -> list[dict]:
-    try:
-        if JOBS_FILE.exists():
-            return json.loads(
-                JOBS_FILE.read_text(encoding="utf-8")
-            )
-    except Exception:
-        pass
-
-    return []
-
-
-def _load_jobs() -> list[dict]:
-    return load_jobs()
+        res = supabase.table("job_applications").select("*").order("applied_at", desc=True).execute()
+        apps = []
+        for row in res.data or []:
+            a = dict(row)
+            applicant_id = str(row.get("applicant_id", ""))
+            a["applicant_id"] = applicant_id
+            a["student_id"] = applicant_id
+            a["created_at"] = row.get("applied_at", "")
+            if a.get("status") == "submitted":
+                a["status"] = "applied"
+            elif a.get("status") == "accepted":
+                a["status"] = "selected"
+            apps.append(a)
+        return apps
+    except Exception as e:
+        print("Error loading applications from Supabase:", e)
+        return []
 
 
 def _find_job(job_id: str) -> dict | None:
@@ -113,50 +99,36 @@ def get_user_from_token(current_user: dict) -> dict | None:
     user_id = current_user.get("user_id")
     role = current_user.get("role")
 
-    try:
-        user = users_collection.find_one({"_id": ObjectId(user_id)})
-        if user:
-            return user
-    except Exception:
-        pass
+    user = users_collection.find_one({"_id": str(user_id)})
+    if user:
+        return user
 
-    user = users_collection.find_one({"_id": user_id})
-    if not user and role:
+    if role:
         users = users_collection.find({"role": role})
         for candidate in users:
             if str(candidate.get("_id")) == str(user_id):
-                user = candidate
-                break
+                return candidate
 
-    return user
-
-
-def _resolve_user(current_user: dict) -> dict | None:
-    return get_user_from_token(current_user)
+    return None
 
 
 # ============================================================
 # NEW API ENDPOINTS: /applications
 # ============================================================
 
+@router.post("/applications")
 @router.post("/applications/apply")
 def apply_for_job(
     application: ApplicationCreateRequest,
     current_user: dict = Depends(get_current_user)
 ):
-    if current_user.get("role") != "student":
+    if current_user.get("role") not in ALLOWED_APPLICATION_ROLES:
         raise HTTPException(
             status_code=403,
-            detail="Only students can apply for jobs."
+            detail="Only students, alumni, and administrators can apply for jobs."
         )
 
-    jobs = load_jobs()
-    target_job = None
-    for job in jobs:
-        if str(job.get("id")) == str(application.job_id):
-            target_job = job
-            break
-
+    target_job = _find_job(application.job_id)
     if not target_job:
         raise HTTPException(
             status_code=404,
@@ -169,12 +141,19 @@ def apply_for_job(
             detail="Applications can only be submitted for approved jobs."
         )
 
+    if is_job_expired(target_job):
+        raise HTTPException(
+            status_code=400,
+            detail="The application deadline for this job has passed."
+        )
+
+    applicant_id = str(current_user.get("user_id"))
     applications = load_applications()
-    student_id = str(current_user.get("user_id"))
 
     for existing in applications:
+        existing_applicant = str(existing.get("applicant_id") or existing.get("student_id"))
         if (
-            str(existing.get("student_id")) == student_id
+            existing_applicant == applicant_id
             and str(existing.get("job_id")) == str(application.job_id)
         ):
             raise HTTPException(
@@ -194,22 +173,37 @@ def apply_for_job(
             status_code=403,
             detail="This account has been deactivated."
         )
-    student_name = user.get("name", "Student")
+
+    applicant_name = user.get("name") or "Applicant"
+    student_name = applicant_name
+    app_id = str(uuid.uuid4())
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    db_status = "submitted"
+    supabase.table("job_applications").insert({
+        "id": app_id,
+        "job_id": str(application.job_id),
+        "applicant_id": applicant_id,
+        "status": db_status,
+        "resume_url": application.resume_url or "",
+        "cover_letter": application.cover_letter or "",
+        "applied_at": now_iso,
+        "updated_at": now_iso,
+    }).execute()
 
     app_document = {
-        "id": str(uuid.uuid4()),
+        "id": app_id,
         "job_id": str(application.job_id),
-        "student_id": student_id,
+        "student_id": applicant_id,
         "student_name": student_name,
+        "applicant_id": applicant_id,
+        "applicant_name": applicant_name,
         "resume_url": application.resume_url or "",
         "cover_letter": application.cover_letter or "",
         "status": "applied",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": now_iso,
+        "updated_at": now_iso,
     }
-
-    applications.append(app_document)
-    save_applications(applications)
 
     poster_id = str(target_job.get("posted_by"))
     job_title = target_job.get("title", "")
@@ -217,11 +211,11 @@ def apply_for_job(
         create_notification_once(
             user_id=poster_id,
             title="New job application",
-            message=f'{student_name} applied for your job "{job_title}".',
+            message=f'{applicant_name} applied for your job "{job_title}".',
             notification_type=NOTIFICATION_TYPES["job_application"],
             entity_type="application",
-            entity_id=str(app_document["id"]),
-            dedupe_key=f"job_application:{app_document['id']}",
+            entity_id=app_id,
+            dedupe_key=f"job_application:{app_id}",
         )
     except Exception:
         pass
@@ -237,29 +231,29 @@ def apply_for_job(
 def get_my_applications_endpoint(
     current_user: dict = Depends(get_current_user)
 ):
-    if current_user.get("role") != "student":
+    if current_user.get("role") not in ALLOWED_APPLICATION_ROLES:
         raise HTTPException(
             status_code=403,
-            detail="Only students can view their own applications."
+            detail="Only students, alumni, and administrators can view their own applications."
         )
 
-    student_id = str(current_user.get("user_id"))
+    user_id = str(current_user.get("user_id"))
     applications = load_applications()
     jobs = load_jobs()
 
-    job_lookup = {}
-    for job in jobs:
-        job_lookup[str(job.get("id"))] = job
+    job_lookup = {str(job.get("id")): job for job in jobs}
 
     results = []
     for app in applications:
-        if str(app.get("student_id")) == student_id:
+        app_user_id = str(app.get("applicant_id") or app.get("student_id"))
+        if app_user_id == user_id:
             job = job_lookup.get(str(app.get("job_id")))
 
             result = {
                 "id": app.get("id"),
                 "job_id": app.get("job_id"),
-                "student_id": app.get("student_id"),
+                "student_id": app_user_id,
+                "applicant_id": app_user_id,
                 "resume_url": app.get("resume_url", ""),
                 "cover_letter": app.get("cover_letter", ""),
                 "status": app.get("status"),
@@ -295,13 +289,7 @@ def get_job_applicants(
     user_id = str(current_user.get("user_id"))
     role = current_user.get("role")
 
-    jobs = load_jobs()
-    target_job = None
-    for job in jobs:
-        if str(job.get("id")) == str(job_id):
-            target_job = job
-            break
-
+    target_job = _find_job(job_id)
     if not target_job:
         raise HTTPException(
             status_code=404,
@@ -319,33 +307,34 @@ def get_job_applicants(
 
     for app in applications:
         if str(app.get("job_id")) == str(job_id):
-            student_name = app.get("student_name", "")
-            student_email = ""
+            applicant_id = str(app.get("applicant_id") or app.get("student_id"))
+            applicant_name = app.get("student_name", "")
+            applicant_email = ""
             department = ""
 
-            student_user = users_collection.find_one(
-                {"_id": app.get("student_id")}
+            applicant_user = users_collection.find_one(
+                {"_id": applicant_id}
             )
 
-            if not student_user:
-                all_students = users_collection.find({"role": "student"})
-                for candidate in all_students:
-                    if str(candidate.get("_id")) == str(app.get("student_id")):
-                        student_user = candidate
-                        break
-
-            if student_user:
-                student_name = student_user.get("name", student_name)
-                student_email = student_user.get("email", "")
-                student_profile = student_user.get("student_profile", {})
-                department = student_profile.get("department", "")
+            if applicant_user:
+                applicant_name = applicant_user.get("name", applicant_name)
+                applicant_email = applicant_user.get("email", "")
+                profile = (
+                    applicant_user.get("student_profile")
+                    or applicant_user.get("alumni_profile")
+                    or {}
+                )
+                department = profile.get("department", "")
 
             results.append({
                 "id": app.get("id"),
                 "job_id": app.get("job_id"),
-                "student_id": app.get("student_id"),
-                "student_name": student_name,
-                "student_email": student_email,
+                "student_id": applicant_id,
+                "student_name": applicant_name,
+                "applicant_id": applicant_id,
+                "applicant_name": applicant_name,
+                "student_email": applicant_email,
+                "applicant_email": applicant_email,
                 "department": department,
                 "resume_url": app.get("resume_url", ""),
                 "cover_letter": app.get("cover_letter", ""),
@@ -383,7 +372,6 @@ def update_application_status(
 
     applications = load_applications()
     jobs = load_jobs()
-
     job_lookup = {str(job.get("id")): job for job in jobs}
 
     for app in applications:
@@ -405,16 +393,26 @@ def update_application_status(
 
             old_status = app.get("status")
             app["status"] = request.status
-            app["updated_at"] = datetime.now(timezone.utc).isoformat()
+            now_iso = datetime.now(timezone.utc).isoformat()
+            app["updated_at"] = now_iso
 
-            save_applications(applications)
+            db_status = request.status
+            if db_status == "applied":
+                db_status = "submitted"
+            elif db_status == "selected":
+                db_status = "accepted"
+
+            supabase.table("job_applications").update({
+                "status": db_status,
+                "updated_at": now_iso
+            }).eq("id", str(application_id)).execute()
 
             if old_status != request.status:
-                student_id = str(app.get("student_id"))
+                applicant_id = str(app.get("applicant_id") or app.get("student_id"))
                 job_title = job.get("title", "") if job else ""
                 try:
                     create_notification_once(
-                        user_id=student_id,
+                        user_id=applicant_id,
                         title="Application status updated",
                         message=f'Your application for "{job_title}" is now "{request.status}".',
                         notification_type=NOTIFICATION_TYPES["application_status"],
@@ -444,26 +442,26 @@ def withdraw_application(
     user_id = str(current_user.get("user_id"))
     applications = load_applications()
 
-    for index, app in enumerate(applications):
+    for app in applications:
         if str(app.get("id")) == str(application_id):
-            if str(app.get("student_id")) != user_id:
+            app_user_id = str(app.get("applicant_id") or app.get("student_id"))
+            if app_user_id != user_id:
                 raise HTTPException(
                     status_code=403,
                     detail="You can only withdraw your own applications."
                 )
 
-            if app.get("status") != "applied":
+            if app.get("status") not in {"applied", "submitted"}:
                 raise HTTPException(
                     status_code=400,
                     detail="Cannot withdraw application that is already being reviewed."
                 )
 
-            deleted_app = applications.pop(index)
-            save_applications(applications)
+            supabase.table("job_applications").delete().eq("id", str(application_id)).execute()
 
             return {
                 "message": "Application withdrawn successfully.",
-                "application": deleted_app
+                "application": app
             }
 
     raise HTTPException(
@@ -482,10 +480,10 @@ def apply_to_job_compatibility(
     body: JobApplicationCreateRequest,
     current_user: dict = Depends(get_current_user),
 ):
-    if current_user.get("role") != "student":
+    if current_user.get("role") not in ALLOWED_APPLICATION_ROLES:
         raise HTTPException(
             status_code=403,
-            detail="Only students can apply to jobs."
+            detail="Only students, alumni, and administrators can apply to jobs."
         )
 
     job = _find_job(job_id)
@@ -501,12 +499,19 @@ def apply_to_job_compatibility(
             detail="Applications are only accepted for approved jobs."
         )
 
-    student_id = str(current_user.get("user_id"))
+    if is_job_expired(job):
+        raise HTTPException(
+            status_code=400,
+            detail="The application deadline for this job has passed."
+        )
+
+    applicant_id = str(current_user.get("user_id"))
     applications = load_applications()
 
     for app in applications:
+        existing_applicant = str(app.get("applicant_id") or app.get("student_id"))
         if (
-            str(app.get("student_id")) == student_id
+            existing_applicant == applicant_id
             and str(app.get("job_id")) == str(job_id)
         ):
             raise HTTPException(
@@ -526,24 +531,38 @@ def apply_to_job_compatibility(
             status_code=403,
             detail="This account has been deactivated."
         )
-    student_name = user.get("name", "Student")
+
+    applicant_name = user.get("name") or "Applicant"
+    student_name = applicant_name
+    app_id = str(uuid.uuid4())
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    supabase.table("job_applications").insert({
+        "id": app_id,
+        "job_id": str(job_id),
+        "applicant_id": applicant_id,
+        "status": "submitted",
+        "resume_url": body.resume_url or "",
+        "cover_letter": body.cover_letter or "",
+        "applied_at": now_iso,
+        "updated_at": now_iso,
+    }).execute()
 
     application = {
-        "id": str(uuid.uuid4()),
+        "id": app_id,
         "job_id": str(job_id),
         "job_title": job.get("title", ""),
         "company": job.get("company", ""),
-        "student_id": student_id,
+        "student_id": applicant_id,
         "student_name": student_name,
+        "applicant_id": applicant_id,
+        "applicant_name": applicant_name,
         "cover_letter": body.cover_letter or "",
         "resume_url": body.resume_url or "",
         "status": "applied",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": now_iso,
+        "updated_at": now_iso,
     }
-
-    applications.append(application)
-    save_applications(applications)
 
     poster_id = str(job.get("posted_by"))
     job_title = job.get("title", "")
@@ -551,11 +570,11 @@ def apply_to_job_compatibility(
         create_notification_once(
             user_id=poster_id,
             title="New job application",
-            message=f'{student_name} applied for your job "{job_title}".',
+            message=f'{applicant_name} applied for your job "{job_title}".',
             notification_type=NOTIFICATION_TYPES["job_application"],
             entity_type="application",
-            entity_id=str(application["id"]),
-            dedupe_key=f"job_application:{application['id']}",
+            entity_id=app_id,
+            dedupe_key=f"job_application:{app_id}",
         )
     except Exception:
         pass
@@ -570,18 +589,18 @@ def apply_to_job_compatibility(
 def get_my_applications_jobs_compatibility(
     current_user: dict = Depends(get_current_user),
 ):
-    if current_user.get("role") != "student":
+    if current_user.get("role") not in ALLOWED_APPLICATION_ROLES:
         raise HTTPException(
             status_code=403,
-            detail="Only students can view their own applications."
+            detail="Only students, alumni, and administrators can view their own applications."
         )
 
-    student_id = str(current_user.get("user_id"))
+    applicant_id = str(current_user.get("user_id"))
     applications = load_applications()
 
     return [
         app for app in applications
-        if str(app.get("student_id")) == student_id
+        if str(app.get("applicant_id") or app.get("student_id")) == applicant_id
     ]
 
 
@@ -646,17 +665,27 @@ def update_application_status_compatibility(
 
             old_status = app.get("status")
             app["status"] = body.status
-            app["updated_at"] = datetime.now(timezone.utc).isoformat()
+            now_iso = datetime.now(timezone.utc).isoformat()
+            app["updated_at"] = now_iso
 
-            save_applications(applications)
+            db_status = body.status
+            if db_status == "applied":
+                db_status = "submitted"
+            elif db_status == "selected":
+                db_status = "accepted"
+
+            supabase.table("job_applications").update({
+                "status": db_status,
+                "updated_at": now_iso
+            }).eq("id", str(application_id)).execute()
 
             if old_status != body.status:
-                student_id = str(app.get("student_id"))
+                applicant_id = str(app.get("applicant_id") or app.get("student_id"))
                 job_obj = _find_job(app.get("job_id"))
                 job_title = job_obj.get("title", "") if job_obj else app.get("job_title", "")
                 try:
                     create_notification_once(
-                        user_id=student_id,
+                        user_id=applicant_id,
                         title="Application status updated",
                         message=f'Your application for "{job_title}" is now "{body.status}".',
                         notification_type=NOTIFICATION_TYPES["application_status"],

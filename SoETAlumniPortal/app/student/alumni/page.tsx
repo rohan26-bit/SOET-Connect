@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
+import LoadingState from '@/components/LoadingState';
 import { alumniService, AlumniDirectoryItem } from '@/lib/services/alumniService';
 import { Search, MapPin, Building, GraduationCap, Globe, ExternalLink, Filter, Mail, X, MessageSquare } from 'lucide-react';
 
@@ -61,7 +62,7 @@ export default function AlumniDirectoryPage() {
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">SOET Connect Directory</h1>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Alumni Directory</h1>
           <p className="text-xs text-slate-500 mt-1">
             Connect with verified graduates and industry professionals from our institution.
           </p>
@@ -114,9 +115,7 @@ export default function AlumniDirectoryPage() {
 
       {/* Alumni Grid */}
       {loading ? (
-        <div className="py-16 text-center text-slate-400 text-sm">
-          Searching verified alumni network...
-        </div>
+        <LoadingState message="Loading alumni profiles" className="py-16" />
       ) : alumni.length === 0 ? (
         <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm">
           <GraduationCap className="w-12 h-12 text-slate-300 mx-auto mb-3" />

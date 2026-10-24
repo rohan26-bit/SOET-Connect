@@ -1,11 +1,9 @@
+import os
 from datetime import datetime, timezone
-import json
-from pathlib import Path
 import uuid
 
-NOTIFICATIONS_FILE = (
-    Path(__file__).resolve().parent.parent / "notifications_data.json"
-)
+from database import supabase
+
 
 # Canonical notification type constants
 NOTIFICATION_TYPES = {
@@ -21,48 +19,23 @@ NOTIFICATION_TYPES = {
     "event_registration": "event_registration",
     "event_cancellation": "event_cancellation",
     "announcement": "announcement",
+    "student_verification": "student_verification",
+    "gallery_submission": "gallery_submission",
+    "gallery_approval": "gallery_approval",
+    "gallery_rejection": "gallery_rejection",
+    "password_reset": "password_reset",
+    "phone_verification": "phone_verification",
 }
 
 
-def get_notifications_file() -> Path:
-    """Resolve notification storage file path, honoring test monkeypatching."""
-    default_path = Path(__file__).resolve().parent.parent / "notifications_data.json"
-
-    # If NOTIFICATIONS_FILE on this module was monkeypatched directly
-    if NOTIFICATIONS_FILE != default_path:
-        return Path(NOTIFICATIONS_FILE)
-
-    # If routes.notifications.NOTIFICATIONS_FILE was monkeypatched (e.g., in conftest.py)
-    import sys
-    routes_notif = sys.modules.get("routes.notifications")
-    if routes_notif and hasattr(routes_notif, "NOTIFICATIONS_FILE"):
-        if routes_notif.NOTIFICATIONS_FILE != default_path:
-            return Path(routes_notif.NOTIFICATIONS_FILE)
-
-    return Path(NOTIFICATIONS_FILE)
-
-
 def load_notifications() -> list[dict]:
-    """Load notifications safely from the resolved JSON data file."""
-    fpath = get_notifications_file()
+    """Load notifications safely from Supabase PostgreSQL notifications table."""
     try:
-        if fpath.exists():
-            content = fpath.read_text(encoding="utf-8").strip()
-            if content:
-                return json.loads(content)
-    except Exception:
-        pass
-
-    return []
-
-
-def save_notifications(notifications: list[dict]):
-    """Persist notification list as formatted JSON."""
-    fpath = get_notifications_file()
-    fpath.write_text(
-        json.dumps(notifications, indent=2),
-        encoding="utf-8"
-    )
+        res = supabase.table("notifications").select("*").order("created_at", desc=True).execute()
+        return res.data or []
+    except Exception as e:
+        print("Error loading notifications from Supabase:", e)
+        return []
 
 
 def create_notification(
@@ -74,40 +47,65 @@ def create_notification(
     entity_id: str | None = None,
     dedupe_key: str | None = None,
 ) -> dict:
-    """Create and persist a notification document.
+    """Create and persist a notification in Supabase PostgreSQL."""
+    user_id_str = str(user_id)
 
-    If dedupe_key is provided and a record with the same dedupe_key already
-    exists, returns the existing notification without creating a duplicate.
-    """
-    notifications = load_notifications()
+    if os.getenv("DATABASE_MODE", "").lower() != "mock":
+        try:
+            uuid.UUID(user_id_str)
+        except (ValueError, AttributeError):
+            try:
+                u_res = supabase.table("users").select("id").eq("legacy_mongo_id", user_id_str).limit(1).execute()
+                if u_res.data:
+                    user_id_str = str(u_res.data[0]["id"])
+                else:
+                    return {}
+            except Exception:
+                return {}
 
     if dedupe_key:
-        for n in notifications:
-            if n.get("dedupe_key") == dedupe_key:
-                return n
+        try:
+            existing = supabase.table("notifications").select("*").eq("dedupe_key", dedupe_key).execute()
+            if existing.data:
+                return existing.data[0]
+        except Exception:
+            pass
 
-    notification = {
-        "id": str(uuid.uuid4()),
-        "user_id": str(user_id),
+    notif_id = str(uuid.uuid4())
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    notif_row = {
+        "id": notif_id,
+        "user_id": user_id_str,
         "title": title,
         "message": message,
+        "type": notification_type,
+        "entity_type": entity_type,
+        "entity_id": str(entity_id) if entity_id else None,
+        "dedupe_key": dedupe_key,
         "is_read": False,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": now_iso,
     }
 
-    if notification_type:
-        notification["type"] = notification_type
-    if entity_type:
-        notification["entity_type"] = entity_type
-    if entity_id:
-        notification["entity_id"] = str(entity_id)
-    if dedupe_key:
-        notification["dedupe_key"] = dedupe_key
+    try:
+        supabase.table("notifications").insert(notif_row).execute()
+    except Exception as e:
+        print("Error inserting notification to Supabase:", e)
 
-    notifications.append(notification)
-    save_notifications(notifications)
+    # Safely dispatch external notifications (Email / SMS) based on user preferences
+    try:
+        from services.delivery import dispatch_external_notification
+        dispatch_external_notification(
+            user_id=user_id_str,
+            title=title,
+            message=message,
+            event_type=notification_type or "general",
+            notification_id=notif_id,
+        )
+    except Exception as e:
+        pass
 
-    return notification
+    return notif_row
 
 
 def create_notification_once(
@@ -141,46 +139,29 @@ def create_notifications_for_users(
     dedupe_prefix: str | None = None,
 ) -> list[dict]:
     """Batch create notifications across multiple users with deduplication."""
-    notifications = load_notifications()
-    existing_dedupe_keys = {
-        n.get("dedupe_key")
-        for n in notifications
-        if n.get("dedupe_key")
-    }
-
     created = []
-    now_iso = datetime.now(timezone.utc).isoformat()
-
     for uid in user_ids:
         user_id_str = str(uid)
         dedupe_key = f"{dedupe_prefix}:{user_id_str}" if dedupe_prefix else None
-
-        if dedupe_key and dedupe_key in existing_dedupe_keys:
-            continue
-
-        notification = {
-            "id": str(uuid.uuid4()),
-            "user_id": user_id_str,
-            "title": title,
-            "message": message,
-            "is_read": False,
-            "created_at": now_iso,
-        }
-
-        if notification_type:
-            notification["type"] = notification_type
-        if entity_type:
-            notification["entity_type"] = entity_type
-        if entity_id:
-            notification["entity_id"] = str(entity_id)
-        if dedupe_key:
-            notification["dedupe_key"] = dedupe_key
-            existing_dedupe_keys.add(dedupe_key)
-
-        notifications.append(notification)
-        created.append(notification)
-
-    if created:
-        save_notifications(notifications)
-
+        notif = create_notification(
+            user_id=user_id_str,
+            title=title,
+            message=message,
+            notification_type=notification_type,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            dedupe_key=dedupe_key,
+        )
+        if notif:
+            created.append(notif)
     return created
+
+
+def save_notifications(notifications: list[dict]) -> None:
+    """Save or update notifications in Supabase PostgreSQL."""
+    for n in notifications:
+        try:
+            supabase.table("notifications").upsert(n).execute()
+        except Exception as e:
+            print("Error saving notification to Supabase:", e)
+

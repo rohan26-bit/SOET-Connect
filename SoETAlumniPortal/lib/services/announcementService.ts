@@ -1,3 +1,9 @@
+import {
+  DocumentAttachmentData,
+  serializeAttachmentIntoText,
+  parseAttachmentFromText,
+} from '@/components/DocumentAttachment';
+
 const API_URL = '/api';
 
 function getToken(): string {
@@ -28,11 +34,19 @@ export interface AnnouncementItem {
   title: string;
   content: string;
   target_audience: 'all' | 'students' | 'alumni';
+  expires_at?: string;
+  is_expired?: boolean;
   created_at: string;
   created_by?: string;
   is_published?: boolean;
   creator_name?: string;
   updated_at?: string;
+  attachment?: {
+    name: string;
+    type: string;
+    size: number;
+    url?: string;
+  } | null;
 }
 
 export const announcementService = {
@@ -50,7 +64,15 @@ export const announcementService = {
     });
 
     const data = await parseResponse(response);
-    return Array.isArray(data) ? data : [];
+    const list = Array.isArray(data) ? data : [];
+    return list.map((ann: any) => {
+      const parsed = parseAttachmentFromText(ann.content);
+      return {
+        ...ann,
+        content: parsed.cleanText,
+        attachment: ann.attachment || parsed.attachment || null,
+      };
+    });
   },
 
   // ============================================================
@@ -61,9 +83,16 @@ export const announcementService = {
     title: string;
     content: string;
     target_audience: 'all' | 'students' | 'alumni';
+    expires_at?: string | null;
     created_by?: string;
     is_published?: boolean;
+    attachment?: DocumentAttachmentData | null;
   }) {
+    const serializedContent = serializeAttachmentIntoText(
+      data.content,
+      data.attachment
+    );
+
     const response = await fetch(`${API_URL}/announcements`, {
       method: 'POST',
       headers: {
@@ -72,8 +101,15 @@ export const announcementService = {
       },
       body: JSON.stringify({
         title: data.title,
-        content: data.content,
+        content: serializedContent,
         target_audience: data.target_audience || 'all',
+        expires_at: data.expires_at || null,
+        attachment: data.attachment ? {
+          name: data.attachment.name,
+          type: data.attachment.type,
+          size: data.attachment.size,
+          url: data.attachment.url,
+        } : null,
       }),
     });
 
@@ -90,8 +126,15 @@ export const announcementService = {
       title?: string;
       content?: string;
       target_audience?: 'all' | 'students' | 'alumni';
+      expires_at?: string | null;
+      attachment?: DocumentAttachmentData | null;
     }
   ) {
+    const payload: any = { ...data };
+    if (data.attachment !== undefined && data.content !== undefined) {
+      payload.content = serializeAttachmentIntoText(data.content, data.attachment);
+    }
+
     const response = await fetch(
       `${API_URL}/announcements/${encodeURIComponent(id)}`,
       {
@@ -100,7 +143,7 @@ export const announcementService = {
           Authorization: `Bearer ${getToken()}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       }
     );
 

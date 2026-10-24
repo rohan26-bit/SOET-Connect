@@ -1,167 +1,56 @@
+"""
+SOET Connect — Unified Database Layer (Supabase PostgreSQL)
+===========================================================
+Supabase PostgreSQL is the sole persistent database for SOET Connect.
+MongoDB runtime dependencies have been completely removed.
+"""
+
 import os
-import uuid
-
-from dotenv import load_dotenv
-from pymongo import MongoClient
-import certifi
-from pwdlib import PasswordHash
-
-
-load_dotenv()
-
-MONGODB_URL = os.getenv("MONGODB_URL")
-DATABASE_NAME = os.getenv("DATABASE_NAME")
-
-password_hash = PasswordHash.recommended()
-
-
-# ============================================================
-# LOCAL DEVELOPMENT FALLBACK
-# ============================================================
-
-class LocalInsertResult:
-    def __init__(self, inserted_id):
-        self.inserted_id = inserted_id
-
-
-class LocalUsersCollection:
-    def __init__(self):
-        self.users = []
-
-        # Demo student account
-        self.users.append({
-            "_id": "demo-student-id",
-            "name": "Demo Student",
-            "email": "test@student.com",
-            "password_hash": password_hash.hash("Test@12345"),
-            "role": "student",
-            "is_active": True,
-            "is_verified": True,
-        })
-
-        # Demo alumni account
-        self.users.append({
-            "_id": "demo-alumni-id",
-            "name": "Demo Alumni",
-            "email": "test@alumni.com",
-            "password_hash": password_hash.hash("Test@12345"),
-            "role": "alumni",
-            "is_active": True,
-            "is_verified": True,
-            "verification_status": "approved",
-        })
-
-        # Demo admin account
-        self.users.append({
-            "_id": "demo-admin-id",
-            "name": "Demo Admin",
-            "email": "test@admin.com",
-            "password_hash": password_hash.hash("Test@12345"),
-            "role": "admin",
-            "is_active": True,
-            "is_verified": True,
-        })
-
-    def find_one(self, query):
-        for user in self.users:
-            if all(
-                user.get(key) == value
-                for key, value in query.items()
-            ):
-                return user
-
-        return None
-
-    def find(self, query):
-        results = []
-
-        for user in self.users:
-            matches = True
-
-            for key, value in query.items():
-                if user.get(key) != value:
-                    matches = False
-                    break
-
-            if matches:
-                results.append(user)
-
-        return results
-
-    def insert_one(self, document):
-        document["_id"] = str(uuid.uuid4())
-        self.users.append(document)
-
-        return LocalInsertResult(document["_id"])
-
-    def update_one(self, query, update):
-        for user in self.users:
-            matches = all(
-                user.get(key) == value
-                for key, value in query.items()
-            )
-
-            if matches:
-                if "$set" in update:
-                    for key, value in update["$set"].items():
-                        user[key] = value
-
-                return True
-
-        return False
-
-
-# ============================================================
-# MONGODB CONNECTION
-# ============================================================
-
-mongo_available = False
-client = None
-database = None
 
 try:
-    if not MONGODB_URL:
-        raise ValueError("MONGODB_URL is not set in .env")
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
-    if not DATABASE_NAME:
-        raise ValueError("DATABASE_NAME is not set in .env")
+DATABASE_BACKEND = "supabase"
+DATABASE_MODE = os.getenv("DATABASE_MODE", "supabase").lower()
 
-    client = MongoClient(
-        MONGODB_URL,
-        tls=True,
-        tlsCAFile=certifi.where(),
-        serverSelectionTimeoutMS=3000,
-        connectTimeoutMS=3000,
-        socketTimeoutMS=3000,
-    )
+from database_supabase import (
+    supabase,
+    supabase_users_collection,
+    supabase_conversations_collection,
+    supabase_messages_collection,
+    test_supabase_connection,
+    get_supabase_config,
+    reset_mock_db,
+)
 
-    client.admin.command("ping")
+class DatabaseAdapter:
+    """Drop-in adapter allowing database['conversations'] syntax for compatibility."""
+    def __getitem__(self, item: str):
+        if item == "users":
+            return users_collection
+        elif item == "conversations":
+            return conversations_collection
+        elif item == "messages":
+            return messages_collection
+        raise KeyError(f"Collection '{item}' not supported in Supabase database adapter.")
 
-    database = client[DATABASE_NAME]
-    users_collection = database["users"]
-
-    mongo_available = True
-
-    print("MongoDB: CONNECTED")
-
-except Exception as e:
-    print("MongoDB unavailable - using LOCAL DEVELOPMENT DATABASE")
-    print("MongoDB error:", e)
-
-    users_collection = LocalUsersCollection()
+# Active database client and collections
+client = None
+users_collection = supabase_users_collection
+conversations_collection = supabase_conversations_collection
+messages_collection = supabase_messages_collection
+database = DatabaseAdapter()
+test_database_connection = test_supabase_connection
 
 
-# ============================================================
-# DATABASE HEALTH CHECK
-# ============================================================
-
-def test_database_connection():
-    if mongo_available:
-        try:
-            client.admin.command("ping")
-            return True
-        except Exception as e:
-            print("MONGODB ERROR:", e)
-            return False
-
-    return False
+def get_database_config() -> dict:
+    """Return active database configuration metadata."""
+    cfg = get_supabase_config()
+    return {
+        "backend": "supabase",
+        "mode": DATABASE_MODE,
+        **cfg,
+    }

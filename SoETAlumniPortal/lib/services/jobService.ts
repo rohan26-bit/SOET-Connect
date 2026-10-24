@@ -1,4 +1,8 @@
-
+import {
+  DocumentAttachmentData,
+  serializeAttachmentIntoText,
+  parseAttachmentFromText,
+} from '@/components/DocumentAttachment';
 
 export interface JobItem {
   id: string;
@@ -13,11 +17,19 @@ export interface JobItem {
   skills?: string[];
   application_url?: string;
   deadline?: string;
-  status: 'pending' | 'approved' | 'rejected';
+  application_deadline?: string;
+  is_expired?: boolean;
+  status: 'pending' | 'approved' | 'rejected' | 'closed';
   created_at: string;
   poster_name?: string;
   poster_avatar?: string;
   poster_email?: string;
+  attachment?: {
+    name: string;
+    type: string;
+    size: number;
+    url?: string;
+  } | null;
 }
 
 export interface JobApplicationItem {
@@ -55,6 +67,15 @@ function getAuthHeaders() {
   };
 }
 
+function normalizeJob(job: any): JobItem {
+  const parsed = parseAttachmentFromText(job.description);
+  return {
+    ...job,
+    description: parsed.cleanText,
+    attachment: job.attachment || parsed.attachment || null,
+  };
+}
+
 export const jobService = {
 
   // ============================================================
@@ -77,7 +98,7 @@ export const jobService = {
       throw new Error(data.detail || 'Failed to load jobs.');
     }
 
-    let result: JobItem[] = data || [];
+    let result: JobItem[] = (data || []).map(normalizeJob);
 
     if (
       filters?.employmentType &&
@@ -136,7 +157,7 @@ export const jobService = {
       );
     }
 
-    return data || [];
+    return (data || []).map(normalizeJob);
   },
 
 
@@ -163,7 +184,7 @@ export const jobService = {
       );
     }
 
-    return data || [];
+    return (data || []).map(normalizeJob);
   },
 
 
@@ -183,7 +204,15 @@ export const jobService = {
     skills?: string[];
     application_url?: string;
     deadline?: string;
+    application_deadline?: string;
+    attachment?: DocumentAttachmentData | null;
   }) {
+    const serializedDescription = serializeAttachmentIntoText(
+      jobData.description,
+      jobData.attachment
+    );
+
+    const deadlineVal = jobData.application_deadline || jobData.deadline || null;
 
     const response = await fetch(
       `${API_URL}/jobs`,
@@ -194,7 +223,7 @@ export const jobService = {
         body: JSON.stringify({
           title: jobData.title,
           company: jobData.company,
-          description: jobData.description,
+          description: serializedDescription,
           location: jobData.location,
           employment_type: jobData.employment_type,
           experience: jobData.experience || '',
@@ -202,7 +231,14 @@ export const jobService = {
           skills: jobData.skills || [],
           application_url:
             jobData.application_url || '',
-          deadline: jobData.deadline || null,
+          deadline: deadlineVal,
+          application_deadline: deadlineVal,
+          attachment: jobData.attachment ? {
+            name: jobData.attachment.name,
+            type: jobData.attachment.type,
+            size: jobData.attachment.size,
+            url: jobData.attachment.url,
+          } : null,
         }),
       }
     );
@@ -216,6 +252,30 @@ export const jobService = {
     }
 
     return data.job;
+  },
+
+
+  // ============================================================
+  // UPDATE JOB DEADLINE
+  // ============================================================
+
+  async updateJobDeadline(jobId: string, deadline: string | null): Promise<JobItem> {
+    const response = await fetch(`${API_URL}/jobs/${jobId}/deadline`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        deadline,
+        application_deadline: deadline,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || 'Failed to update job deadline.');
+    }
+
+    return normalizeJob(data.job);
   },
 
 

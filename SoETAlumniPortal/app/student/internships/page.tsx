@@ -3,8 +3,10 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
+import LoadingState from '@/components/LoadingState';
 import { jobService, JobItem } from '@/lib/services/jobService';
 import { Briefcase, Building, MapPin, ArrowRight } from 'lucide-react';
+import { DocumentAttachmentView } from '@/components/DocumentAttachment';
 
 export default function InternshipsPage() {
   const [internships, setInternships] = useState<JobItem[]>([]);
@@ -27,7 +29,7 @@ export default function InternshipsPage() {
   return (
     <DashboardLayout>
       <div className="flex items-center text-xs font-semibold text-slate-400 mb-6 uppercase tracking-wider">
-        <span>Careers</span>
+        <span>SOET Connect - Alumni Portal</span>
         <span className="mx-2 text-slate-300">/</span>
         <span className="text-blue-600">Internships</span>
       </div>
@@ -35,7 +37,7 @@ export default function InternshipsPage() {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">Active Student Internships</h1>
-          <p className="text-xs text-slate-500 mt-1">Verified industry internship opportunities from SOET alumni.</p>
+          <p className="text-xs text-slate-500 mt-1">Verified industry internship opportunities from our alumni network.</p>
         </div>
         <Link
           href="/student/jobs"
@@ -46,7 +48,7 @@ export default function InternshipsPage() {
       </div>
 
       {loading ? (
-        <div className="py-16 text-center text-slate-400 text-sm">Loading internship listings...</div>
+        <LoadingState message="Loading opportunities" className="py-16" />
       ) : internships.length === 0 ? (
         <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm">
           <Briefcase className="w-12 h-12 text-slate-300 mx-auto mb-3" />
@@ -72,6 +74,13 @@ export default function InternshipsPage() {
                   {job.salary && <span>• Stipend: {job.salary}</span>}
                 </div>
               </div>
+
+              {/* Document Attachment Display */}
+              {job.attachment && job.attachment.name && (
+                <div className="mt-3">
+                  <DocumentAttachmentView attachment={job.attachment} label="Internship Details" />
+                </div>
+              )}
 
               <Link
                 href="/student/jobs"

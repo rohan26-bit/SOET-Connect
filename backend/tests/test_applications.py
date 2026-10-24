@@ -1,6 +1,7 @@
 from bson import ObjectId
 from database import users_collection
 from security.jwt import create_access_token
+from tests.conftest import _create_mock_user
 
 
 def _create_approved_job(client, admin_user):
@@ -14,20 +15,86 @@ def _create_approved_job(client, admin_user):
     return res.json()["job"]["id"]
 
 
-def test_only_students_can_apply(client, verified_alumni_user, admin_user):
-    """Alumni and admin cannot apply for jobs."""
+def test_student_alumni_admin_can_apply(client, admin_user, verified_alumni_user, student_user):
+    """Student, Alumni, and Admin roles are all permitted to apply for approved jobs."""
     job_id = _create_approved_job(client, admin_user)
 
-    res = client.post(f"/jobs/{job_id}/applications", json={
-        "resume_url": "https://example.com/resume.pdf",
-        "cover_letter": "I want to apply"
+    # 1. Student applies via /jobs/{job_id}/applications
+    res_student = client.post(f"/jobs/{job_id}/applications", json={
+        "resume_url": "https://example.com/student_resume.pdf",
+        "cover_letter": "Student application letter",
+        "skills": ["Python"]
+    }, headers=student_user["headers"])
+    assert res_student.status_code == 200
+    stu_app = res_student.json()["application"]
+    assert stu_app["student_id"] == student_user["id"]
+    assert stu_app["status"] == "applied"
+
+    # 2. Alumni applies via /applications/apply
+    res_alumni = client.post("/applications/apply", json={
+        "job_id": job_id,
+        "resume_url": "https://example.com/alumni_resume.pdf",
+        "cover_letter": "Alumni application letter"
     }, headers=verified_alumni_user["headers"])
-    assert res.status_code == 403
-    assert "Only students can apply" in res.json().get("detail", "")
+    assert res_alumni.status_code == 200
+    alu_app = res_alumni.json()["application"]
+    assert alu_app["student_id"] == verified_alumni_user["id"]
+    assert alu_app["status"] == "applied"
+
+    # 3. Admin applies to another approved job created by alumni
+    res_alu_job = client.post("/jobs", json={
+        "title": "Data Scientist",
+        "company": "DataCorp",
+        "description": "ML dev",
+        "location": "Pune",
+        "employment_type": "full-time"
+    }, headers=verified_alumni_user["headers"])
+    alu_job_id = res_alu_job.json()["job"]["id"]
+    # Admin approves the job first
+    client.patch(f"/jobs/{alu_job_id}/status", json={"status": "approved"}, headers=admin_user["headers"])
+
+    # 3. Admin applies via /applications (or /applications/apply) to another approved job created by alumni
+    res_admin = client.post("/applications", json={
+        "job_id": alu_job_id,
+        "resume_url": "https://example.com/admin_resume.pdf",
+        "cover_letter": "Admin application letter"
+    }, headers=admin_user["headers"])
+    assert res_admin.status_code == 200
+    adm_app = res_admin.json()["application"]
+    assert adm_app["student_id"] == admin_user["id"]
+    assert adm_app["status"] == "applied"
 
 
-def test_cannot_apply_to_pending_job(client, verified_alumni_user, student_user):
-    """Applications can only be submitted for approved jobs."""
+def test_duplicate_application_rejected_for_all_roles(client, admin_user, verified_alumni_user, student_user):
+    """Duplicate applications are rejected for Student, Alumni, and Admin."""
+    job_id = _create_approved_job(client, admin_user)
+
+    for user in [student_user, verified_alumni_user, admin_user]:
+        payload = {
+            "job_id": job_id,
+            "resume_url": f"https://example.com/{user['role']}_resume.pdf",
+            "cover_letter": f"Letter from {user['role']}"
+        }
+        # First application succeeds
+        res1 = client.post("/applications/apply", json=payload, headers=user["headers"])
+        assert res1.status_code == 200
+
+        # Duplicate via /applications/apply returns 409
+        res2 = client.post("/applications/apply", json=payload, headers=user["headers"])
+        assert res2.status_code == 409
+        assert "already applied" in res2.json().get("detail", "").lower()
+
+        # Duplicate via /jobs/{job_id}/applications returns 400
+        res3 = client.post(f"/jobs/{job_id}/applications", json={
+            "resume_url": payload["resume_url"],
+            "cover_letter": payload["cover_letter"]
+        }, headers=user["headers"])
+        assert res3.status_code == 400
+        assert "already applied" in res3.json().get("detail", "").lower()
+
+
+def test_cannot_apply_to_pending_or_unapproved_job(client, verified_alumni_user, student_user, admin_user):
+    """Applications are rejected when submitting to unapproved/pending jobs."""
     res_job = client.post("/jobs", json={
         "title": "Pending Job",
         "company": "Startup Inc",
@@ -37,53 +104,111 @@ def test_cannot_apply_to_pending_job(client, verified_alumni_user, student_user)
     }, headers=verified_alumni_user["headers"])
     pending_job_id = res_job.json()["job"]["id"]
 
-    res = client.post(f"/jobs/{pending_job_id}/applications", json={
-        "resume_url": "https://example.com/resume.pdf"
+    for user in [student_user, verified_alumni_user, admin_user]:
+        # via /jobs/{job_id}/applications
+        res = client.post(f"/jobs/{pending_job_id}/applications", json={
+            "resume_url": "https://example.com/resume.pdf"
+        }, headers=user["headers"])
+        assert res.status_code == 400
+        assert "approved" in res.json().get("detail", "").lower()
+
+        # via /applications/apply
+        res_apply = client.post("/applications/apply", json={
+            "job_id": pending_job_id,
+            "resume_url": "https://example.com/resume.pdf"
+        }, headers=user["headers"])
+        assert res_apply.status_code == 400
+        assert "approved" in res_apply.json().get("detail", "").lower()
+
+
+def test_inactive_account_rejected_from_applying(client, admin_user, student_user, verified_alumni_user):
+    """Deactivated accounts are rejected from applying across all roles."""
+    job_id = _create_approved_job(client, admin_user)
+
+    # Deactivate student
+    users_collection.update_one({"_id": student_user["doc_id"]}, {"$set": {"is_active": False}})
+    res_stu = client.post("/applications/apply", json={
+        "job_id": job_id,
+        "resume_url": "https://example.com/stu.pdf"
     }, headers=student_user["headers"])
-    assert res.status_code == 400
-    assert "only accepted for approved jobs" in res.json().get("detail", "")
+    assert res_stu.status_code == 403
+    assert "deactivated" in res_stu.json().get("detail", "").lower()
+
+    # Deactivate alumni
+    users_collection.update_one({"_id": verified_alumni_user["doc_id"]}, {"$set": {"is_active": False}})
+    res_alu = client.post(f"/jobs/{job_id}/applications", json={
+        "resume_url": "https://example.com/alu.pdf"
+    }, headers=verified_alumni_user["headers"])
+    assert res_alu.status_code == 403
+    assert "deactivated" in res_alu.json().get("detail", "").lower()
 
 
-def test_student_apply_success_and_duplicate_prevented(client, admin_user, student_user):
-    """Student can apply to approved job, but duplicate application is rejected."""
+def test_roles_retrieve_own_application_history(client, admin_user, student_user, verified_alumni_user, other_student_user):
+    """Student, Alumni, and Admin can retrieve their own application history exclusively."""
     job_id = _create_approved_job(client, admin_user)
 
-    payload = {
-        "resume_url": "https://example.com/student_resume.pdf",
-        "cover_letter": "I am passionate about this role.",
-        "skills": ["Python", "FastAPI"]
-    }
+    client.post("/applications/apply", json={"job_id": job_id, "resume_url": "https://example.com/s1.pdf"}, headers=student_user["headers"])
+    client.post("/applications/apply", json={"job_id": job_id, "resume_url": "https://example.com/s2.pdf"}, headers=other_student_user["headers"])
+    client.post("/applications/apply", json={"job_id": job_id, "resume_url": "https://example.com/alu.pdf"}, headers=verified_alumni_user["headers"])
 
-    # First application succeeds
-    res1 = client.post(f"/jobs/{job_id}/applications", json=payload, headers=student_user["headers"])
-    assert res1.status_code == 200
-    app_data = res1.json()["application"]
-    assert app_data["student_id"] == student_user["id"]
-    assert app_data["status"] == "applied"
+    # Student 1 gets their history via /applications/mine
+    res_s1 = client.get("/applications/mine", headers=student_user["headers"])
+    assert res_s1.status_code == 200
+    s1_apps = res_s1.json()
+    assert len(s1_apps) == 1
+    assert s1_apps[0]["student_id"] == student_user["id"]
 
-    # Second application fails with 400
-    res2 = client.post(f"/jobs/{job_id}/applications", json=payload, headers=student_user["headers"])
-    assert res2.status_code == 400
-    assert "already applied" in res2.json().get("detail", "")
+    # Student 1 gets their history via /jobs/applications/me
+    res_s1_comp = client.get("/jobs/applications/me", headers=student_user["headers"])
+    assert res_s1_comp.status_code == 200
+    assert len(res_s1_comp.json()) == 1
+
+    # Alumni gets their history via /applications/mine
+    res_alu = client.get("/applications/mine", headers=verified_alumni_user["headers"])
+    assert res_alu.status_code == 200
+    alu_apps = res_alu.json()
+    assert len(alu_apps) == 1
+    assert alu_apps[0]["student_id"] == verified_alumni_user["id"]
+
+    # Admin gets their history (0 apps yet)
+    res_adm = client.get("/applications/mine", headers=admin_user["headers"])
+    assert res_adm.status_code == 200
+    assert len(res_adm.json()) == 0
 
 
-def test_student_views_only_own_applications(client, admin_user, student_user, other_student_user):
-    """GET /jobs/applications/me returns only current student's applications."""
+def test_unauthorized_other_role_blocked(client, admin_user):
+    """Users with roles other than student, alumni, or admin cannot apply or view applications."""
     job_id = _create_approved_job(client, admin_user)
 
-    client.post(f"/jobs/{job_id}/applications", json={"resume_url": "https://example.com/s1.pdf"}, headers=student_user["headers"])
-    client.post(f"/jobs/{job_id}/applications", json={"resume_url": "https://example.com/s2.pdf"}, headers=other_student_user["headers"])
+    guest_user = _create_mock_user("Guest User", "guest@example.com", "guest")
 
-    res1 = client.get("/jobs/applications/me", headers=student_user["headers"])
-    assert res1.status_code == 200
-    apps = res1.json()
-    assert len(apps) == 1
-    assert apps[0]["student_id"] == student_user["id"]
+    # Applying blocked with 403
+    res_apply = client.post("/applications/apply", json={
+        "job_id": job_id,
+        "resume_url": "https://example.com/guest.pdf"
+    }, headers=guest_user["headers"])
+    assert res_apply.status_code == 403
+    assert "Only students, alumni, and administrators" in res_apply.json().get("detail", "")
+
+    # Compatibility endpoint blocked with 403
+    res_comp = client.post(f"/jobs/{job_id}/applications", json={
+        "resume_url": "https://example.com/guest.pdf"
+    }, headers=guest_user["headers"])
+    assert res_comp.status_code == 403
+    assert "Only students, alumni, and administrators" in res_comp.json().get("detail", "")
+
+    # Viewing applications blocked with 403
+    res_view = client.get("/applications/mine", headers=guest_user["headers"])
+    assert res_view.status_code == 403
+    assert "Only students, alumni, and administrators" in res_view.json().get("detail", "")
+
+    # Unauthenticated request returns 401
+    res_unauth = client.post("/applications/apply", json={"job_id": job_id})
+    assert res_unauth.status_code == 401
 
 
 def test_job_poster_and_admin_view_applicants(client, verified_alumni_user, other_alumni_user, admin_user, student_user):
     """Job poster and admin can view applicants; third-party alumni receives 403."""
-    # Alumni creates job, admin approves it
     res_job = client.post("/jobs", json={
         "title": "Alumni Job",
         "company": "Poster Co",
@@ -197,7 +322,6 @@ def test_deleted_user_jwt_rejected_from_applying(client, admin_user, student_use
     assert "not found" in res_nonexistent.json().get("detail", "").lower()
 
     # 4. Unauthorized user attempting another user's protected resource remains rejected (403)
-    from tests.conftest import _create_mock_user
     unauth_student = _create_mock_user("Student Three", "student3@example.com", "student")
     app_id = res_valid.json()["application"]["id"]
     res_unauth = client.delete(
