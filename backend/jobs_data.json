@@ -1,1 +1,43 @@
-[]
+[
+  {
+    "id": "144d08a7-df03-499e-9e59-236b1c8ac85b",
+    "posted_by": "6ac0d8a555d53a2d7d9af957",
+    "poster_name": "Parth Gohil",
+    "title": "Data analyst",
+    "company": "Infosys",
+    "description": "Fun job",
+    "location": "Pune",
+    "employment_type": "Full-time",
+    "experience": "",
+    "salary": "8 LPA",
+    "skills": [
+      "SOL"
+    ],
+    "application_url": "",
+    "deadline": null,
+    "status": "rejected",
+    "created_at": "2026-10-03T10:48:21.472823+00:00",
+    "updated_at": "2026-10-03T11:09:43.125392+00:00"
+  },
+  {
+    "id": "1dd3b105-cbf0-44ee-b719-c119021fb8ef",
+    "posted_by": "6ac0df2955d53a2d7d9af959",
+    "poster_name": "Rohan Kadam",
+    "title": "Software Engineer",
+    "company": "Yardi",
+    "description": "Hiring for Internship",
+    "location": "Pune, India",
+    "employment_type": "Internship",
+    "experience": "",
+    "salary": "4 LPA",
+    "skills": [
+      "MySQL",
+      "Blockchain"
+    ],
+    "application_url": "",
+    "deadline": null,
+    "status": "approved",
+    "created_at": "2026-10-03T11:05:40.243674+00:00",
+    "updated_at": "2026-10-03T11:09:41.927974+00:00"
+  }
+]

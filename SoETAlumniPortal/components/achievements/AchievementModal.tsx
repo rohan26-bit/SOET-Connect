@@ -583,7 +583,7 @@ export default function AchievementModal({
               </button>
               <button
                 type="submit"
-                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-md shadow-blue-600/20 transition cursor-pointer"
+                className="px-5 py-2.5 bg-[#F28C38] hover:bg-[#E07D2E] text-white text-xs font-bold rounded-xl shadow-md shadow-[#F28C38]/20 transition cursor-pointer"
               >
                 {mode === 'add' ? 'Save Achievement' : 'Update Achievement'}
               </button>

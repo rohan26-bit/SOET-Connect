@@ -92,16 +92,16 @@ export default function AdminReportsPage() {
   return (
     <DashboardLayout>
       {/* SECTION 1: PAGE HEADER & BREADCRUMBS */}
-      <div className="flex items-center text-sm text-gray-500 mb-6">
-        <span>Admin</span>
-        <span className="mx-2">/</span>
-        <span className="font-medium text-gray-900">Reports & Analytics</span>
+      <div className="flex items-center text-xs font-semibold text-[#6B6B6B] mb-6 uppercase tracking-wider">
+        <span>Administration</span>
+        <span className="mx-2 text-[#DDD7D2]">/</span>
+        <span className="text-[#F28C38]">Reports & Analytics</span>
       </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Reports & Analytics</h1>
-          <p className="text-gray-500">
+          <h1 className="text-2xl font-black text-[#4A3832] tracking-tight mb-2">Reports & Analytics</h1>
+          <p className="text-xs text-[#6B6B6B]">
             System overview summarizing currently available platform data.
           </p>
         </div>
