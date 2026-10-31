@@ -283,8 +283,8 @@ def test_application_triggers(client, admin_user, verified_alumni_user, student_
 # EVENT TRIGGERS & CANCELLATION
 # ============================================================
 
-def test_event_triggers_and_cancellation(
-    from datetime import datetime, timedelta, timezoneclient, admin_user, student_user, other_student_user):
+def test_event_triggers_and_cancellation(client, admin_user, student_user, other_student_user):
+    from datetime import datetime, timedelta, timezone
     # 1. Student suggests pending event -> Creator receives submission notification
     event_payload = {
         "title": "Hackathon 2026",
