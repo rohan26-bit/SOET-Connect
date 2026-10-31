@@ -455,6 +455,8 @@ def test_forgot_password_generic_response_for_unknown_user(client: TestClient):
 
 def test_full_password_recovery_flow(client: TestClient, monkeypatch):
     """Complete 4-step recovery flow: request code, verify code, set new password, login."""
+    # The sender is mocked; mark the provider configured so the mocked path runs.
+    monkeypatch.setattr("services.delivery.is_email_configured", lambda: True)
     monkeypatch.setattr("services.delivery.send_email_message", lambda to, subj, msg: (True, "mock_resend_recovery_01", None))
     # 1. Register a test user
     email = "recovery_test_user@example.com"
@@ -525,6 +527,8 @@ def test_password_recovery_preserves_verification_status(
     client: TestClient, unverified_alumni_user: dict, monkeypatch
 ):
     """Password reset preserves the unverified status of an account (cannot bypass moderation)."""
+    # The sender is mocked; mark the provider configured so the mocked path runs.
+    monkeypatch.setattr("services.delivery.is_email_configured", lambda: True)
     monkeypatch.setattr("services.delivery.send_email_message", lambda to, subj, msg: (True, "mock_resend_preserve_01", None))
     email = unverified_alumni_user["email"]
     user_id = unverified_alumni_user["id"]
@@ -1074,6 +1078,8 @@ def test_email_delivery_failure_invalidates_challenge(monkeypatch, verified_alum
 
 def test_successful_delivery_keeps_challenge_active(monkeypatch, verified_alumni_user: dict):
     """When email delivery succeeds, the challenge remains active so the user can verify."""
+    # The sender is mocked; mark the provider configured so the mocked path runs.
+    monkeypatch.setattr("services.delivery.is_email_configured", lambda: True)
     from services.password_recovery import request_password_reset
 
     email = verified_alumni_user["email"]
@@ -1097,6 +1103,8 @@ def test_successful_delivery_keeps_challenge_active(monkeypatch, verified_alumni
 
 def test_retry_after_failed_delivery_creates_fresh_challenge(monkeypatch, verified_alumni_user: dict):
     """After a delivery failure invalidates the challenge, a retry creates a fresh active one."""
+    # The sender is mocked; mark the provider configured so the mocked path runs.
+    monkeypatch.setattr("services.delivery.is_email_configured", lambda: True)
     from services.password_recovery import request_password_reset
 
     email = verified_alumni_user["email"]
