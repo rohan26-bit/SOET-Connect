@@ -283,14 +283,16 @@ def test_application_triggers(client, admin_user, verified_alumni_user, student_
 # EVENT TRIGGERS & CANCELLATION
 # ============================================================
 
-def test_event_triggers_and_cancellation(client, admin_user, student_user, other_student_user):
+def test_event_triggers_and_cancellation(
+    from datetime import datetime, timedelta, timezoneclient, admin_user, student_user, other_student_user):
     # 1. Student suggests pending event -> Creator receives submission notification
     event_payload = {
         "title": "Hackathon 2026",
         "description": "Code all night",
         "event_type": "Hackathon",
         "location": "Campus Lab",
-        "start_date": "2026-11-01T09:00:00Z",
+        "start_date": (datetime.now(timezone.utc) + timedelta(days=2)).isoformat(),
+        "registration_deadline": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
     }
     create_res = client.post("/events", headers=student_user["headers"], json=event_payload)
     assert create_res.status_code == 200
