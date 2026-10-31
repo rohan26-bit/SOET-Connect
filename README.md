@@ -22,6 +22,16 @@ The current codebase includes modules for:
 - **Administration** — administrative operations and management endpoints.
 - **Bug reports** — in-app issue reporting.
 
+## Screenshots
+
+### Landing Page
+![SOET Connect Landing Page](docs/screenshots/soet-connect-home.png)
+*The landing page displaying MGM University branding, campus imagery, and portal navigation.*
+
+### Authentication & Role Selection
+![SOET Connect Authentication Page](docs/screenshots/soet-connect-login.png)
+*Role-based sign-in interface supporting student, alumni, and administrator access.*
+
 ## Technology stack
 
 | Layer | Technologies |
