@@ -1,5 +1,6 @@
 # SOET Connect
 
+[![CI](https://github.com/rohan26-bit/SOET-Connect/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/rohan26-bit/SOET-Connect/actions/workflows/ci.yml)
 SOET Connect is an alumni engagement portal for the School of Engineering and Technology. It brings students, alumni, and administrators together through a shared platform for alumni profiles, career opportunities, events, announcements, and communication.
 
 This is an academic team project developed as part of the B.Tech Computer Science and Engineering programme at MGM University.
