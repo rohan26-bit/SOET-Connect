@@ -1,3 +1,4 @@
+import concurrent.futures
 from pathlib import Path
 import json
 
@@ -89,47 +90,30 @@ def get_alumni_directory(
 
     alumni_users = users_collection.find(query)
 
-    jobs = []
-    if JOBS_FILE and Path(JOBS_FILE).exists():
-        try:
-            content = Path(JOBS_FILE).read_text(encoding="utf-8").strip()
-            if content and content != "[]":
-                jobs = json.loads(content)
-        except Exception:
-            jobs = []
-    if not jobs:
-        try:
-            jobs = supabase.table("jobs").select("*").execute().data or []
-        except Exception:
-            jobs = []
+    def _fetch_table(table_name: str, file_path: str | None, columns: str) -> list:
+        data = []
+        if file_path and Path(file_path).exists():
+            try:
+                content = Path(file_path).read_text(encoding="utf-8").strip()
+                if content and content != "[]":
+                    data = json.loads(content)
+            except Exception:
+                data = []
+        if not data:
+            try:
+                data = supabase.table(table_name).select(columns).execute().data or []
+            except Exception:
+                data = []
+        return data
 
-    events = []
-    if EVENTS_FILE and Path(EVENTS_FILE).exists():
-        try:
-            content = Path(EVENTS_FILE).read_text(encoding="utf-8").strip()
-            if content and content != "[]":
-                events = json.loads(content)
-        except Exception:
-            events = []
-    if not events:
-        try:
-            events = supabase.table("events").select("*").execute().data or []
-        except Exception:
-            events = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        fut_jobs = executor.submit(_fetch_table, "jobs", JOBS_FILE, "id,posted_by,status")
+        fut_events = executor.submit(_fetch_table, "events", EVENTS_FILE, "id,created_by,status")
+        fut_regs = executor.submit(_fetch_table, "event_registrations", REGISTRATIONS_FILE, "id,event_id,user_id")
 
-    registrations = []
-    if REGISTRATIONS_FILE and Path(REGISTRATIONS_FILE).exists():
-        try:
-            content = Path(REGISTRATIONS_FILE).read_text(encoding="utf-8").strip()
-            if content and content != "[]":
-                registrations = json.loads(content)
-        except Exception:
-            registrations = []
-    if not registrations:
-        try:
-            registrations = supabase.table("event_registrations").select("*").execute().data or []
-        except Exception:
-            registrations = []
+        jobs = fut_jobs.result()
+        events = fut_events.result()
+        registrations = fut_regs.result()
 
     results = []
 

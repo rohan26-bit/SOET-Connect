@@ -11,7 +11,7 @@ import { announcementService, AnnouncementItem } from '@/lib/services/announceme
 import { Briefcase, Calendar, Megaphone, ArrowRight, MapPin, Building, Clock } from 'lucide-react';
 
 export default function StudentDashboard() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [jobs, setJobs] = useState<JobItem[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
@@ -20,45 +20,43 @@ export default function StudentDashboard() {
   const [announcementsLoading, setAnnouncementsLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) return;
     let isMounted = true;
 
-    // Fetch jobs independently
-    jobService
-      .getApprovedJobs()
-      .then((jobsData) => {
-        if (isMounted) setJobs(jobsData);
-      })
-      .catch((err) => console.error('Error loading jobs:', err))
-      .finally(() => {
-        if (isMounted) setJobsLoading(false);
-      });
+    // Concurrently fetch dashboard items once auth resolves
+    Promise.allSettled([
+      jobService
+        .getApprovedJobs()
+        .then((jobsData) => {
+          if (isMounted) setJobs(jobsData);
+        })
+        .catch((err) => console.error('Error loading jobs:', err)),
 
-    // Fetch events independently
-    eventService
-      .getApprovedEvents(user?.id)
-      .then((eventsData) => {
-        if (isMounted) setEvents(eventsData);
-      })
-      .catch((err) => console.error('Error loading events:', err))
-      .finally(() => {
-        if (isMounted) setEventsLoading(false);
-      });
+      eventService
+        .getApprovedEvents(user?.id)
+        .then((eventsData) => {
+          if (isMounted) setEvents(eventsData);
+        })
+        .catch((err) => console.error('Error loading events:', err)),
 
-    // Fetch announcements independently
-    announcementService
-      .getAnnouncements()
-      .then((announcementsData) => {
-        if (isMounted) setAnnouncements(announcementsData);
-      })
-      .catch((err) => console.error('Error loading announcements:', err))
-      .finally(() => {
-        if (isMounted) setAnnouncementsLoading(false);
-      });
+      announcementService
+        .getAnnouncements()
+        .then((announcementsData) => {
+          if (isMounted) setAnnouncements(announcementsData);
+        })
+        .catch((err) => console.error('Error loading announcements:', err)),
+    ]).finally(() => {
+      if (isMounted) {
+        setJobsLoading(false);
+        setEventsLoading(false);
+        setAnnouncementsLoading(false);
+      }
+    });
 
     return () => {
       isMounted = false;
     };
-  }, [user]);
+  }, [authLoading, user?.id]);
 
   const firstName = user?.full_name?.trim().split(' ')[0] || 'Student';
   const department = user?.student_profile?.department || 'Engineering';
