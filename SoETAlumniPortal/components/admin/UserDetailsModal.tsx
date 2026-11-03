@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import {
   BriefcaseBusiness,
   Code2,
@@ -11,7 +11,7 @@ import {
   UserRound,
   X,
 } from 'lucide-react';
-import { UserManagementItem } from '@/lib/services/adminService';
+import type { UserManagementItem } from '@/lib/services/adminService';
 
 interface UserDetailsModalProps {
   user: UserManagementItem | null;
