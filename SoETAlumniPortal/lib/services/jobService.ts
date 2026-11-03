@@ -192,7 +192,7 @@ export const jobService = {
       );
     }
 
-    return (data || []).map(normalizeJob);
+    return newestFirst((data || []).map(normalizeJob));
   },
 
 
