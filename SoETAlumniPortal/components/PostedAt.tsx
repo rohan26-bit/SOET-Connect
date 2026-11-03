@@ -88,7 +88,7 @@ export default function PostedAt({
   return (
     <time
       dateTime={parsedDate.toISOString()}
-      title={`Posted on ${fullDate} (IST)`}
+      title={`${prefix} on ${fullDate} (IST)`}
       className={className}
     >
       {prefix} {label}
