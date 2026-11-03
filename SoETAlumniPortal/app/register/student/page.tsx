@@ -43,12 +43,38 @@ export default function StudentRegisterPage() {
       return;
     }
 
+    const requiredFields = [
+      ['Student ID / PRN', formData.studentId],
+      ['Email Address', formData.email],
+      ['Password', formData.password],
+      ['Department', formData.department],
+      ['Course', formData.course],
+      ['Academic Year', formData.academicYear],
+      ['Graduation Year', formData.graduationYear],
+      ['Phone Number', formData.phone],
+    ];
+    const missingFields = requiredFields
+      .filter(([, value]) => !value.trim())
+      .map(([label]) => label);
+
+    if (missingFields.length > 0) {
+      setError(`Please complete all required fields: ${missingFields.join(', ')}.`);
+      return;
+    }
+
     setLoading(true);
 
     try {
       await authService.registerStudent({
         ...formData,
         fullName: trimmedName,
+        studentId: formData.studentId.trim(),
+        email: formData.email.trim(),
+        department: formData.department.trim(),
+        course: formData.course.trim(),
+        academicYear: formData.academicYear.trim(),
+        graduationYear: formData.graduationYear.trim(),
+        phone: formData.phone.trim(),
       });
       setSubmitted(true);
     } catch (err: unknown) {
@@ -177,6 +203,7 @@ export default function StudentRegisterPage() {
                     Department *
                   </label>
                   <select
+                    required
                     value={formData.department}
                     onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-[#FBFAF8] border border-[#DDD7D2] rounded-xl text-[#222222] text-sm focus:ring-2 focus:ring-[#F28C38] focus:border-[#F28C38] focus:bg-white outline-none transition"
@@ -204,9 +231,10 @@ export default function StudentRegisterPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-[#4A3832] uppercase tracking-wider mb-1.5">
-                    Academic Year
+                    Academic Year *
                   </label>
                   <select
+                    required
                     value={formData.academicYear}
                     onChange={(e) => setFormData({ ...formData, academicYear: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-[#FBFAF8] border border-[#DDD7D2] rounded-xl text-[#222222] text-sm focus:ring-2 focus:ring-[#F28C38] focus:border-[#F28C38] focus:bg-white outline-none transition"
@@ -232,10 +260,11 @@ export default function StudentRegisterPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-[#4A3832] uppercase tracking-wider mb-1.5">
-                    Phone Number
+                    Phone Number *
                   </label>
                   <input
                     type="tel"
+                    required
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     placeholder="+91 9876543210"

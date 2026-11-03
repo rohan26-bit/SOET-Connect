@@ -136,12 +136,12 @@ export const authService = {
     fullName: string;
     email: string;
     password: string;
-    studentId?: string;
+    studentId: string;
     department: string;
-    course?: string;
-    academicYear?: string;
-    graduationYear?: string;
-    phone?: string;
+    course: string;
+    academicYear: string;
+    graduationYear: string;
+    phone: string;
   }) {
     const response = await fetch(`${API_URL}/auth/register`, {
       method: 'POST',

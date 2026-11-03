@@ -1,6 +1,16 @@
 import pytest
 
 
+VALID_STUDENT_FIELDS = {
+    "student_id": "STU-TEST-001",
+    "department": "Computer Engineering",
+    "course": "B.Tech",
+    "academic_year": "3rd Year",
+    "graduation_year": "2026",
+    "phone": "9876543210",
+}
+
+
 def test_unauthenticated_protected_endpoint_returns_401(client):
     """Accessing a protected endpoint without Authorization header must return 401."""
     response = client.get("/profile/me")
@@ -23,6 +33,7 @@ def test_register_student_success(client):
         "email": "jane.student@example.com",
         "password": "SecurePassword123!",
         "role": "student",
+        **VALID_STUDENT_FIELDS,
         "student_id": "STU100",
         "department": "IT",
         "course": "B.Tech",
@@ -38,13 +49,55 @@ def test_register_student_success(client):
     assert data["role"] == "student"
 
 
+@pytest.mark.parametrize(
+    "missing_field",
+    ["student_id", "department", "course", "academic_year", "graduation_year", "phone"],
+)
+def test_student_registration_rejects_each_missing_required_profile_field(client, missing_field):
+    """Student registration must reject requests that omit any profile field."""
+    payload = {
+        "name": "Incomplete Student",
+        "email": f"incomplete-{missing_field}@example.com",
+        "password": "SecurePassword123!",
+        "role": "student",
+        **VALID_STUDENT_FIELDS,
+    }
+    payload.pop(missing_field)
+
+    response = client.post("/auth/register", json=payload)
+
+    assert response.status_code == 422
+    assert missing_field.replace("_", " ").split()[0].lower() in response.text.lower()
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["student_id", "department", "course", "academic_year", "graduation_year", "phone"],
+)
+def test_student_registration_rejects_blank_required_profile_fields(client, field):
+    """Whitespace-only values must not bypass required student profile validation."""
+    payload = {
+        "name": "Blank Field Student",
+        "email": f"blank-{field}@example.com",
+        "password": "SecurePassword123!",
+        "role": "student",
+        **VALID_STUDENT_FIELDS,
+        field: "   ",
+    }
+
+    response = client.post("/auth/register", json=payload)
+
+    assert response.status_code == 422
+
+
 def test_register_duplicate_email_fails(client):
     """Registering the same email twice returns 400."""
     payload = {
         "name": "Duplicate Student",
         "email": "dup@example.com",
         "password": "Password123!",
-        "role": "student"
+        "role": "student",
+        **VALID_STUDENT_FIELDS,
     }
     res1 = client.post("/auth/register", json=payload)
     assert res1.status_code == 201
@@ -75,7 +128,8 @@ def test_login_success(client):
         "name": "Login User",
         "email": "loginuser@example.com",
         "password": "MySecretPassword123",
-        "role": "student"
+        "role": "student",
+        **VALID_STUDENT_FIELDS,
     }
     client.post("/auth/register", json=reg_payload)
 
@@ -104,7 +158,8 @@ def test_login_invalid_password(client):
         "name": "Login User",
         "email": "loginuser2@example.com",
         "password": "MySecretPassword123",
-        "role": "student"
+        "role": "student",
+        **VALID_STUDENT_FIELDS,
     }
     client.post("/auth/register", json=reg_payload)
 
@@ -131,7 +186,8 @@ def test_register_password_under_8_chars_fails(client):
         "name": "Short Password User",
         "email": "shortpw@example.com",
         "password": "1234567",
-        "role": "student"
+        "role": "student",
+        **VALID_STUDENT_FIELDS,
     }
     response = client.post("/auth/register", json=payload)
     assert response.status_code == 422
@@ -143,7 +199,8 @@ def test_register_whitespace_name_fails(client):
         "name": "   ",
         "email": "whitespacename@example.com",
         "password": "ValidPassword123!",
-        "role": "student"
+        "role": "student",
+        **VALID_STUDENT_FIELDS,
     }
     response = client.post("/auth/register", json=payload)
     assert response.status_code == 422
@@ -155,7 +212,8 @@ def test_register_name_trimmed_and_preserves_special_characters(client):
         "name": "  Jean-Luc O'Connor  ",
         "email": "jeanluc@example.com",
         "password": "ValidPassword123!",
-        "role": "student"
+        "role": "student",
+        **VALID_STUDENT_FIELDS,
     }
     response = client.post("/auth/register", json=payload)
     assert response.status_code == 201
@@ -197,6 +255,7 @@ def test_student_registration_is_pending(client):
         "email": "pending.student@example.com",
         "password": "SecurePassword123!",
         "role": "student",
+        **VALID_STUDENT_FIELDS,
         "student_id": "STU999",
         "department": "CSE",
         "course": "B.Tech"
@@ -265,7 +324,8 @@ def test_pending_student_login_returns_403(client):
         "name": "Student A",
         "email": "student.a@example.com",
         "password": "Password123!",
-        "role": "student"
+        "role": "student",
+        **VALID_STUDENT_FIELDS,
     })
     res = client.post("/auth/login", json={
         "email": "student.a@example.com",
@@ -281,7 +341,8 @@ def test_rejected_student_login_returns_403(client):
         "name": "Student B",
         "email": "student.b@example.com",
         "password": "Password123!",
-        "role": "student"
+        "role": "student",
+        **VALID_STUDENT_FIELDS,
     })
     from database import users_collection
     users_collection.update_one(
@@ -302,7 +363,8 @@ def test_suspended_student_login_returns_403(client):
         "name": "Student C",
         "email": "student.c@example.com",
         "password": "Password123!",
-        "role": "student"
+        "role": "student",
+        **VALID_STUDENT_FIELDS,
     })
     from database import users_collection
     users_collection.update_one(
@@ -323,7 +385,8 @@ def test_approved_student_login_returns_200(client):
         "name": "Student D",
         "email": "student.d@example.com",
         "password": "Password123!",
-        "role": "student"
+        "role": "student",
+        **VALID_STUDENT_FIELDS,
     })
     from database import users_collection
     users_collection.update_one(

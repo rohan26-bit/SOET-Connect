@@ -19,11 +19,41 @@ class RegisterRequest(BaseModel):
             raise ValueError("Name cannot exceed 100 characters.")
         return trimmed
 
+    @field_validator(
+        "student_id", "department", "course", "academic_year", "graduation_year", "phone",
+        mode="before"
+    )
+    @classmethod
+    def trim_student_registration_fields(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
     @model_validator(mode="after")
-    def validate_alumni_id_required(self) -> "RegisterRequest":
+    def validate_role_specific_registration_fields(self) -> "RegisterRequest":
         if self.role == "alumni":
             if not self.alumni_id or not self.alumni_id.strip():
                 raise ValueError("Alumni ID / PRN is required.")
+
+        if self.role == "student":
+            required_fields = [
+                ("student_id", "Student ID / PRN"),
+                ("department", "Department"),
+                ("course", "Course"),
+                ("academic_year", "Academic Year"),
+                ("graduation_year", "Graduation Year"),
+                ("phone", "Phone Number"),
+            ]
+            missing_fields = [
+                label
+                for field, label in required_fields
+                if not getattr(self, field) or not getattr(self, field).strip()
+            ]
+            if missing_fields:
+                raise ValueError(
+                    "The following student registration fields are required: "
+                    + ", ".join(missing_fields)
+                    + "."
+                )
+
         return self
 
     # Admin registration

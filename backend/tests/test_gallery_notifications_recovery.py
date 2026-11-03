@@ -475,6 +475,7 @@ def test_full_password_recovery_flow(client: TestClient, monkeypatch):
             "course": "B.Tech",
             "academic_year": "3rd Year",
             "graduation_year": "2026",
+            "phone": "9876543210",
         },
     )
     assert reg_res.status_code == 201
