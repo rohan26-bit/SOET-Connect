@@ -16,6 +16,7 @@ from routes.admin import router as admin_router
 from routes.chat import router as chat_router
 from routes.bug_reports import router as bug_reports_router
 from routes.gallery import router as gallery_router
+from routes.placements import router as placements_router
 
 
 app = FastAPI(
@@ -64,6 +65,7 @@ api_router.include_router(admin_router)
 api_router.include_router(chat_router)
 api_router.include_router(bug_reports_router)
 api_router.include_router(gallery_router)
+api_router.include_router(placements_router)
 
 app.include_router(api_router)
 app.include_router(auth_router)
@@ -78,6 +80,7 @@ app.include_router(admin_router)
 app.include_router(chat_router)
 app.include_router(bug_reports_router)
 app.include_router(gallery_router)
+app.include_router(placements_router)
 
 @app.get("/")
 def root():
