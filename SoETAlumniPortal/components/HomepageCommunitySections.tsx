@@ -69,7 +69,7 @@ export default function HomepageCommunitySections() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {placements.slice(0, 4).map((placement) => (
+              {placements.map((placement) => (
                 <article key={placement.id} className="overflow-hidden rounded-2xl bg-white border border-[#E7DED6] shadow-sm">
                   <div className="h-48 bg-gradient-to-br from-[#F7E8D9] to-[#EBD3BD] overflow-hidden">
                     {placement.photo_url ? (
