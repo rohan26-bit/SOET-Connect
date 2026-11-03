@@ -293,41 +293,46 @@ def get_admin_stats(
 # ============================================================
 
 def _sanitize_user(user: dict) -> dict:
-    """Build a safe user response, stripping sensitive fields."""
-    profile = user.get("student_profile", {}) or {}
-
-    if user.get("role") == "alumni":
-        profile = user.get("alumni_profile", {}) or {}
+    """Return complete, safe account/profile details without authentication secrets."""
+    role = user.get("role", "")
+    student_profile = user.get("student_profile", {}) or {}
+    alumni_profile = user.get("alumni_profile", {}) or {}
+    profile = alumni_profile if role == "alumni" else student_profile
 
     return {
-        "id": str(user["_id"]),
+        "id": str(user.get("_id") or user.get("id") or ""),
         "full_name": user.get("name", ""),
         "email": user.get("email", ""),
-        "role": user.get("role", ""),
+        "role": role,
         "avatar_url": user.get("avatar_url"),
+        "phone": user.get("phone") or profile.get("phone"),
+        "is_phone_verified": user.get("is_phone_verified", False),
+        "student_id": student_profile.get("student_id") if role == "student" else None,
+        "alumni_id": alumni_profile.get("alumni_id") if role == "alumni" else None,
         "department": profile.get("department"),
         "degree": profile.get("degree"),
+        "course": student_profile.get("course") if role == "student" else None,
+        "academic_year": student_profile.get("academic_year") if role == "student" else None,
         "graduation_year": profile.get("graduation_year"),
         "course_or_company": (
-            profile.get("course")
-            or profile.get("company")
-            or profile.get("department")
-        ),
-        "company": profile.get("company"),
-        "designation": profile.get("designation"),
-        "industry": profile.get("industry"),
-        "location": profile.get("location"),
-        "skills": profile.get("skills", []),
-        "linkedin": profile.get("linkedin"),
-        "github": profile.get("github"),
-        "website": profile.get("website"),
-        "bio": profile.get("bio"),
+            student_profile.get("course")
+            if role == "student"
+            else alumni_profile.get("company")
+        ) or profile.get("department"),
+        "company": alumni_profile.get("company") if role == "alumni" else None,
+        "designation": alumni_profile.get("designation") if role == "alumni" else None,
+        "industry": alumni_profile.get("industry") if role == "alumni" else None,
+        "location": alumni_profile.get("location") if role == "alumni" else None,
+        "skills": alumni_profile.get("skills", []) if role == "alumni" else [],
+        "linkedin": alumni_profile.get("linkedin") if role == "alumni" else None,
+        "github": alumni_profile.get("github") if role == "alumni" else None,
+        "website": alumni_profile.get("website") if role == "alumni" else None,
+        "bio": alumni_profile.get("bio") if role == "alumni" else None,
         "is_verified": user.get("is_verified", False),
-        "verification_status": user.get(
-            "verification_status", "pending"
-        ),
+        "verification_status": user.get("verification_status", "pending"),
         "is_active": user.get("is_active", True),
         "created_at": user.get("created_at"),
+        "updated_at": user.get("updated_at"),
     }
 
 
@@ -346,6 +351,23 @@ def _find_user_by_id(user_id: str) -> dict | None:
             return candidate
 
     return None
+
+
+@router.get("/alumni")
+def get_all_alumni(
+    current_user: dict = Depends(get_current_user)
+):
+    """Return every alumni account and its profile details for admin management."""
+    _require_admin(current_user)
+
+    alumni_users = users_collection.find({
+        "role": "alumni",
+    })
+
+    return [
+        _sanitize_user(alumni)
+        for alumni in alumni_users
+    ]
 
 
 @router.get("/students")
