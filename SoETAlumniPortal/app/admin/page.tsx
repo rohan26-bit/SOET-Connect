@@ -60,18 +60,18 @@ export default function AdminDashboard() {
       </div>
 
       {/* Dynamic Statistics Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 mb-8">
         
         {/* Total Students */}
-        <div className="bg-white p-6 rounded-3xl border border-[#DDD7D2] shadow-sm flex flex-col justify-between">
+        <div className="bg-white p-7 md:p-8 min-h-[220px] rounded-3xl border border-[#DDD7D2] shadow-sm flex flex-col justify-between">
           <div className="flex justify-between items-center mb-3">
             <span className="text-xs font-bold text-[#6B6B6B] uppercase tracking-wider">Total Students</span>
-            <div className="w-10 h-10 bg-[#F28C38]/10 text-[#F28C38] rounded-xl flex items-center justify-center">
-              <GraduationCap className="w-5 h-5" />
+            <div className="w-12 h-12 bg-[#F28C38]/10 text-[#F28C38] rounded-xl flex items-center justify-center">
+              <GraduationCap className="w-6 h-6" />
             </div>
           </div>
           <div>
-            <div className="text-3xl font-black text-[#4A3832]">{metrics.totalStudents}</div>
+            <div className="text-4xl font-black text-[#4A3832]">{metrics.totalStudents}</div>
             <p className="text-[11px] text-blue-600 font-bold mt-1">
               {approvedStudents} Verified • {pendingStudents} Pending
             </p>
@@ -79,15 +79,15 @@ export default function AdminDashboard() {
         </div>
 
         {/* Total Alumni */}
-        <div className="bg-white p-6 rounded-3xl border border-[#DDD7D2] shadow-sm flex flex-col justify-between">
+        <div className="bg-white p-7 md:p-8 min-h-[220px] rounded-3xl border border-[#DDD7D2] shadow-sm flex flex-col justify-between">
           <div className="flex justify-between items-center mb-3">
             <span className="text-xs font-bold text-[#6B6B6B] uppercase tracking-wider">Total Alumni</span>
-            <div className="w-10 h-10 bg-[#4A3832]/10 text-[#4A3832] rounded-xl flex items-center justify-center">
-              <Users className="w-5 h-5" />
+            <div className="w-12 h-12 bg-[#4A3832]/10 text-[#4A3832] rounded-xl flex items-center justify-center">
+              <Users className="w-6 h-6" />
             </div>
           </div>
           <div>
-            <div className="text-3xl font-black text-[#4A3832]">{metrics.totalAlumni}</div>
+            <div className="text-4xl font-black text-[#4A3832]">{metrics.totalAlumni}</div>
             <p className="text-[11px] text-emerald-600 font-bold mt-1">
               {metrics.verifiedAlumni} Verified • {metrics.pendingAlumni} Pending
             </p>
@@ -95,15 +95,15 @@ export default function AdminDashboard() {
         </div>
 
         {/* Jobs Posted */}
-        <div className="bg-white p-6 rounded-3xl border border-[#DDD7D2] shadow-sm flex flex-col justify-between">
+        <div className="bg-white p-7 md:p-8 min-h-[220px] rounded-3xl border border-[#DDD7D2] shadow-sm flex flex-col justify-between">
           <div className="flex justify-between items-center mb-3">
             <span className="text-xs font-bold text-[#6B6B6B] uppercase tracking-wider">Jobs & Internships</span>
-            <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
-              <Briefcase className="w-5 h-5" />
+            <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
+              <Briefcase className="w-6 h-6" />
             </div>
           </div>
           <div>
-            <div className="text-3xl font-black text-[#4A3832]">{metrics.totalJobs}</div>
+            <div className="text-4xl font-black text-[#4A3832]">{metrics.totalJobs}</div>
             <p className="text-[11px] text-[#6B6B6B] mt-1">
               {metrics.pendingJobs > 0 ? (
                 <span className="text-amber-600 font-bold">{metrics.pendingJobs} Pending Approval</span>
@@ -115,15 +115,15 @@ export default function AdminDashboard() {
         </div>
 
         {/* Events */}
-        <div className="bg-white p-6 rounded-3xl border border-[#DDD7D2] shadow-sm flex flex-col justify-between">
+        <div className="bg-white p-7 md:p-8 min-h-[220px] rounded-3xl border border-[#DDD7D2] shadow-sm flex flex-col justify-between">
           <div className="flex justify-between items-center mb-3">
             <span className="text-xs font-bold text-[#6B6B6B] uppercase tracking-wider">Campus Events</span>
-            <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center">
-              <Calendar className="w-5 h-5" />
+            <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center">
+              <Calendar className="w-6 h-6" />
             </div>
           </div>
           <div>
-            <div className="text-3xl font-black text-[#4A3832]">{metrics.totalEvents}</div>
+            <div className="text-4xl font-black text-[#4A3832]">{metrics.totalEvents}</div>
             <p className="text-[11px] text-[#6B6B6B] mt-1">{metrics.totalRegistrations} total registrations</p>
           </div>
         </div>
