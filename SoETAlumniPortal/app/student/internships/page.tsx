@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
+import PostedAt from '@/components/PostedAt';
 import { jobService, JobItem } from '@/lib/services/jobService';
 import { Briefcase, Building, MapPin, ArrowRight } from 'lucide-react';
 import { DocumentAttachmentView } from '@/components/DocumentAttachment';
@@ -67,6 +68,7 @@ export default function InternshipsPage() {
                   {job.employment_type}
                 </span>
                 <h3 className="text-base font-bold text-slate-900 mt-1">{job.title}</h3>
+                <PostedAt date={job.created_at} className="text-[11px] text-slate-400 block mt-1" />
                 <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
                   <span className="flex items-center gap-1"><Building className="w-3.5 h-3.5" /> {job.company}</span>
                   <span>•</span>
