@@ -135,9 +135,13 @@ export interface JobApplicantDetail {
   email: string;
   role: string;
   identifier: string;
+  prn?: string;
   department: string;
+  course?: string;
+  degree?: string;
   status: string;
   resume_url: string;
+  has_resume?: boolean;
   cover_letter: string;
   applied_at: string;
 }

@@ -320,3 +320,326 @@ def test_nonexistent_event_or_job_returns_404(
     )
     assert res_job.status_code == 404
     assert "not found" in res_job.json().get("detail", "").lower()
+
+
+def test_admin_job_applicants_comprehensive_workflow(
+    client: TestClient,
+    admin_user: dict,
+    student_user: dict,
+    verified_alumni_user: dict,
+):
+    """
+    Comprehensive test for Job Applicant Count & Details:
+    - Job with multiple applicants (student and alumni).
+    - Job with zero applicants.
+    - Duplicate application deduplication (same applicant applying multiple times).
+    - Hydration of student_id, alumni_id, PRN, department, and course/degree.
+    - Application status and resume/cover letter availability flags.
+    - Privacy check: password hashes, tokens, or raw secrets are never exposed.
+    - RBAC enforcement: unauthenticated (401), student (403), alumni (403).
+    - CSV export endpoint integrity.
+    """
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    # 1. Job with zero applicants
+    zero_job_id = "job_zero_applicants_001"
+    supabase.table("jobs").insert({
+        "id": zero_job_id,
+        "title": "Quantum Computing Researcher",
+        "company": "DeepTech Labs",
+        "location": "Pune",
+        "job_type": "Full-time",
+        "status": "approved",
+        "created_at": now_iso,
+    }).execute()
+
+    res_zero = client.get(
+        f"/api/admin/participation/jobs/{zero_job_id}/applicants",
+        headers=admin_user["headers"],
+    )
+    assert res_zero.status_code == 200
+    zero_data = res_zero.json()
+    assert zero_data["job_id"] == zero_job_id
+    assert zero_data["total_count"] == 0
+    assert zero_data["applicants"] == []
+
+    # 2. Job with multiple applicants + duplicate submission test
+    multi_job_id = "job_multi_applicants_002"
+    supabase.table("jobs").insert({
+        "id": multi_job_id,
+        "title": "Full Stack Lead",
+        "company": "Enterprise Cloud",
+        "location": "Mumbai",
+        "job_type": "Full-time",
+        "status": "approved",
+        "created_at": now_iso,
+    }).execute()
+
+    # Application 1: Student
+    earlier_iso = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    supabase.table("job_applications").insert({
+        "id": "app_multi_001",
+        "job_id": multi_job_id,
+        "applicant_id": str(student_user["id"]),
+        "status": "applied",
+        "resume_url": "https://storage.example.com/resumes/student_one.pdf",
+        "cover_letter": "I am proficient in Python and React.",
+        "applied_at": earlier_iso,
+    }).execute()
+
+    # Application 2: Duplicate submission by the SAME student (e.g. updated cover letter / re-submit)
+    later_iso = datetime.now(timezone.utc).isoformat()
+    supabase.table("job_applications").insert({
+        "id": "app_multi_001_duplicate",
+        "job_id": multi_job_id,
+        "applicant_id": str(student_user["id"]),
+        "status": "under_review",
+        "resume_url": "https://storage.example.com/resumes/student_one_v2.pdf",
+        "cover_letter": "Updated cover letter with project details.",
+        "applied_at": later_iso,
+    }).execute()
+
+    # Application 3: Alumni applicant
+    supabase.table("job_applications").insert({
+        "id": "app_multi_002",
+        "job_id": multi_job_id,
+        "applicant_id": str(verified_alumni_user["id"]),
+        "status": "shortlisted",
+        "resume_url": "https://storage.example.com/resumes/alumni_verified.pdf",
+        "cover_letter": "5+ years backend microservices experience.",
+        "applied_at": earlier_iso,
+    }).execute()
+
+    # 3. Query applicants as Admin: verify deduplication and count
+    res_multi = client.get(
+        f"/api/admin/participation/jobs/{multi_job_id}/applicants",
+        headers=admin_user["headers"],
+    )
+    assert res_multi.status_code == 200
+    multi_data = res_multi.json()
+    assert multi_data["job_id"] == multi_job_id
+    # Even though 3 rows exist in table, 2 unique applicants should be returned (duplicate deduplicated)
+    assert multi_data["total_count"] == 2
+    assert len(multi_data["applicants"]) == 2
+
+    # Check Student applicant hydration
+    student_app = next(a for a in multi_data["applicants"] if a["applicant_id"] == str(student_user["id"]))
+    assert student_app["name"] == student_user["name"]
+    assert student_app["email"] == student_user["email"]
+    assert student_app["role"] == "student"
+    assert student_app["identifier"] == "STU001"
+    assert student_app["department"] == "Computer Science"
+    assert student_app["course"] == "B.Tech"
+    assert student_app["has_resume"] is True
+    assert student_app["resume_url"] != ""
+    assert "password_hash" not in student_app
+    assert "salt" not in student_app
+    assert "token" not in student_app
+
+    # Check Alumni applicant hydration
+    alumni_app = next(a for a in multi_data["applicants"] if a["applicant_id"] == str(verified_alumni_user["id"]))
+    assert alumni_app["name"] == verified_alumni_user["name"]
+    assert alumni_app["email"] == verified_alumni_user["email"]
+    assert alumni_app["role"] == "alumni"
+    assert alumni_app["identifier"] == "ALU001"
+    assert alumni_app["department"] == "Computer Science"
+    assert alumni_app["degree"] == "B.Tech"
+    assert alumni_app["status"] == "shortlisted"
+    assert alumni_app["has_resume"] is True
+    assert "password_hash" not in alumni_app
+
+    # 4. Search and Status filtering
+    # Search by department/course
+    search_res = client.get(
+        f"/api/admin/participation/jobs/{multi_job_id}/applicants?search=B.Tech",
+        headers=admin_user["headers"],
+    )
+    assert search_res.status_code == 200
+    assert len(search_res.json()["applicants"]) == 2
+
+    # Filter by status
+    status_res = client.get(
+        f"/api/admin/participation/jobs/{multi_job_id}/applicants?status=shortlisted",
+        headers=admin_user["headers"],
+    )
+    assert status_res.status_code == 200
+    assert len(status_res.json()["applicants"]) == 1
+    assert status_res.json()["applicants"][0]["applicant_id"] == str(verified_alumni_user["id"])
+
+    # 5. Admin Authorization (RBAC) tests
+    # Unauthenticated -> 401
+    unauth_res = client.get(f"/api/admin/participation/jobs/{multi_job_id}/applicants")
+    assert unauth_res.status_code == 401
+
+    # Student -> 403
+    stu_res = client.get(
+        f"/api/admin/participation/jobs/{multi_job_id}/applicants",
+        headers=student_user["headers"],
+    )
+    assert stu_res.status_code == 403
+
+    # Alumni -> 403
+    alu_res = client.get(
+        f"/api/admin/participation/jobs/{multi_job_id}/applicants",
+        headers=verified_alumni_user["headers"],
+    )
+    assert alu_res.status_code == 403
+
+    # 6. CSV Export for this job
+    csv_res = client.get(
+        f"/api/admin/participation/jobs/{multi_job_id}/export",
+        headers=admin_user["headers"],
+    )
+    assert csv_res.status_code == 200
+    assert "text/csv" in csv_res.headers.get("content-type", "")
+    content_text = csv_res.text
+    assert "Job Title" in content_text
+    assert "Full Stack Lead" in content_text
+    assert "Resume Available" in content_text
+    # Raw storage URL must NOT be exposed in CSV
+    assert "https://storage.example.com" not in content_text
+
+
+def test_admin_job_applicants_pagination_and_duplicates(
+    client: TestClient,
+    admin_user: dict,
+    student_user: dict,
+):
+    """
+    Dedicated test for:
+    - Robust deduplication of duplicate applications (identical rows + repeated submissions).
+    - Multi-page pagination using limit, offset, and total_count.
+    - Verification that unique_applicant_count in jobs overview matches deduplicated total.
+    """
+    now = datetime.now(timezone.utc)
+    job_id = "job_pagination_test_999"
+
+    supabase.table("jobs").insert({
+        "id": job_id,
+        "title": "Systems Architect",
+        "company": "Apex Global",
+        "location": "Bengaluru",
+        "job_type": "Full-time",
+        "status": "approved",
+        "created_at": now.isoformat(),
+    }).execute()
+
+    # Create 6 distinct mock users and applications
+    applicant_ids = []
+    for i in range(1, 7):
+        uid = f"user_pag_{i}"
+        applicant_ids.append(uid)
+        users_collection.insert_one({
+            "_id": uid,
+            "id": uid,
+            "name": f"Candidate {i}",
+            "email": f"candidate{i}@example.com",
+            "role": "student",
+            "student_profile": {
+                "student_id": f"PAG00{i}",
+                "department": "Information Technology",
+                "course": "B.Tech",
+            },
+        })
+        app_time = (now - timedelta(minutes=10 * i)).isoformat()
+        supabase.table("job_applications").insert({
+            "id": f"app_pag_{i}",
+            "job_id": job_id,
+            "applicant_id": uid,
+            "status": "applied",
+            "applied_at": app_time,
+        }).execute()
+
+    # Add duplicate applications for Candidate 1 (different app id, later time)
+    later_time = (now + timedelta(minutes=5)).isoformat()
+    supabase.table("job_applications").insert({
+        "id": "app_pag_1_dup",
+        "job_id": job_id,
+        "applicant_id": "user_pag_1",
+        "status": "shortlisted",
+        "applied_at": later_time,
+    }).execute()
+
+    # Add identical row duplicate for Candidate 2
+    supabase.table("job_applications").insert({
+        "id": "app_pag_2",  # identical id
+        "job_id": job_id,
+        "applicant_id": "user_pag_2",
+        "status": "applied",
+        "applied_at": (now - timedelta(minutes=20)).isoformat(),
+    }).execute()
+
+    # 1. Verify overview returns correct unique_applicant_count
+    overview_res = client.get("/api/admin/participation/jobs", headers=admin_user["headers"])
+    assert overview_res.status_code == 200
+    job_item = next(j for j in overview_res.json()["jobs"] if j["id"] == job_id)
+    assert job_item["unique_applicant_count"] == 6
+
+    # 2. Page 1: limit=2, offset=0
+    p1_res = client.get(
+        f"/api/admin/participation/jobs/{job_id}/applicants?limit=2&offset=0",
+        headers=admin_user["headers"],
+    )
+    assert p1_res.status_code == 200
+    p1_data = p1_res.json()
+    assert p1_data["total_count"] == 6
+    assert p1_data["limit"] == 2
+    assert p1_data["offset"] == 0
+    assert len(p1_data["applicants"]) == 2
+    p1_ids = [a["applicant_id"] for a in p1_data["applicants"]]
+
+    # Candidate 1 must have the updated status from the latest submission
+    cand1 = next(a for a in p1_data["applicants"] if a["applicant_id"] == "user_pag_1")
+    assert cand1["status"] == "shortlisted"
+
+    # 3. Page 2: limit=2, offset=2
+    p2_res = client.get(
+        f"/api/admin/participation/jobs/{job_id}/applicants?limit=2&offset=2",
+        headers=admin_user["headers"],
+    )
+    assert p2_res.status_code == 200
+    p2_data = p2_res.json()
+    assert p2_data["total_count"] == 6
+    assert p2_data["limit"] == 2
+    assert p2_data["offset"] == 2
+    assert len(p2_data["applicants"]) == 2
+    p2_ids = [a["applicant_id"] for a in p2_data["applicants"]]
+    # No overlap with Page 1
+    assert set(p1_ids).isdisjoint(set(p2_ids))
+
+    # 4. Page 3: limit=2, offset=4
+    p3_res = client.get(
+        f"/api/admin/participation/jobs/{job_id}/applicants?limit=2&offset=4",
+        headers=admin_user["headers"],
+    )
+    assert p3_res.status_code == 200
+    p3_data = p3_res.json()
+    assert p3_data["total_count"] == 6
+    assert len(p3_data["applicants"]) == 2
+    p3_ids = [a["applicant_id"] for a in p3_data["applicants"]]
+    assert set(p2_ids).isdisjoint(set(p3_ids))
+
+    # All 6 unique candidates accounted for across 3 pages
+    all_seen = set(p1_ids) | set(p2_ids) | set(p3_ids)
+    assert len(all_seen) == 6
+    assert all_seen == set(applicant_ids)
+
+    # 5. Out of bounds offset: offset=6
+    p4_res = client.get(
+        f"/api/admin/participation/jobs/{job_id}/applicants?limit=2&offset=6",
+        headers=admin_user["headers"],
+    )
+    assert p4_res.status_code == 200
+    p4_data = p4_res.json()
+    assert p4_data["total_count"] == 6
+    assert len(p4_data["applicants"]) == 0
+
+    # 6. Negative offset bounds check
+    neg_res = client.get(
+        f"/api/admin/participation/jobs/{job_id}/applicants?limit=2&offset=-5",
+        headers=admin_user["headers"],
+    )
+    assert neg_res.status_code == 200
+    neg_data = neg_res.json()
+    assert neg_data["offset"] == 0
+    assert len(neg_data["applicants"]) == 2

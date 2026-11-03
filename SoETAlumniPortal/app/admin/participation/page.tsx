@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
 import { useAuth } from '@/components/AuthProvider';
@@ -25,7 +24,7 @@ import {
   AlertCircle,
   ArrowLeft,
   ChevronRight,
-  ExternalLink,
+  ChevronLeft,
   MapPin,
   Clock,
   GraduationCap,
@@ -41,7 +40,7 @@ import {
 } from 'lucide-react';
 
 export default function AdminParticipationPage() {
-  const { user } = useAuth();
+  useAuth();
 
   // Active top-level tab: 'events' or 'jobs'
   const [activeTab, setActiveTab] = useState<'events' | 'jobs'>('events');
@@ -76,8 +75,11 @@ export default function AdminParticipationPage() {
   // Job applicants detail state
   const [applicantsLoading, setApplicantsLoading] = useState<boolean>(false);
   const [applicantsList, setApplicantsList] = useState<JobApplicantDetail[]>([]);
+  const [totalApplicantsCount, setTotalApplicantsCount] = useState<number>(0);
   const [applicantSearch, setApplicantSearch] = useState<string>('');
   const [applicantStatusFilter, setApplicantStatusFilter] = useState<string>('all');
+  const [applicantPage, setApplicantPage] = useState<number>(1);
+  const APPLICANTS_PER_PAGE = 15;
 
   // Cover letter modal
   const [modalCoverLetter, setModalCoverLetter] = useState<{ name: string; text: string } | null>(null);
@@ -121,6 +123,16 @@ export default function AdminParticipationPage() {
   }, [fetchEventParticipation, fetchJobParticipation]);
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam === 'jobs') {
+        setActiveTab('jobs');
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     loadAllData();
   }, [loadAllData]);
 
@@ -138,19 +150,46 @@ export default function AdminParticipationPage() {
     }
   }, []);
 
-  // Load applicants for selected job
-  const loadJobApplicants = useCallback(async (jobId: string) => {
-    setApplicantsLoading(true);
-    try {
-      const res = await adminService.getJobApplicantsDetailed(jobId, { limit: 100 });
-      setApplicantsList(res.applicants || []);
-    } catch (err: any) {
-      console.error('Failed to load job applicants:', err);
-      setApplicantsList([]);
-    } finally {
-      setApplicantsLoading(false);
-    }
-  }, []);
+  // Load applicants for selected job with server-side pagination, search, and status filtering
+  const loadJobApplicants = useCallback(
+    async (
+      jobId: string,
+      page: number = 1,
+      search: string = '',
+      status: string = 'all'
+    ) => {
+      setApplicantsLoading(true);
+      try {
+        const limit = APPLICANTS_PER_PAGE;
+        const offset = Math.max(0, (page - 1) * limit);
+        const res = await adminService.getJobApplicantsDetailed(jobId, {
+          limit,
+          offset,
+          search: search.trim() ? search.trim() : undefined,
+          status: status !== 'all' ? status : undefined,
+        });
+        setApplicantsList(res.applicants || []);
+        setTotalApplicantsCount(res.total_count ?? 0);
+        setApplicantPage(page);
+      } catch (err: unknown) {
+        console.error('Failed to load job applicants:', err);
+        setApplicantsList([]);
+        setTotalApplicantsCount(0);
+      } finally {
+        setApplicantsLoading(false);
+      }
+    },
+    [APPLICANTS_PER_PAGE]
+  );
+
+  // Debounce-load applicants when search or status filter changes for selected job
+  useEffect(() => {
+    if (!selectedJob) return;
+    const timer = setTimeout(() => {
+      loadJobApplicants(selectedJob.id, 1, applicantSearch, applicantStatusFilter);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [selectedJob, applicantSearch, applicantStatusFilter, loadJobApplicants]);
 
   // Handler when selecting an event to view participants
   const handleSelectEvent = (event: EventParticipationItem) => {
@@ -165,7 +204,8 @@ export default function AdminParticipationPage() {
     setSelectedJob(job);
     setApplicantSearch('');
     setApplicantStatusFilter('all');
-    loadJobApplicants(job.id);
+    setApplicantPage(1);
+    loadJobApplicants(job.id, 1, '', 'all');
   };
 
   // Filtered Events list
@@ -214,22 +254,7 @@ export default function AdminParticipationPage() {
     });
   }, [jobData, jobSearch, jobStatusFilter]);
 
-  // Filtered Applicants list
-  const filteredApplicants = useMemo(() => {
-    return applicantsList.filter((a) => {
-      const q = applicantSearch.toLowerCase();
-      const matchesSearch =
-        !q ||
-        a.name.toLowerCase().includes(q) ||
-        a.email.toLowerCase().includes(q) ||
-        a.identifier.toLowerCase().includes(q) ||
-        a.department.toLowerCase().includes(q);
-      const matchesStatus =
-        applicantStatusFilter === 'all' ||
-        a.status.toLowerCase() === applicantStatusFilter.toLowerCase();
-      return matchesSearch && matchesStatus;
-    });
-  }, [applicantsList, applicantSearch, applicantStatusFilter]);
+  const totalApplicantPages = Math.max(1, Math.ceil(totalApplicantsCount / APPLICANTS_PER_PAGE));
 
   // Active filter detection flags
   const isParticipantFiltered = Boolean(participantSearch.trim()) || participantRoleFilter !== 'all';
@@ -1006,16 +1031,16 @@ export default function AdminParticipationPage() {
                     <button
                       type="button"
                       onClick={() => handleExportJobApplicants(isApplicantFiltered)}
-                      disabled={exporting || applicantsLoading || (isApplicantFiltered ? filteredApplicants.length === 0 : selectedJob.application_count === 0)}
+                      disabled={exporting || applicantsLoading || (isApplicantFiltered ? totalApplicantsCount === 0 : selectedJob.application_count === 0)}
                       className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#F28C38] hover:bg-[#E07D2E] text-white rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50 cursor-pointer"
-                      title={isApplicantFiltered ? `Download CSV of ${filteredApplicants.length} filtered applicants` : `Download CSV of all ${selectedJob.application_count} applicants`}
+                      title={isApplicantFiltered ? `Download CSV of ${totalApplicantsCount} filtered applicants` : `Download CSV of all ${selectedJob.application_count} applicants`}
                     >
                       <Download className={`w-3.5 h-3.5 ${exporting ? 'animate-bounce' : ''}`} />
                       <span>
                         {exporting
                           ? 'Preparing CSV...'
                           : isApplicantFiltered
-                          ? `Download CSV (${filteredApplicants.length} Filtered)`
+                          ? `Download CSV (${totalApplicantsCount} Filtered)`
                           : `Download CSV (${selectedJob.application_count})`}
                       </span>
                     </button>
@@ -1042,14 +1067,14 @@ export default function AdminParticipationPage() {
                       <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-[#F28C38]" />
                       Loading applicants...
                     </div>
-                  ) : filteredApplicants.length === 0 ? (
+                  ) : totalApplicantsCount === 0 ? (
                     <div className="p-12 text-center">
                       <Briefcase className="w-8 h-8 text-[#CCCCCC] mx-auto mb-2" />
                       <p className="text-sm font-semibold text-[#4A3832]">No applicants found</p>
                       <p className="text-xs text-[#888888] mt-1">
-                        {applicantsList.length === 0
-                          ? 'No applications have been submitted for this job yet.'
-                          : 'No applicants matched your current search filters.'}
+                        {applicantSearch || applicantStatusFilter !== 'all'
+                          ? 'No applicants matched your current search filters.'
+                          : 'No applications have been submitted for this job yet.'}
                       </p>
                     </div>
                   ) : (
@@ -1059,14 +1084,14 @@ export default function AdminParticipationPage() {
                           <tr>
                             <th className="py-3 px-4">Applicant</th>
                             <th className="py-3 px-4">Role & ID</th>
-                            <th className="py-3 px-4">Department</th>
+                            <th className="py-3 px-4">Department & Course</th>
                             <th className="py-3 px-4">Applied Date</th>
                             <th className="py-3 px-4">Status</th>
                             <th className="py-3 px-4 text-right">Materials</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#F0EDE8]">
-                          {filteredApplicants.map((a) => (
+                          {applicantsList.map((a) => (
                             <tr key={a.application_id} className="hover:bg-[#FBFAF8] transition">
                               <td className="py-3.5 px-4">
                                 <div className="flex items-center gap-3">
@@ -1091,9 +1116,20 @@ export default function AdminParticipationPage() {
                                     {a.identifier}
                                   </div>
                                 )}
+                                {a.prn && a.prn !== a.identifier && (
+                                  <div className="font-mono text-[10px] text-[#888888]">
+                                    PRN: {a.prn}
+                                  </div>
+                                )}
                               </td>
                               <td className="py-3.5 px-4 text-[#4A3832]">
-                                {a.department || '—'}
+                                <div className="font-medium">{a.department || '—'}</div>
+                                {(a.course || a.degree) && (
+                                  <div className="text-[11px] text-[#888888] flex items-center gap-1 mt-0.5">
+                                    <GraduationCap className="w-3 h-3 text-[#888888]" />
+                                    {a.course || a.degree}
+                                  </div>
+                                )}
                               </td>
                               <td className="py-3.5 px-4 text-[#6B6B6B]">
                                 {formatDate(a.applied_at)}
@@ -1134,6 +1170,38 @@ export default function AdminParticipationPage() {
                           ))}
                         </tbody>
                       </table>
+                    </div>
+                  )}
+
+                  {/* Pagination Controls */}
+                  {totalApplicantsCount > APPLICANTS_PER_PAGE && (
+                    <div className="p-3 bg-[#FBFAF8] border-t border-[#DDD7D2] flex items-center justify-between text-xs text-[#6B6B6B]">
+                      <div>
+                        Showing {(applicantPage - 1) * APPLICANTS_PER_PAGE + 1} to{' '}
+                        {Math.min(applicantPage * APPLICANTS_PER_PAGE, totalApplicantsCount)} of{' '}
+                        {totalApplicantsCount} applicants
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => loadJobApplicants(selectedJob.id, applicantPage - 1, applicantSearch, applicantStatusFilter)}
+                          disabled={applicantPage <= 1 || applicantsLoading}
+                          className="px-2.5 py-1 rounded-lg border border-[#DDD7D2] bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 font-semibold"
+                        >
+                          <ChevronLeft className="w-3 h-3" /> Previous
+                        </button>
+                        <span className="font-semibold text-[#222222]">
+                          Page {applicantPage} of {totalApplicantPages}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => loadJobApplicants(selectedJob.id, applicantPage + 1, applicantSearch, applicantStatusFilter)}
+                          disabled={applicantPage >= totalApplicantPages || applicantsLoading}
+                          className="px-2.5 py-1 rounded-lg border border-[#DDD7D2] bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 font-semibold"
+                        >
+                          Next <ChevronRight className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
