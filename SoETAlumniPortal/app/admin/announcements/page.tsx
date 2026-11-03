@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
+import PostedAt from '@/components/PostedAt';
 import { useAuth } from '@/components/AuthProvider';
 import { announcementService, AnnouncementItem } from '@/lib/services/announcementService';
 import { Megaphone, Plus, Trash2, Users, GraduationCap, Globe, AlertCircle, X } from 'lucide-react';
@@ -207,7 +208,7 @@ export default function AdminAnnouncementsPage() {
               </div>
 
               <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
-                <span>Published on {new Date(a.created_at).toLocaleDateString()}</span>
+                <PostedAt date={a.created_at} className="text-[11px] text-slate-400" />
                 <button
                   onClick={() => handleDelete(a.id)}
                   className="text-red-600 hover:text-red-700 font-bold flex items-center gap-1"
