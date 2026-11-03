@@ -52,9 +52,10 @@ export default function LocationAutocomplete({
     }
 
     const controller = new AbortController();
+    setSuggestions([]);
+    setLoading(true);
+    setLookupFailed(false);
     const timeoutId = window.setTimeout(async () => {
-      setLoading(true);
-      setLookupFailed(false);
 
       try {
         const params = new URLSearchParams({ type: kind, q: query });
