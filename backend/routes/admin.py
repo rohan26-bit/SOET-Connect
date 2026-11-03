@@ -765,7 +765,7 @@ def get_admin_event_participation(
         })
 
     # Sort events by date descending or created_at descending
-    event_list.sort(key=lambda x: x.get("event_date") or x.get("created_at") or "", reverse=True)
+    event_list.sort(key=lambda x: x.get("created_at") or "", reverse=True)
 
     return {
         "total_registrations": total_registrations,
@@ -856,7 +856,7 @@ def export_all_event_registrations(
             reg_status,
         ])
 
-    rows.sort(key=lambda x: (x[2], x[10]), reverse=True)
+    rows.sort(key=lambda x: x[10] or "", reverse=True)
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     filename = f"event_registrations_{today}.csv"
@@ -1270,7 +1270,7 @@ def export_all_job_applications(
             "Yes" if has_cover else "No",
         ])
 
-    rows.sort(key=lambda x: (x[1], x[10]), reverse=True)
+    rows.sort(key=lambda x: x[10] or "", reverse=True)
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     filename = f"job_applications_{today}.csv"
