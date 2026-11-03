@@ -35,7 +35,7 @@ class RegisterRequest(BaseModel):
     @model_validator(mode="after")
     def validate_role_specific_registration_fields(self) -> "RegisterRequest":
         if self.role == "alumni":
-            if not all(character.isalpha() or character.isspace() for character in self.name):
+            if not all(character.isalpha() or character == ' ' for character in self.name):
                 raise ValueError("Alumni full name must contain letters and spaces only.")
 
             if not self.alumni_id:
