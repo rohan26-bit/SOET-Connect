@@ -14,7 +14,7 @@ export default function HomepageCommunitySections() {
   useEffect(() => {
     let active = true;
     Promise.all([
-      placementService.getPublished(8).catch(() => []),
+      placementService.getPublished(100).catch(() => []),
       fetch('/api/gallery?limit=6', { cache: 'no-store' })
         .then(async (response) => {
           if (!response.ok) return [];
