@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { LoaderCircle, MapPin } from 'lucide-react';
 
 type LocationKind = 'city' | 'state' | 'country';
@@ -29,9 +29,19 @@ export default function LocationAutocomplete({
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [lookupFailed, setLookupFailed] = useState(false);
+  const selectedValueRef = useRef<string | null>(null);
 
   useEffect(() => {
     const query = value.trim();
+
+    if (selectedValueRef.current === query) {
+      selectedValueRef.current = null;
+      setSuggestions([]);
+      setLoading(false);
+      setLookupFailed(false);
+      setOpen(false);
+      return;
+    }
 
     if (query.length < 2) {
       setSuggestions([]);
@@ -78,6 +88,7 @@ export default function LocationAutocomplete({
   }, [kind, value]);
 
   const handleSelect = (suggestion: LocationSuggestion) => {
+    selectedValueRef.current = suggestion.value;
     onChange(suggestion.value);
     setSuggestions([]);
     setOpen(false);
@@ -85,7 +96,14 @@ export default function LocationAutocomplete({
   };
 
   return (
-    <div className="relative min-w-0">
+    <div
+      className="relative min-w-0"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setOpen(false);
+        }
+      }}
+    >
       <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[#4A3832]">
         {label}
       </label>
