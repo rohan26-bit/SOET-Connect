@@ -5,8 +5,8 @@ import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import { adminService, AdminMetrics } from '@/lib/services/adminService';
 import { 
-  Users, GraduationCap, ShieldAlert, Briefcase, 
-  Calendar, ArrowRight, ShieldCheck, FileCheck, UserCheck 
+  Users, GraduationCap, Briefcase, Calendar,
+  ArrowRight, ShieldCheck, FileCheck
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -63,47 +63,6 @@ export default function AdminDashboard() {
           </p>
         </div>
       </div>
-
-      {/* Action Banners */}
-      {(metrics.pendingStudents || 0) > 0 && (
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <GraduationCap className="w-5 h-5 text-blue-600 shrink-0" />
-            <div>
-              <h4 className="text-xs font-bold text-blue-900">
-                {metrics.pendingStudents} Student{(metrics.pendingStudents || 0) > 1 ? 's' : ''} Pending Verification
-              </h4>
-              <p className="text-xs text-blue-700">New student registrations awaiting administrator approval.</p>
-            </div>
-          </div>
-          <Link
-            href="/admin/students"
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md transition self-start sm:self-auto"
-          >
-            Review Students →
-          </Link>
-        </div>
-      )}
-
-      {metrics.pendingAlumni > 0 && (
-        <div className="mb-8 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0" />
-            <div>
-              <h4 className="text-xs font-bold text-amber-900">
-                {metrics.pendingAlumni} Alumni Pending Verification
-              </h4>
-              <p className="text-xs text-amber-700">New graduate registrations awaiting your authorization.</p>
-            </div>
-          </div>
-          <Link
-            href="/admin/verify"
-            className="px-4 py-2 bg-[#F28C38] hover:bg-[#E07D2E] text-white text-xs font-bold rounded-xl shadow-md transition self-start sm:self-auto"
-          >
-            Review Queue →
-          </Link>
-        </div>
-      )}
 
       {/* Dynamic Statistics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -176,64 +135,117 @@ export default function AdminDashboard() {
 
       </div>
 
-      {/* Quick Navigation Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        
-        <Link
-          href="/admin/verify"
-          className="bg-white p-6 rounded-3xl border border-[#DDD7D2] shadow-sm hover:shadow-md hover:border-[#F28C38]/40 transition group flex flex-col justify-between"
-        >
-          <div>
-            <div className="w-10 h-10 bg-[#F28C38] text-white rounded-xl flex items-center justify-center mb-4 shadow-md shadow-[#F28C38]/20">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-            <h3 className="text-base font-bold text-[#4A3832]">Alumni Verification</h3>
-            <p className="text-xs text-[#6B6B6B] mt-1 leading-relaxed">
-              Verify credentials, batch graduation records, and authorize newly registered alumni.
-            </p>
-          </div>
-          <div className="mt-4 flex items-center text-xs font-bold text-[#F28C38] group-hover:translate-x-1 transition-transform">
-            Open Queue →
-          </div>
-        </Link>
+      {/* Consolidated Pending Approvals */}
+      {(() => {
+        const pendingApprovalItems = [
+          {
+            title: 'Alumni Verification',
+            description: 'Review newly registered alumni and verify their credentials.',
+            count: metrics.pendingAlumni || 0,
+            href: '/admin/verify',
+            icon: ShieldCheck,
+            iconStyle: 'bg-[#F28C38]/10 text-[#F28C38]',
+          },
+          {
+            title: 'Student Verification',
+            description: 'Review student registration and enrollment requests.',
+            count: pendingStudents,
+            href: '/admin/students',
+            icon: GraduationCap,
+            iconStyle: 'bg-[#4A3832]/10 text-[#4A3832]',
+          },
+          {
+            title: 'Job Approvals',
+            description: 'Review career opportunities submitted by alumni.',
+            count: metrics.pendingJobs || 0,
+            href: '/admin/jobs',
+            icon: FileCheck,
+            iconStyle: 'bg-emerald-50 text-emerald-600',
+          },
+        ];
+        const totalPendingApprovals = pendingApprovalItems.reduce(
+          (total, item) => total + item.count,
+          0
+        );
 
-        <Link
-          href="/admin/students"
-          className="bg-white p-6 rounded-3xl border border-[#DDD7D2] shadow-sm hover:shadow-md hover:border-[#F28C38]/40 transition group flex flex-col justify-between"
-        >
-          <div>
-            <div className="w-10 h-10 bg-[#4A3832] text-white rounded-xl flex items-center justify-center mb-4 shadow-md shadow-[#4A3832]/20">
-              <UserCheck className="w-5 h-5" />
+        return (
+          <section
+            aria-labelledby="pending-approvals-heading"
+            className="bg-white p-6 md:p-7 rounded-3xl border border-[#DDD7D2] shadow-sm"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+              <div>
+                <h2 id="pending-approvals-heading" className="text-base font-bold text-[#4A3832]">
+                  Pending Approvals
+                </h2>
+                <p className="text-xs text-[#6B6B6B] mt-1">
+                  A single view of requests that need administrator attention.
+                </p>
+              </div>
+              <span
+                className={`inline-flex items-center self-start sm:self-auto rounded-full px-3 py-1.5 text-xs font-bold ${
+                  loading
+                    ? 'bg-gray-100 text-gray-600'
+                    : totalPendingApprovals > 0
+                    ? 'bg-orange-50 text-[#D97706]'
+                    : 'bg-emerald-50 text-emerald-700'
+                }`}
+                aria-live="polite"
+              >
+                {loading
+                  ? 'Checking queues…'
+                  : totalPendingApprovals > 0
+                  ? `${totalPendingApprovals} awaiting review`
+                  : 'All caught up'}
+              </span>
             </div>
-            <h3 className="text-base font-bold text-[#4A3832]">Student Verification</h3>
-            <p className="text-xs text-[#6B6B6B] mt-1 leading-relaxed">
-              Review student registration requests, verify enrollment details, and approve or reject newly registered students.
-            </p>
-          </div>
-          <div className="mt-4 flex items-center text-xs font-bold text-[#F28C38] group-hover:translate-x-1 transition-transform">
-            Review Student Requests →
-          </div>
-        </Link>
 
-        <Link
-          href="/admin/jobs"
-          className="bg-white p-6 rounded-3xl border border-[#DDD7D2] shadow-sm hover:shadow-md hover:border-[#F28C38]/40 transition group flex flex-col justify-between"
-        >
-          <div>
-            <div className="w-10 h-10 bg-emerald-600 text-white rounded-xl flex items-center justify-center mb-4 shadow-md shadow-emerald-600/20">
-              <FileCheck className="w-5 h-5" />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {pendingApprovalItems.map((item) => {
+                const ItemIcon = item.icon;
+
+                return (
+                  <Link
+                    key={item.title}
+                    href={item.href}
+                    className="group rounded-2xl border border-[#EAE5E1] p-4 hover:border-[#F28C38]/50 hover:shadow-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F28C38] focus-visible:ring-offset-2"
+                    aria-label={`${item.title}: ${loading ? 'loading' : `${item.count} pending`}. Open queue`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${item.iconStyle}`}>
+                        <ItemIcon className="w-5 h-5" aria-hidden="true" />
+                      </div>
+                      <span className={`text-2xl font-black tabular-nums ${
+                        loading
+                          ? 'text-gray-300'
+                          : item.count > 0
+                          ? 'text-[#D97706]'
+                          : 'text-[#4A3832]'
+                      }`}>
+                        {loading ? '—' : item.count}
+                      </span>
+                    </div>
+                    <h3 className="text-sm font-bold text-[#4A3832] mt-4">{item.title}</h3>
+                    <p className="text-xs text-[#6B6B6B] leading-relaxed mt-1 min-h-[2.5rem]">
+                      {item.description}
+                    </p>
+                    <div className="mt-4 flex items-center justify-between gap-2 text-xs font-bold">
+                      <span className={item.count > 0 && !loading ? 'text-[#D97706]' : 'text-emerald-700'}>
+                        {loading
+                          ? 'Loading status'
+                          : item.count > 0
+                          ? `${item.count} pending review`
+                          : 'No pending requests'}
+                      </span>
+                      <ArrowRight className="w-4 h-4 text-[#F28C38] group-hover:translate-x-1 transition-transform" aria-hidden="true" />
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
-            <h3 className="text-base font-bold text-[#4A3832]">Job Approvals</h3>
-            <p className="text-xs text-[#6B6B6B] mt-1 leading-relaxed">
-              Moderate and approve career opportunities posted by alumni before they go live.
-            </p>
-          </div>
-          <div className="mt-4 flex items-center text-xs font-bold text-[#F28C38] group-hover:translate-x-1 transition-transform">
-            Review Jobs →
-          </div>
-        </Link>
-
-      </div>
+          </section>
+        );
+      })()}
     </DashboardLayout>
   );
 }

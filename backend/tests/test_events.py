@@ -140,12 +140,15 @@ def test_admin_event_creation():
 def test_event_visibility_rules():
     """Admin sees all events; non-admin sees approved events + own pending events."""
     headers = setup_test_users()
+    # Keep the approved event in the future so this test remains valid over time.
+    future_event_date = (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()
+
     # Student creates pending event
-    client.post("/events", json={"title": "Stu Pending", "description": "D", "event_date": "2026-11-01"}, headers=headers["student"])
+    client.post("/events", json={"title": "Stu Pending", "description": "D", "event_date": future_event_date}, headers=headers["student"])
     # Alumni creates pending event
-    client.post("/events", json={"title": "Alu Pending", "description": "D", "event_date": "2026-11-02"}, headers=headers["alumni_ver"])
+    client.post("/events", json={"title": "Alu Pending", "description": "D", "event_date": future_event_date}, headers=headers["alumni_ver"])
     # Admin creates approved event
-    client.post("/events", json={"title": "Admin Approved", "description": "D", "event_date": "2026-11-03"}, headers=headers["admin"])
+    client.post("/events", json={"title": "Admin Approved", "description": "D", "event_date": future_event_date}, headers=headers["admin"])
 
     # Student 1 sees: Admin Approved + Stu Pending (own) = 2
     res_stu1 = client.get("/events", headers=headers["student"])
