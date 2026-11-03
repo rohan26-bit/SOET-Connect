@@ -19,48 +19,27 @@ interface PhotonFeature {
   properties?: PhotonProperties;
 }
 
-const SETTLEMENT_TYPES = new Set([
-  'city',
-  'town',
-  'village',
-  'municipality',
-  'hamlet',
-  'suburb',
-  'locality',
-  'borough',
-  'quarter',
-  'neighbourhood',
-]);
-
 function getSuggestion(
   properties: PhotonProperties,
   kind: LocationKind,
   query: string,
 ): { value: string; label: string } | null {
-  const featureType = (properties.type || properties.osm_value || '').toLowerCase();
   let value = '';
 
+  // The API request is already filtered to the requested Photon layer.
+  // Prefer the feature's own name, then fall back to its address component.
   if (kind === 'city') {
-    if (SETTLEMENT_TYPES.has(featureType)) {
-      value = properties.name || '';
-    } else {
-      value =
-        properties.city ||
-        properties.locality ||
-        properties.suburb ||
-        properties.district ||
-        '';
-    }
+    value =
+      properties.name ||
+      properties.city ||
+      properties.locality ||
+      properties.suburb ||
+      properties.district ||
+      '';
   } else if (kind === 'state') {
-    value = properties.state || '';
-    if (!value && ['state', 'province', 'region'].includes(featureType)) {
-      value = properties.name || '';
-    }
+    value = properties.name || properties.state || '';
   } else {
-    value = properties.country || '';
-    if (!value && featureType === 'country') {
-      value = properties.name || '';
-    }
+    value = properties.name || properties.country || '';
   }
 
   value = value.trim();
