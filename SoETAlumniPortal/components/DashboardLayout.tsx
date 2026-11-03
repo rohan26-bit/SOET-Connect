@@ -56,6 +56,7 @@ const adminNavItems = [
   { name: 'Participation & Registrations', icon: UserCheck, href: '/admin/participation' },
   { name: 'Events', icon: Calendar, href: '/admin/events' },
   { name: 'Gallery Moderation', icon: ImageIcon, href: '/admin/gallery' },
+  { name: 'Placement Celebrations', icon: Award, href: '/admin/placements' },
   { name: 'Announcements', icon: Megaphone, href: '/admin/announcements' },
   { name: 'Reports & Analytics', icon: BarChart3, href: '/admin/reports' },
 ];
