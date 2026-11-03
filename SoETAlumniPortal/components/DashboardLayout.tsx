@@ -8,8 +8,8 @@ import LoadingState from '@/components/LoadingState';
 import { 
   Home, Users, Briefcase, Calendar, 
   Bell, User, Settings, Info, 
-  LogOut, Shield, Megaphone,
-  Menu, X, ShieldCheck, GraduationCap, Bug, UserCheck,
+  LogOut, Megaphone, ChevronDown,
+  Menu, X, GraduationCap, Bug, UserCheck,
   Image as ImageIcon, MessageSquare, Award
 } from 'lucide-react';
 
@@ -48,10 +48,24 @@ const alumniMoreNavItems = [
 
 const adminNavItems = [
   { name: 'Dashboard', icon: Home, href: '/admin' },
-  { name: 'Alumni Verification', icon: Shield, href: '/admin/verify' },
-  { name: 'Student Verification', icon: ShieldCheck, href: '/admin/students' },
-  { name: 'Student Management', icon: GraduationCap, href: '/admin/student-management' },
-  { name: 'Alumni Management', icon: Users, href: '/admin/alumni' },
+  {
+    id: 'alumni',
+    name: 'Alumni',
+    icon: Users,
+    children: [
+      { name: 'Verification', href: '/admin/verify' },
+      { name: 'Management', href: '/admin/alumni' },
+    ],
+  },
+  {
+    id: 'students',
+    name: 'Students',
+    icon: GraduationCap,
+    children: [
+      { name: 'Verification', href: '/admin/students' },
+      { name: 'Management', href: '/admin/student-management' },
+    ],
+  },
   { name: 'Job Approvals', icon: Briefcase, href: '/admin/jobs' },
   { name: 'Participation & Registrations', icon: UserCheck, href: '/admin/participation' },
   { name: 'Events', icon: Calendar, href: '/admin/events' },
@@ -70,11 +84,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const { user, logout, loading } = useAuth();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [expandedAdminGroups, setExpandedAdminGroups] = useState<string[]>([]);
 
   // Close mobile navigation on route changes
   useEffect(() => {
     setIsMobileNavOpen(false);
   }, [pathname]);
+
+  // Keep the corresponding admin group expanded when one of its pages is open.
+  useEffect(() => {
+    if (user?.role !== 'admin') return;
+
+    const activeGroup =
+      pathname === '/admin/verify' || pathname.startsWith('/admin/alumni')
+        ? 'alumni'
+        : pathname === '/admin/students' || pathname.startsWith('/admin/student-management')
+        ? 'students'
+        : null;
+
+    if (activeGroup) {
+      setExpandedAdminGroups((current) =>
+        current.includes(activeGroup) ? current : [...current, activeGroup]
+      );
+    }
+  }, [pathname, user?.role]);
 
   // Close mobile navigation on Escape key press
   useEffect(() => {
@@ -114,11 +147,70 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const navItems = isAdmin ? adminNavItems : isAlumni ? alumniNavItems : mainNavItems;
   const moreItems = isAdmin ? adminMoreNavItems : isAlumni ? alumniMoreNavItems : studentMoreNavItems;
 
+  const toggleAdminGroup = (groupId: string) => {
+    setExpandedAdminGroups((current) =>
+      current.includes(groupId)
+        ? current.filter((id) => id !== groupId)
+        : [...current, groupId]
+    );
+  };
+
   const renderNavLinks = (onItemClick?: () => void) => (
     <div className="flex-1 overflow-y-auto px-4 py-6 dark-scrollbar">
       <p className="text-xs font-semibold text-[#DDD7D2]/60 mb-4 px-2 tracking-wider uppercase">Main Menu</p>
       <nav className="space-y-1">
         {navItems.map((item) => {
+          if ('children' in item) {
+            const isExpanded = expandedAdminGroups.includes(item.id);
+            const isGroupActive = item.children.some(
+              (child) => pathname === child.href || pathname.startsWith(`${child.href}/`)
+            );
+
+            return (
+              <div key={item.id}>
+                <button
+                  type="button"
+                  onClick={() => toggleAdminGroup(item.id)}
+                  aria-expanded={isExpanded}
+                  aria-controls={`admin-nav-${item.id}`}
+                  className={`flex items-center justify-between w-full px-3 py-2.5 rounded-xl transition-all duration-150 ${
+                    isGroupActive
+                      ? 'bg-[#5A453D] text-white font-semibold'
+                      : 'hover:bg-[#5A453D] hover:text-white text-gray-200'
+                  }`}
+                >
+                  <span className="flex items-center min-w-0">
+                    <item.icon className={`w-5 h-5 mr-3 shrink-0 ${isGroupActive ? 'text-[#F6A15A]' : 'text-[#DDD7D2]'}`} />
+                    <span>{item.name}</span>
+                  </span>
+                  <ChevronDown className={`w-4 h-4 shrink-0 ml-2 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                </button>
+
+                {isExpanded && (
+                  <div id={`admin-nav-${item.id}`} className="mt-1 ml-4 pl-3 border-l border-[#6B5147] space-y-1">
+                    {item.children.map((child) => {
+                      const isActive = pathname === child.href || pathname.startsWith(`${child.href}/`);
+                      return (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          onClick={onItemClick}
+                          className={`flex items-center px-3 py-2 rounded-lg text-xs transition-all duration-150 ${
+                            isActive
+                              ? 'bg-[#F28C38] text-white font-semibold shadow-sm'
+                              : 'text-gray-300 hover:bg-[#5A453D] hover:text-white'
+                          }`}
+                        >
+                          {child.name}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
           const isActive = pathname === item.href;
           return (
             <Link
