@@ -83,14 +83,18 @@ export async function GET(request: NextRequest) {
     photonUrl.searchParams.set('layer', kind!);
 
     const response = await fetch(photonUrl.toString(), {
-      headers: { Accept: 'application/json' },
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'SOET-Connect/1.0 (alumni registration location suggestions)',
+      },
       next: { revalidate: 3600 },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(12000),
     });
 
     if (!response.ok) {
+      console.warn(`[location-suggestions] Photon returned HTTP ${response.status} for ${kind} query.`);
       return NextResponse.json(
-        { error: 'Location suggestions are temporarily unavailable.', suggestions: [] },
+        { error: `Photon returned HTTP ${response.status}.`, suggestions: [] },
         { status: 502 },
       );
     }
@@ -112,9 +116,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       suggestions: Array.from(suggestions.values()),
     });
-  } catch {
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'Unknown upstream error';
+    console.warn(`[location-suggestions] ${kind} lookup failed: ${reason}`);
     return NextResponse.json(
-      { error: 'Location suggestions are temporarily unavailable.', suggestions: [] },
+      { error: 'Location suggestions are temporarily unavailable.', diagnostic: reason, suggestions: [] },
       { status: 502 },
     );
   }
