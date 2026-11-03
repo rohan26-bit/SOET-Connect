@@ -62,7 +62,7 @@ def _load_placements(query):
 
 @router.get("")
 def get_published_placements(
-    limit: int = Query(default=8, ge=1, le=30),
+    limit: int = Query(default=100, ge=1, le=100),
 ):
     """Public feed used by the unauthenticated homepage. Only published records are returned."""
     rows = _load_placements(
