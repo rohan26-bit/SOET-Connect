@@ -191,7 +191,7 @@ export default function LocationAutocomplete({
 
         try {
           results = await fetchDirectPhotonSuggestions(kind, query, externalController.signal);
-        } catch (directError) {
+        } catch {
           if (controller.signal.aborted) return;
           results = await fetchServerFallback(kind, query, controller.signal);
         }
@@ -200,7 +200,7 @@ export default function LocationAutocomplete({
         setSuggestions(results);
         setLookupFailed(false);
         setOpen(true);
-      } catch (error) {
+      } catch {
         if (controller.signal.aborted) return;
         setSuggestions([]);
         setLookupFailed(true);
