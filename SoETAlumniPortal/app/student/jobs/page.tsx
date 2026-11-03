@@ -404,6 +404,7 @@ export default function JobsPage() {
                   <div>
                     <h3 className="text-sm font-bold text-slate-900">{j.title}</h3>
                     <p className="text-xs text-slate-500">{j.company} • {j.location} • {j.employment_type}</p>
+                    <PostedAt date={j.created_at} className="text-[11px] text-slate-400 block mt-1" />
                   </div>
                   <div className="flex items-center gap-3">
                     {j.is_expired && (
