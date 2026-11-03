@@ -60,7 +60,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const logout = async () => {
     await authService.signOut();
     setUser(null);
-    router.push('/login');
+
+    // Return every role to the public homepage after clearing the session.
+    // Replace the protected route so browser back does not immediately reopen it.
+    router.replace('/');
   };
 
   return (
