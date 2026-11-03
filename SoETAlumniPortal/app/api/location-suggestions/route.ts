@@ -100,6 +100,8 @@ export async function GET(request: NextRequest) {
     photonUrl.searchParams.set('q', query);
     photonUrl.searchParams.set('limit', '20');
     photonUrl.searchParams.set('lang', 'en');
+    // Photon supports dedicated city/state/country search layers.
+    photonUrl.searchParams.set('layer', kind!);
 
     const response = await fetch(photonUrl.toString(), {
       headers: { Accept: 'application/json' },
