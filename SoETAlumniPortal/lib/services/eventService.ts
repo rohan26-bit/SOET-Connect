@@ -85,6 +85,14 @@ function normalizeEvent(e: any): EventItem {
   };
 }
 
+function newestEventsFirst(events: EventItem[]): EventItem[] {
+  return [...events].sort((a, b) => {
+    const aTime = Date.parse(a.created_at || a.event_date || '');
+    const bTime = Date.parse(b.created_at || b.event_date || '');
+    return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+  });
+}
+
 export const eventService = {
   // ============================================================
   // GET APPROVED EVENTS
@@ -100,9 +108,9 @@ export const eventService = {
       throw new Error(data.detail || 'Failed to load events.');
     }
 
-    return (data || [])
+    return newestEventsFirst((data || [])
       .filter((e: any) => e.status === 'approved')
-      .map(normalizeEvent);
+      .map(normalizeEvent));
   },
 
   // ============================================================
@@ -119,7 +127,7 @@ export const eventService = {
       throw new Error(data.detail || 'Failed to load events for admin.');
     }
 
-    return (data || []).map(normalizeEvent);
+    return newestEventsFirst((data || []).map(normalizeEvent));
   },
 
   // ============================================================
@@ -137,9 +145,9 @@ export const eventService = {
       throw new Error(data.detail || 'Failed to load your events.');
     }
 
-    return (data || [])
+    return newestEventsFirst((data || [])
       .filter((e: any) => !userId || String(e.created_by) === String(userId))
-      .map(normalizeEvent);
+      .map(normalizeEvent));
   },
 
 
@@ -333,7 +341,11 @@ export const eventService = {
       throw new Error(data.detail || 'Failed to load your registrations.');
     }
 
-    return data || [];
+    return (data || []).sort((a: any, b: any) => {
+      const aTime = Date.parse(a.created_at || a.registered_at || '');
+      const bTime = Date.parse(b.created_at || b.registered_at || '');
+      return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+    });
   },
 
   // ============================================================
@@ -362,7 +374,11 @@ export const eventService = {
       user_email: r.user_email,
       user_role: r.user_role,
       avatar_url: r.avatar_url,
-    }));
+    })).sort((a: EventAttendeeItem, b: EventAttendeeItem) => {
+      const aTime = Date.parse(a.created_at || '');
+      const bTime = Date.parse(b.created_at || '');
+      return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+    });
   },
 };
 
