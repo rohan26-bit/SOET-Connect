@@ -140,7 +140,6 @@ _mock_store: Dict[str, List[dict]] = {
     "announcements": [],
     "notifications": [],
     "achievements": [],
-    "bug_reports": [],
     "gallery_photos": [],
     "notification_preferences": [],
     "notification_deliveries": [],

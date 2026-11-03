@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
-import ReportIssueForm from '@/components/ReportIssueForm';
 import NotificationPreferencesCard from '@/components/NotificationPreferencesCard';
 import { Shield } from 'lucide-react';
 
@@ -81,13 +80,6 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="pt-8 border-t border-[#DDD7D2]">
-          <div className="mb-4">
-            <h2 className="text-lg font-bold text-[#4A3832]">Support & Report an Issue</h2>
-            <p className="text-xs text-[#6B6B6B] mt-0.5">Found a bug or having trouble? Let the technical team know.</p>
-          </div>
-          <ReportIssueForm initialRoute="/student/settings" />
-        </div>
       </div>
     </DashboardLayout>
   );

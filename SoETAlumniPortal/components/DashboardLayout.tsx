@@ -9,7 +9,7 @@ import {
   Home, Users, Briefcase, Calendar, 
   Bell, User, Settings, Info, 
   LogOut, Megaphone, ChevronDown,
-  Menu, X, GraduationCap, Bug, UserCheck,
+  Menu, X, GraduationCap, UserCheck,
   Image as ImageIcon, MessageSquare, Award
 } from 'lucide-react';
 
@@ -88,7 +88,6 @@ const adminNavItems: NavItem[] = [
 
 const adminMoreNavItems = [
   { name: 'Public Gallery', icon: ImageIcon, href: '/gallery' },
-  { name: 'Issue Reports', icon: Bug, href: '/admin/bug-reports' },
   { name: 'Settings', icon: Settings, href: '/admin/settings' },
 ];
 
