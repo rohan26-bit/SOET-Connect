@@ -283,7 +283,7 @@ def test_alumni_registration_is_pending(client):
         "email": "pending.alumni@example.com",
         "password": "SecurePassword123!",
         "role": "alumni",
-        "alumni_id": "ALU999",
+        "alumni_id": "999999",
         "department": "CSE"
     }
     res = client.post("/auth/register", json=payload)
@@ -295,6 +295,47 @@ def test_alumni_registration_is_pending(client):
     assert u is not None
     assert u["is_verified"] is False
     assert u["verification_status"] == "pending"
+
+
+def test_alumni_registration_rejects_non_numeric_alumni_id(client):
+    """Alumni ID / PRN must contain digits only."""
+    response = client.post("/auth/register", json={
+        "name": "Numeric Alumni",
+        "email": "numeric.alumni@example.com",
+        "password": "SecurePassword123!",
+        "role": "alumni",
+        "alumni_id": "ALU2022",
+        "department": "CSE",
+    })
+    assert response.status_code == 422
+    assert "numbers only" in response.text.lower()
+
+
+def test_alumni_registration_rejects_name_with_numbers(client):
+    """Alumni full names may contain letters and spaces, but not digits."""
+    response = client.post("/auth/register", json={
+        "name": "Alumni 2022",
+        "email": "alumni.name.digits@example.com",
+        "password": "SecurePassword123!",
+        "role": "alumni",
+        "alumni_id": "2022001",
+        "department": "CSE",
+    })
+    assert response.status_code == 422
+    assert "letters and spaces only" in response.text.lower()
+
+
+def test_alumni_registration_rejects_email_without_at(client):
+    """Alumni registration requires a syntactically valid email address."""
+    response = client.post("/auth/register", json={
+        "name": "Email Alumni",
+        "email": "alumni.example.com",
+        "password": "SecurePassword123!",
+        "role": "alumni",
+        "alumni_id": "2022002",
+        "department": "CSE",
+    })
+    assert response.status_code == 422
 
 
 def test_admin_registration_is_approved(client, monkeypatch):
