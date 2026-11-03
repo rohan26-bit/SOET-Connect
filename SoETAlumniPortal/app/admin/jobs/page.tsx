@@ -24,6 +24,8 @@ import {
   Mail,
   ExternalLink,
   RefreshCw,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import DocumentAttachment, { DocumentAttachmentData, DocumentAttachmentView } from '@/components/DocumentAttachment';
 
@@ -51,6 +53,9 @@ export default function AdminJobsPage() {
   const [modalApplicantsLoading, setModalApplicantsLoading] = useState<boolean>(false);
   const [modalApplicantsError, setModalApplicantsError] = useState<string | null>(null);
   const [modalCoverLetter, setModalCoverLetter] = useState<{ name: string; text: string } | null>(null);
+  const [modalPage, setModalPage] = useState<number>(1);
+  const [modalTotalCount, setModalTotalCount] = useState<number>(0);
+  const MODAL_LIMIT = 10;
 
   const initialJobState = {
     title: '',
@@ -77,7 +82,7 @@ export default function AdminJobsPage() {
       if (partData && partData.jobs) {
         const counts: Record<string, number> = {};
         partData.jobs.forEach((pj) => {
-          counts[pj.id] = pj.application_count;
+          counts[pj.id] = pj.unique_applicant_count ?? pj.application_count ?? 0;
         });
         setApplicantCounts(counts);
       }
@@ -88,20 +93,33 @@ export default function AdminJobsPage() {
     }
   };
 
-  const handleOpenApplicantsModal = async (job: JobItem) => {
-    setSelectedJobForApplicants(job);
+  const fetchModalApplicants = async (jobId: string, page: number = 1) => {
     setModalApplicantsLoading(true);
     setModalApplicantsError(null);
     try {
-      const res = await adminService.getJobApplicantsDetailed(job.id, { limit: 100 });
+      const offset = Math.max(0, (page - 1) * MODAL_LIMIT);
+      const res = await adminService.getJobApplicantsDetailed(jobId, {
+        limit: MODAL_LIMIT,
+        offset,
+      });
       setModalApplicants(res.applicants || []);
-    } catch (err: any) {
+      setModalTotalCount(res.total_count ?? 0);
+      setModalPage(page);
+    } catch (err: unknown) {
       console.error('Failed to load job applicants:', err);
-      setModalApplicantsError(err?.message || 'Failed to load applicants.');
+      const msg = err instanceof Error ? err.message : 'Failed to load applicants.';
+      setModalApplicantsError(msg);
       setModalApplicants([]);
+      setModalTotalCount(0);
     } finally {
       setModalApplicantsLoading(false);
     }
+  };
+
+  const handleOpenApplicantsModal = (job: JobItem) => {
+    setSelectedJobForApplicants(job);
+    setModalPage(1);
+    fetchModalApplicants(job.id, 1);
   };
 
   useEffect(() => {
@@ -620,6 +638,8 @@ export default function AdminJobsPage() {
                 setSelectedJobForApplicants(null);
                 setModalApplicants([]);
                 setModalApplicantsError(null);
+                setModalPage(1);
+                setModalTotalCount(0);
               }}
               className="absolute top-6 right-6 p-2 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition"
               title="Close"
@@ -634,7 +654,7 @@ export default function AdminJobsPage() {
                   {selectedJobForApplicants.employment_type || 'Job'}
                 </span>
                 <span className="px-3 py-0.5 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-full border border-emerald-200">
-                  {modalApplicants.length} Total Applicant{modalApplicants.length === 1 ? '' : 's'}
+                  {modalTotalCount} Total Applicant{modalTotalCount === 1 ? '' : 's'}
                 </span>
               </div>
               <h3 className="text-xl font-bold text-slate-900">
@@ -663,7 +683,7 @@ export default function AdminJobsPage() {
                   <span>{modalApplicantsError}</span>
                 </div>
                 <button
-                  onClick={() => handleOpenApplicantsModal(selectedJobForApplicants)}
+                  onClick={() => fetchModalApplicants(selectedJobForApplicants.id, modalPage)}
                   className="px-3 py-1 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 text-[11px]"
                 >
                   Retry
@@ -782,6 +802,37 @@ export default function AdminJobsPage() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Modal Pagination Controls */}
+                {modalTotalCount > MODAL_LIMIT && (
+                  <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
+                    <div>
+                      Showing {(modalPage - 1) * MODAL_LIMIT + 1} to{' '}
+                      {Math.min(modalPage * MODAL_LIMIT, modalTotalCount)} of {modalTotalCount} applicants
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => fetchModalApplicants(selectedJobForApplicants.id, modalPage - 1)}
+                        disabled={modalPage <= 1 || modalApplicantsLoading}
+                        className="px-2.5 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 font-semibold"
+                      >
+                        <ChevronLeft className="w-3 h-3" /> Previous
+                      </button>
+                      <span className="font-semibold text-slate-800">
+                        Page {modalPage} of {Math.max(1, Math.ceil(modalTotalCount / MODAL_LIMIT))}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => fetchModalApplicants(selectedJobForApplicants.id, modalPage + 1)}
+                        disabled={modalPage >= Math.ceil(modalTotalCount / MODAL_LIMIT) || modalApplicantsLoading}
+                        className="px-2.5 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 font-semibold"
+                      >
+                        Next <ChevronRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -800,6 +851,8 @@ export default function AdminJobsPage() {
                   setSelectedJobForApplicants(null);
                   setModalApplicants([]);
                   setModalApplicantsError(null);
+                  setModalPage(1);
+                  setModalTotalCount(0);
                 }}
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
               >

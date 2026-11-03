@@ -498,3 +498,148 @@ def test_admin_job_applicants_comprehensive_workflow(
     assert "Resume Available" in content_text
     # Raw storage URL must NOT be exposed in CSV
     assert "https://storage.example.com" not in content_text
+
+
+def test_admin_job_applicants_pagination_and_duplicates(
+    client: TestClient,
+    admin_user: dict,
+    student_user: dict,
+):
+    """
+    Dedicated test for:
+    - Robust deduplication of duplicate applications (identical rows + repeated submissions).
+    - Multi-page pagination using limit, offset, and total_count.
+    - Verification that unique_applicant_count in jobs overview matches deduplicated total.
+    """
+    now = datetime.now(timezone.utc)
+    job_id = "job_pagination_test_999"
+
+    supabase.table("jobs").insert({
+        "id": job_id,
+        "title": "Systems Architect",
+        "company": "Apex Global",
+        "location": "Bengaluru",
+        "job_type": "Full-time",
+        "status": "approved",
+        "created_at": now.isoformat(),
+    }).execute()
+
+    # Create 6 distinct mock users and applications
+    applicant_ids = []
+    for i in range(1, 7):
+        uid = f"user_pag_{i}"
+        applicant_ids.append(uid)
+        users_collection.insert_one({
+            "_id": uid,
+            "id": uid,
+            "name": f"Candidate {i}",
+            "email": f"candidate{i}@example.com",
+            "role": "student",
+            "student_profile": {
+                "student_id": f"PAG00{i}",
+                "department": "Information Technology",
+                "course": "B.Tech",
+            },
+        })
+        app_time = (now - timedelta(minutes=10 * i)).isoformat()
+        supabase.table("job_applications").insert({
+            "id": f"app_pag_{i}",
+            "job_id": job_id,
+            "applicant_id": uid,
+            "status": "applied",
+            "applied_at": app_time,
+        }).execute()
+
+    # Add duplicate applications for Candidate 1 (different app id, later time)
+    later_time = (now + timedelta(minutes=5)).isoformat()
+    supabase.table("job_applications").insert({
+        "id": "app_pag_1_dup",
+        "job_id": job_id,
+        "applicant_id": "user_pag_1",
+        "status": "shortlisted",
+        "applied_at": later_time,
+    }).execute()
+
+    # Add identical row duplicate for Candidate 2
+    supabase.table("job_applications").insert({
+        "id": "app_pag_2",  # identical id
+        "job_id": job_id,
+        "applicant_id": "user_pag_2",
+        "status": "applied",
+        "applied_at": (now - timedelta(minutes=20)).isoformat(),
+    }).execute()
+
+    # 1. Verify overview returns correct unique_applicant_count
+    overview_res = client.get("/api/admin/participation/jobs", headers=admin_user["headers"])
+    assert overview_res.status_code == 200
+    job_item = next(j for j in overview_res.json()["jobs"] if j["id"] == job_id)
+    assert job_item["unique_applicant_count"] == 6
+
+    # 2. Page 1: limit=2, offset=0
+    p1_res = client.get(
+        f"/api/admin/participation/jobs/{job_id}/applicants?limit=2&offset=0",
+        headers=admin_user["headers"],
+    )
+    assert p1_res.status_code == 200
+    p1_data = p1_res.json()
+    assert p1_data["total_count"] == 6
+    assert p1_data["limit"] == 2
+    assert p1_data["offset"] == 0
+    assert len(p1_data["applicants"]) == 2
+    p1_ids = [a["applicant_id"] for a in p1_data["applicants"]]
+
+    # Candidate 1 must have the updated status from the latest submission
+    cand1 = next(a for a in p1_data["applicants"] if a["applicant_id"] == "user_pag_1")
+    assert cand1["status"] == "shortlisted"
+
+    # 3. Page 2: limit=2, offset=2
+    p2_res = client.get(
+        f"/api/admin/participation/jobs/{job_id}/applicants?limit=2&offset=2",
+        headers=admin_user["headers"],
+    )
+    assert p2_res.status_code == 200
+    p2_data = p2_res.json()
+    assert p2_data["total_count"] == 6
+    assert p2_data["limit"] == 2
+    assert p2_data["offset"] == 2
+    assert len(p2_data["applicants"]) == 2
+    p2_ids = [a["applicant_id"] for a in p2_data["applicants"]]
+    # No overlap with Page 1
+    assert set(p1_ids).isdisjoint(set(p2_ids))
+
+    # 4. Page 3: limit=2, offset=4
+    p3_res = client.get(
+        f"/api/admin/participation/jobs/{job_id}/applicants?limit=2&offset=4",
+        headers=admin_user["headers"],
+    )
+    assert p3_res.status_code == 200
+    p3_data = p3_res.json()
+    assert p3_data["total_count"] == 6
+    assert len(p3_data["applicants"]) == 2
+    p3_ids = [a["applicant_id"] for a in p3_data["applicants"]]
+    assert set(p2_ids).isdisjoint(set(p3_ids))
+
+    # All 6 unique candidates accounted for across 3 pages
+    all_seen = set(p1_ids) | set(p2_ids) | set(p3_ids)
+    assert len(all_seen) == 6
+    assert all_seen == set(applicant_ids)
+
+    # 5. Out of bounds offset: offset=6
+    p4_res = client.get(
+        f"/api/admin/participation/jobs/{job_id}/applicants?limit=2&offset=6",
+        headers=admin_user["headers"],
+    )
+    assert p4_res.status_code == 200
+    p4_data = p4_res.json()
+    assert p4_data["total_count"] == 6
+    assert len(p4_data["applicants"]) == 0
+
+    # 6. Negative offset bounds check
+    neg_res = client.get(
+        f"/api/admin/participation/jobs/{job_id}/applicants?limit=2&offset=-5",
+        headers=admin_user["headers"],
+    )
+    assert neg_res.status_code == 200
+    neg_data = neg_res.json()
+    assert neg_data["offset"] == 0
+    assert len(neg_data["applicants"]) == 2

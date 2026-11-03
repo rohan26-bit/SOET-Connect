@@ -1420,12 +1420,13 @@ def get_admin_job_applicants(
     applicants.sort(key=lambda x: x.get("applied_at") or "", reverse=True)
 
     total_count = len(applicants)
+    bounded_offset = max(0, offset)
     if limit < 0:
-        paginated = applicants[offset:]
+        paginated = applicants[bounded_offset:]
         bounded_limit = len(paginated)
     else:
         bounded_limit = max(1, min(limit, 1000))
-        paginated = applicants[offset : offset + bounded_limit]
+        paginated = applicants[bounded_offset : bounded_offset + bounded_limit]
 
     return {
         "job_id": str(job_id),
@@ -1433,7 +1434,7 @@ def get_admin_job_applicants(
         "company": target_job.get("company", ""),
         "total_count": total_count,
         "limit": bounded_limit,
-        "offset": offset,
+        "offset": bounded_offset,
         "applicants": paginated,
     }
 
