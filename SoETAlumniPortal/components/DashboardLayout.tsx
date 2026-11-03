@@ -8,7 +8,7 @@ import LoadingState from '@/components/LoadingState';
 import { 
   Home, Users, Briefcase, Calendar, 
   Bell, User, Settings, Info, 
-  LogOut, Shield, BarChart3, Megaphone,
+  LogOut, Shield, Megaphone,
   Menu, X, ShieldCheck, GraduationCap, Bug, UserCheck,
   Image as ImageIcon, MessageSquare, Award
 } from 'lucide-react';
@@ -58,7 +58,6 @@ const adminNavItems = [
   { name: 'Gallery Moderation', icon: ImageIcon, href: '/admin/gallery' },
   { name: 'Placement Celebrations', icon: Award, href: '/admin/placements' },
   { name: 'Announcements', icon: Megaphone, href: '/admin/announcements' },
-  { name: 'Reports & Analytics', icon: BarChart3, href: '/admin/reports' },
 ];
 
 const adminMoreNavItems = [
