@@ -27,11 +27,22 @@ class RegisterRequest(BaseModel):
     def trim_student_registration_fields(cls, value):
         return value.strip() if isinstance(value, str) else value
 
+    @field_validator("alumni_id", mode="before")
+    @classmethod
+    def trim_alumni_id(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
     @model_validator(mode="after")
     def validate_role_specific_registration_fields(self) -> "RegisterRequest":
         if self.role == "alumni":
-            if not self.alumni_id or not self.alumni_id.strip():
+            if not all(character.isalpha() or character == ' ' for character in self.name):
+                raise ValueError("Alumni full name must contain letters and spaces only.")
+
+            if not self.alumni_id:
                 raise ValueError("Alumni ID / PRN is required.")
+
+            if not self.alumni_id.isascii() or not self.alumni_id.isdigit():
+                raise ValueError("Alumni ID / PRN must contain numbers only.")
 
         if self.role == "student":
             required_fields = [

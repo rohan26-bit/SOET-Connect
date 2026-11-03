@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { authService } from '@/lib/services/authService';
 import { AlertCircle, ArrowRight, ShieldAlert } from 'lucide-react';
 import { ButtonSpinner } from '@/components/LoadingState';
+import LocationAutocomplete from '@/components/LocationAutocomplete';
 
 const DEPARTMENTS = [
   'Computer Engineering',
@@ -28,7 +29,9 @@ export default function AlumniRegisterPage() {
     company: '',
     designation: '',
     industry: 'Information Technology',
-    location: '',
+    city: '',
+    state: '',
+    country: '',
     skillsStr: '',
     linkedin: '',
     github: '',
@@ -48,10 +51,24 @@ export default function AlumniRegisterPage() {
       setError('Full name must be at least 2 characters long.');
       return;
     }
+    if (!/^[\p{L} ]+$/u.test(trimmedName)) {
+      setError('Full name can contain letters and spaces only.');
+      return;
+    }
 
     const trimmedAlumniId = formData.alumniId.trim();
     if (!trimmedAlumniId) {
       setError('Alumni ID / PRN is required.');
+      return;
+    }
+    if (!/^[0-9]+$/.test(trimmedAlumniId)) {
+      setError('Alumni ID / PRN must contain numbers only.');
+      return;
+    }
+
+    const trimmedEmail = formData.email.trim();
+    if (!trimmedEmail.includes('@')) {
+      setError('Please enter an email address containing @.');
       return;
     }
 
@@ -64,16 +81,19 @@ export default function AlumniRegisterPage() {
 
       await authService.registerAlumni({
         fullName: trimmedName,
-        email: formData.email,
+        email: trimmedEmail,
         password: formData.password,
-        alumniId: formData.alumniId,
+        alumniId: trimmedAlumniId,
         department: formData.department,
         degree: formData.degree,
         graduationYear: formData.graduationYear,
         company: formData.company,
         designation: formData.designation,
         industry: formData.industry,
-        location: formData.location,
+        location: [formData.city, formData.state, formData.country]
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .join(', '),
         skills: skills,
         linkedin: formData.linkedin,
         github: formData.github,
@@ -151,7 +171,10 @@ export default function AlumniRegisterPage() {
                     type="text"
                     required
                     value={formData.fullName}
-                    onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      fullName: e.target.value.replace(/[^\p{L} ]/gu, ''),
+                    })}
                     placeholder="e.g. Ananya Patel"
                     className="w-full px-3.5 py-2.5 bg-[#FBFAF8] border border-[#DDD7D2] rounded-xl text-[#222222] text-sm focus:ring-2 focus:ring-[#F28C38] focus:border-[#F28C38] focus:bg-white outline-none transition"
                   />
@@ -164,8 +187,10 @@ export default function AlumniRegisterPage() {
                     type="text"
                     required
                     value={formData.alumniId}
-                    onChange={(e) => setFormData({ ...formData, alumniId: e.target.value })}
-                    placeholder="e.g. SOET-ALUM-2022"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    onChange={(e) => setFormData({ ...formData, alumniId: e.target.value.replace(/[^0-9]/g, '') })}
+                    placeholder="e.g. 202311116026"
                     className="w-full px-3.5 py-2.5 bg-[#FBFAF8] border border-[#DDD7D2] rounded-xl text-[#222222] text-sm focus:ring-2 focus:ring-[#F28C38] focus:border-[#F28C38] focus:bg-white outline-none transition"
                   />
                 </div>
@@ -244,19 +269,23 @@ export default function AlumniRegisterPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-[#4A3832] uppercase tracking-wider mb-1.5">
                     Current Company *
                   </label>
                   <input
                     type="text"
+                    list="alumni-company-options"
                     required
                     value={formData.company}
                     onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                    placeholder="e.g. Google / Microsoft"
+                    placeholder="e.g. Google / Microsoft, or choose None"
                     className="w-full px-3.5 py-2.5 bg-[#FBFAF8] border border-[#DDD7D2] rounded-xl text-[#222222] text-sm focus:ring-2 focus:ring-[#F28C38] focus:border-[#F28C38] focus:bg-white outline-none transition"
                   />
+                  <datalist id="alumni-company-options">
+                    <option value="None" />
+                  </datalist>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-[#4A3832] uppercase tracking-wider mb-1.5">
@@ -264,25 +293,52 @@ export default function AlumniRegisterPage() {
                   </label>
                   <input
                     type="text"
+                    list="alumni-designation-options"
                     required
                     value={formData.designation}
                     onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
-                    placeholder="e.g. Senior Software Engineer"
+                    placeholder="e.g. Senior Software Engineer, or choose None"
                     className="w-full px-3.5 py-2.5 bg-[#FBFAF8] border border-[#DDD7D2] rounded-xl text-[#222222] text-sm focus:ring-2 focus:ring-[#F28C38] focus:border-[#F28C38] focus:bg-white outline-none transition"
                   />
+                  <datalist id="alumni-designation-options">
+                    <option value="None" />
+                  </datalist>
                 </div>
+              </div>
+
+              <div className="space-y-2">
                 <div>
-                  <label className="block text-xs font-semibold text-[#4A3832] uppercase tracking-wider mb-1.5">
-                    Location
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.location}
-                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                    placeholder="e.g. Bengaluru, India"
-                    className="w-full px-3.5 py-2.5 bg-[#FBFAF8] border border-[#DDD7D2] rounded-xl text-[#222222] text-sm focus:ring-2 focus:ring-[#F28C38] focus:border-[#F28C38] focus:bg-white outline-none transition"
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[#4A3832]">Location</p>
+                  <p className="mt-1 text-[11px] text-[#8A7B70]">
+                    Start typing to see matching places, or enter a location manually.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <LocationAutocomplete
+                    kind="city"
+                    label="City"
+                    value={formData.city}
+                    onChange={(city) => setFormData({ ...formData, city })}
+                    placeholder="e.g. Chhatrapati Sambhajinagar"
+                  />
+                  <LocationAutocomplete
+                    kind="state"
+                    label="State"
+                    value={formData.state}
+                    onChange={(state) => setFormData({ ...formData, state })}
+                    placeholder="e.g. Maharashtra"
+                  />
+                  <LocationAutocomplete
+                    kind="country"
+                    label="Country"
+                    value={formData.country}
+                    onChange={(country) => setFormData({ ...formData, country })}
+                    placeholder="e.g. India"
                   />
                 </div>
+                <p className="text-[10px] text-[#9A8E85]">
+                  Location suggestions by Photon · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline hover:text-[#6B6B6B]">© OpenStreetMap contributors</a>
+                </p>
               </div>
 
               <div>
