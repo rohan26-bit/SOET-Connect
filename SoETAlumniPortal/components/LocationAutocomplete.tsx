@@ -10,12 +10,138 @@ interface LocationSuggestion {
   label: string;
 }
 
+interface PhotonFeature {
+  properties?: {
+    name?: string;
+    city?: string;
+    locality?: string;
+    suburb?: string;
+    district?: string;
+    state?: string;
+    country?: string;
+    countrycode?: string;
+  };
+}
+
+interface PhotonResponse {
+  features?: PhotonFeature[];
+}
+
+interface SuggestionResponse {
+  suggestions?: LocationSuggestion[];
+}
+
 interface LocationAutocompleteProps {
   kind: LocationKind;
   label: string;
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
+}
+
+function getPhotonSuggestions(
+  data: PhotonResponse,
+  kind: LocationKind,
+  query: string,
+): LocationSuggestion[] {
+  const suggestions = new Map<string, LocationSuggestion>();
+
+  for (const feature of data.features || []) {
+    const properties = feature.properties || {};
+    let value = '';
+
+    if (kind === 'city') {
+      value =
+        properties.name ||
+        properties.city ||
+        properties.locality ||
+        properties.suburb ||
+        properties.district ||
+        '';
+    } else if (kind === 'state') {
+      value = properties.name || properties.state || '';
+    } else {
+      value = properties.name || properties.country || '';
+    }
+
+    value = value.trim();
+    if (!value || !value.toLocaleLowerCase().includes(query.toLocaleLowerCase())) {
+      continue;
+    }
+
+    const context =
+      kind === 'city'
+        ? [properties.state, properties.country].filter(Boolean)
+        : kind === 'state'
+          ? [properties.country].filter(Boolean)
+          : [properties.countrycode?.toUpperCase()].filter(Boolean);
+
+    const suggestion = {
+      value,
+      label: [value, ...context].filter(Boolean).join(', '),
+    };
+
+    if (!suggestions.has(value.toLocaleLowerCase())) {
+      suggestions.set(value.toLocaleLowerCase(), suggestion);
+    }
+
+    if (suggestions.size >= 8) break;
+  }
+
+  return Array.from(suggestions.values());
+}
+
+async function fetchDirectPhotonSuggestions(
+  kind: LocationKind,
+  query: string,
+  signal: AbortSignal,
+): Promise<LocationSuggestion[]> {
+  const url = new URL('https://photon.komoot.io/api/');
+  url.searchParams.set('q', query);
+  url.searchParams.set('limit', '20');
+  url.searchParams.set('lang', 'en');
+  url.searchParams.set('layer', kind);
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    mode: 'cors',
+    signal,
+    headers: { Accept: 'application/json' },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Photon returned HTTP ${response.status}.`);
+  }
+
+  const data = (await response.json()) as PhotonResponse;
+  return getPhotonSuggestions(data, kind, query);
+}
+
+async function fetchServerFallback(
+  kind: LocationKind,
+  query: string,
+  signal: AbortSignal,
+): Promise<LocationSuggestion[]> {
+  const params = new URLSearchParams({ type: kind, q: query });
+  const response = await fetch(`/api/location-suggestions?${params.toString()}`, {
+    method: 'GET',
+    signal,
+    headers: { Accept: 'application/json' },
+  });
+
+  if (!response.ok) {
+    let reason = `HTTP ${response.status}`;
+    try {
+      const body = (await response.json()) as { error?: string };
+      if (body.error) reason = body.error;
+    } catch {
+      // Keep the HTTP status as the fallback diagnostic.
+    }
+    throw new Error(reason);
+  }
+
+  const data = (await response.json()) as SuggestionResponse;
+  return Array.isArray(data.suggestions) ? data.suggestions : [];
 }
 
 export default function LocationAutocomplete({
@@ -52,38 +178,43 @@ export default function LocationAutocomplete({
     }
 
     const controller = new AbortController();
+    const externalController = new AbortController();
     setSuggestions([]);
     setLoading(true);
     setLookupFailed(false);
-    const timeoutId = window.setTimeout(async () => {
 
+    // If the public provider is slow or unreachable, fall back to the same-origin API.
+    const externalTimeoutId = window.setTimeout(() => externalController.abort(), 6500);
+    const debounceId = window.setTimeout(async () => {
       try {
-        const params = new URLSearchParams({ type: kind, q: query });
-        const response = await fetch(`/api/location-suggestions?${params.toString()}`, {
-          method: 'GET',
-          signal: controller.signal,
-          headers: { Accept: 'application/json' },
-        });
+        let results: LocationSuggestion[];
 
-        if (!response.ok) {
-          throw new Error('Location suggestions are currently unavailable.');
+        try {
+          results = await fetchDirectPhotonSuggestions(kind, query, externalController.signal);
+        } catch {
+          if (controller.signal.aborted) return;
+          results = await fetchServerFallback(kind, query, controller.signal);
         }
 
-        const result = (await response.json()) as { suggestions?: LocationSuggestion[] };
-        setSuggestions(Array.isArray(result.suggestions) ? result.suggestions : []);
+        if (controller.signal.aborted) return;
+        setSuggestions(results);
+        setLookupFailed(false);
         setOpen(true);
-      } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') return;
+      } catch {
+        if (controller.signal.aborted) return;
         setSuggestions([]);
         setLookupFailed(true);
         setOpen(true);
       } finally {
+        window.clearTimeout(externalTimeoutId);
         if (!controller.signal.aborted) setLoading(false);
       }
-    }, 350);
+    }, 500);
 
     return () => {
-      window.clearTimeout(timeoutId);
+      window.clearTimeout(debounceId);
+      window.clearTimeout(externalTimeoutId);
+      externalController.abort();
       controller.abort();
     };
   }, [kind, value]);
@@ -159,7 +290,7 @@ export default function LocationAutocomplete({
             ))
           ) : lookupFailed ? (
             <p className="px-3.5 py-3 text-xs text-[#8A7B70]">
-              Suggestions are temporarily unavailable. You can still enter this location manually.
+              Location suggestions are temporarily unavailable. You can still enter this location manually.
             </p>
           ) : !loading ? (
             <p className="px-3.5 py-3 text-xs text-[#8A7B70]">
