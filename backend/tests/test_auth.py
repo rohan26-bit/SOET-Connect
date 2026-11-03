@@ -33,7 +33,7 @@ def test_register_student_success(client):
         "email": "jane.student@example.com",
         "password": "SecurePassword123!",
         "role": "student",
-        **VALID_STUDENT_FIELDS,,
+        **VALID_STUDENT_FIELDS,
         "student_id": "STU100",
         "department": "IT",
         "course": "B.Tech",
@@ -255,7 +255,7 @@ def test_student_registration_is_pending(client):
         "email": "pending.student@example.com",
         "password": "SecurePassword123!",
         "role": "student",
-        **VALID_STUDENT_FIELDS,,
+        **VALID_STUDENT_FIELDS,
         "student_id": "STU999",
         "department": "CSE",
         "course": "B.Tech"
