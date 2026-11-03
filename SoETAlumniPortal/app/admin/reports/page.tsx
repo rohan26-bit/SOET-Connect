@@ -72,14 +72,6 @@ export default function AdminReportsPage() {
     loadMetrics();
   }, [loadMetrics]);
 
-  // Safely computed rates for visualizations (guarded against division by zero)
-  const verifiedRate =
-    data && data.totalAlumni > 0
-      ? Math.round((data.verifiedAlumni / data.totalAlumni) * 100)
-      : 0;
-  const pendingRate =
-    data && data.totalAlumni > 0 ? 100 - verifiedRate : 0;
-
   const nonPendingJobs =
     data ? Math.max(0, data.totalJobs - data.pendingJobs) : 0;
   const pendingJobsRate =
@@ -156,22 +148,6 @@ export default function AdminReportsPage() {
             </div>
           </div>
 
-          {/* Verification Skeleton */}
-          <div className="bg-white p-8 rounded-2xl border border-gray-100 shadow-sm">
-            <div className="h-6 w-48 bg-slate-200 rounded animate-pulse mb-2" />
-            <div className="h-4 w-64 bg-slate-100 rounded animate-pulse mb-6" />
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="p-5 bg-slate-50 rounded-xl border border-slate-100 animate-pulse">
-                  <div className="h-3 w-24 bg-slate-200 rounded mb-2" />
-                  <div className="h-7 w-16 bg-slate-200 rounded mb-1" />
-                  <div className="h-3 w-28 bg-slate-100 rounded" />
-                </div>
-              ))}
-            </div>
-            <div className="h-3.5 w-full bg-slate-100 rounded-full animate-pulse" />
-          </div>
-
           {/* Jobs Skeleton */}
           <div className="bg-white p-8 rounded-2xl border border-gray-100 shadow-sm">
             <div className="h-6 w-48 bg-slate-200 rounded animate-pulse mb-2" />
@@ -237,7 +213,7 @@ export default function AdminReportsPage() {
                   </div>
                 </div>
                 <p className="text-xs text-slate-500 mt-3">
-                  Derived total (Verified + Pending)
+                  Active alumni portal accounts
                 </p>
               </div>
 
@@ -317,98 +293,7 @@ export default function AdminReportsPage() {
             </div>
           </div>
 
-          {/* SECTION 3: ALUMNI VERIFICATION */}
-          <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
-              <h2 className="text-xl font-bold text-slate-900">Alumni Verification</h2>
-              <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 self-start sm:self-auto">
-                Real-time Verification Ratio
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mb-6">
-              Verification status breakdown of registered alumni records.
-            </p>
-
-            {/* Metric Summaries */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
-              <div className="p-5 bg-slate-50 rounded-xl border border-slate-100">
-                <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-                  Total Alumni
-                </div>
-                <div className="text-2xl font-black text-slate-900">
-                  {data.totalAlumni}
-                </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  Combined directory & pending
-                </div>
-              </div>
-
-              <div className="p-5 bg-emerald-50/50 rounded-xl border border-emerald-100">
-                <div className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1">
-                  Verified Alumni
-                </div>
-                <div className="text-2xl font-black text-emerald-700">
-                  {data.verifiedAlumni}
-                </div>
-                <div className="text-xs text-emerald-600 mt-1">
-                  {data.totalAlumni > 0 ? `${verifiedRate}% of total alumni` : '0% of total'}
-                </div>
-              </div>
-
-              <div className="p-5 bg-amber-50/50 rounded-xl border border-amber-100">
-                <div className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-1">
-                  Pending Alumni
-                </div>
-                <div className="text-2xl font-black text-amber-700">
-                  {data.pendingAlumni}
-                </div>
-                <div className="text-xs text-amber-600 mt-1">
-                  {data.totalAlumni > 0 ? `${pendingRate}% of total alumni` : '0% of total'}
-                </div>
-              </div>
-            </div>
-
-            {/* Segmented Horizontal Progress Bar */}
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between text-xs font-semibold text-slate-600 gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block shrink-0" />
-                  <span>Verified: {data.verifiedAlumni} ({verifiedRate}%)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block shrink-0" />
-                  <span>Pending: {data.pendingAlumni} ({pendingRate}%)</span>
-                </div>
-              </div>
-
-              <div className="w-full h-3.5 bg-slate-100 rounded-full overflow-hidden flex">
-                {data.totalAlumni === 0 ? (
-                  <div className="w-full h-full bg-slate-200" title="No alumni records" />
-                ) : (
-                  <>
-                    <div
-                      className="h-full bg-emerald-500 transition-all duration-300"
-                      style={{ width: `${verifiedRate}%` }}
-                      title={`Verified: ${data.verifiedAlumni} (${verifiedRate}%)`}
-                    />
-                    <div
-                      className="h-full bg-amber-500 transition-all duration-300"
-                      style={{ width: `${pendingRate}%` }}
-                      title={`Pending: ${data.pendingAlumni} (${pendingRate}%)`}
-                    />
-                  </>
-                )}
-              </div>
-
-              <p className="text-[11px] text-slate-400">
-                {data.totalAlumni === 0
-                  ? 'No alumni records have been registered in the system yet.'
-                  : `Visual ratio computed dynamically from ${data.totalAlumni} real alumni records.`}
-              </p>
-            </div>
-          </div>
-
-          {/* SECTION 4: JOBS & APPLICATIONS */}
+          {/* SECTION 3: JOBS & APPLICATIONS */}
           <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
               <h2 className="text-xl font-bold text-slate-900">Jobs & Applications</h2>
@@ -534,7 +419,7 @@ export default function AdminReportsPage() {
             </div>
           </div>
 
-          {/* SECTION 5: EVENTS */}
+          {/* SECTION 4: EVENTS */}
           <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
               <h2 className="text-xl font-bold text-slate-900">Events</h2>
@@ -642,7 +527,7 @@ export default function AdminReportsPage() {
             </div>
           </div>
 
-          {/* SECTION 6: DATA AVAILABILITY / LIMITATIONS */}
+          {/* SECTION 5: DATA AVAILABILITY / LIMITATIONS */}
           <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200">
             <div className="flex items-start gap-4">
               <div className="w-8 h-8 rounded-xl bg-slate-200 text-slate-600 flex items-center justify-center shrink-0 mt-0.5">
