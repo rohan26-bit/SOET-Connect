@@ -13,7 +13,17 @@ import {
   Image as ImageIcon, MessageSquare, Award
 } from 'lucide-react';
 
-const mainNavItems = [
+type NavItem =
+  | { type?: 'link'; name: string; icon: React.ElementType; href: string }
+  | {
+      type: 'group';
+      id: string;
+      name: string;
+      icon: React.ElementType;
+      children: { name: string; href: string }[];
+    };
+
+const mainNavItems: NavItem[] = [
   { name: 'Dashboard', icon: Home, href: '/student' },
   { name: 'Alumni Directory', icon: Users, href: '/student/alumni' },
   { name: 'Jobs & Internships', icon: Briefcase, href: '/student/jobs' },
@@ -29,7 +39,7 @@ const studentMoreNavItems = [
   { name: 'About SOET', icon: Info, href: '/student/about' },
 ];
 
-const alumniNavItems = [
+const alumniNavItems: NavItem[] = [
   { name: 'Dashboard', icon: Home, href: '/alumni' },
   { name: 'Alumni Directory', icon: Users, href: '/student/alumni' },
   { name: 'Jobs & Internships', icon: Briefcase, href: '/student/jobs' },
@@ -46,9 +56,10 @@ const alumniMoreNavItems = [
   { name: 'About SOET', icon: Info, href: '/student/about' },
 ];
 
-const adminNavItems = [
+const adminNavItems: NavItem[] = [
   { name: 'Dashboard', icon: Home, href: '/admin' },
   {
+    type: 'group',
     id: 'alumni',
     name: 'Alumni',
     icon: Users,
@@ -58,6 +69,7 @@ const adminNavItems = [
     ],
   },
   {
+    type: 'group',
     id: 'students',
     name: 'Students',
     icon: GraduationCap,
@@ -160,7 +172,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <p className="text-xs font-semibold text-[#DDD7D2]/60 mb-4 px-2 tracking-wider uppercase">Main Menu</p>
       <nav className="space-y-1">
         {navItems.map((item) => {
-          if ('children' in item) {
+          if (item.type === 'group') {
             const isExpanded = expandedAdminGroups.includes(item.id);
             const isGroupActive = item.children.some(
               (child) => pathname === child.href || pathname.startsWith(`${child.href}/`)
