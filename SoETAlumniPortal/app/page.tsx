@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
+import HomepageCommunitySections from '@/components/HomepageCommunitySections';
 
 export default function LandingPage() {
   return (
@@ -88,6 +89,9 @@ export default function LandingPage() {
             </div>
           </div>
         </section>
+
+        {/* Public placement bulletin and recent approved gallery photos */}
+        <HomepageCommunitySections />
       </main>
 
       {/* Footer */}
