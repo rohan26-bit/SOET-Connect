@@ -17,6 +17,7 @@ import {
   Code2,
   Globe,
   Mail,
+  Phone,
   X,
 } from 'lucide-react';
 
@@ -270,8 +271,17 @@ export default function AdminVerifyPage() {
                   </h3>
 
                   <div className="flex items-center gap-1.5 text-sm text-slate-500 mt-1">
-                    <Mail className="w-4 h-4" />
+                    <Mail className="w-4 h-4 shrink-0" />
                     {selectedAlumni.email}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 mt-1">
+                    <Phone className="w-3.5 h-3.5 shrink-0" />
+                    <span>{selectedAlumni.phone || 'Phone not provided'}</span>
+                    {selectedAlumni.phone && (
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${selectedAlumni.is_phone_verified ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {selectedAlumni.is_phone_verified ? 'Phone verified' : 'Phone not verified'}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
