@@ -96,3 +96,22 @@ def test_public_placement_feed_only_queries_published_rows(
     assert "photo_consent" not in observed["selected"]
     assert "created_by" not in observed["selected"]
     assert "is_published" not in observed["selected"]
+
+
+def test_published_placement_requires_a_photo(
+    client: TestClient,
+    admin_user: dict,
+):
+    """Even an admin must attach an alumnus photo before publishing a placement story."""
+    response = client.post(
+        "/api/placements",
+        headers=admin_user["headers"],
+        json={
+            "alumni_name": "Test Alumni",
+            "company_name": "Example Technologies",
+            "photo_consent": True,
+            "is_published": True,
+        },
+    )
+    assert response.status_code == 400
+    assert "photo is required" in response.json()["detail"].lower()
