@@ -87,6 +87,8 @@ def create_placement(
     _require_admin(current_user)
     if body.is_published and not body.photo_consent:
         raise HTTPException(status_code=400, detail="Confirm permission to publish the alumnus photo and placement details.")
+    if body.is_published and not body.photo_url:
+        raise HTTPException(status_code=400, detail="A photo is required before publishing a placement celebration.")
 
     now = datetime.now(timezone.utc).isoformat()
     row = body.model_dump()
@@ -120,15 +122,18 @@ def update_placement(
     if "photo_url" in updates:
         updates["photo_url"] = _normalise_photo_url(updates["photo_url"])
 
-    current = supabase.table("placement_celebrations").select("photo_consent,is_published").eq("id", placement_id).limit(1).execute()
+    current = supabase.table("placement_celebrations").select("photo_consent,is_published,photo_url").eq("id", placement_id).limit(1).execute()
     if not current.data:
         raise HTTPException(status_code=404, detail="Placement record not found.")
 
     current_row = current.data[0]
     will_publish = updates.get("is_published", current_row.get("is_published", False))
     will_have_consent = updates.get("photo_consent", current_row.get("photo_consent", False))
+    will_have_photo = updates.get("photo_url", current_row.get("photo_url"))
     if will_publish and not will_have_consent:
         raise HTTPException(status_code=400, detail="Photo consent is required before publishing this placement.")
+    if will_publish and not will_have_photo:
+        raise HTTPException(status_code=400, detail="A photo is required before publishing a placement celebration.")
 
     updates["updated_at"] = datetime.now(timezone.utc).isoformat()
     result = supabase.table("placement_celebrations").update(updates).eq("id", placement_id).execute()
