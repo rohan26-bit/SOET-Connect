@@ -66,6 +66,14 @@ export interface NotificationDeliveryItem {
   created_at: string;
 }
 
+function newestFirst<T extends { created_at?: string | null }>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const aTime = Date.parse(a.created_at || '');
+    const bTime = Date.parse(b.created_at || '');
+    return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+  });
+}
+
 export const notificationService = {
   // ============================================================
   // GET ALL NOTIFICATIONS
@@ -81,7 +89,7 @@ export const notificationService = {
     });
 
     const data = await parseResponse(response);
-    return Array.isArray(data) ? data : [];
+    return Array.isArray(data) ? newestFirst(data) : [];
   },
 
   // ============================================================

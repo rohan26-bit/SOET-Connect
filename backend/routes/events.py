@@ -140,9 +140,10 @@ def load_events(status: str | None = None, created_by: str | None = None) -> lis
             q = q.eq("status", status)
         if created_by:
             q = q.eq("created_by", str(created_by))
-        res = q.order("date", desc=True).execute()
+        res = q.order("created_at", desc=True).order("date", desc=True).execute()
 
         raw_events = res.data or []
+        raw_events.sort(key=lambda event: str(event.get("created_at") or event.get("date") or ""), reverse=True)
         if not raw_events:
             return []
 
@@ -223,9 +224,10 @@ def load_registrations(hydrate_users: bool = True, event_id: str | None = None, 
             q = q.eq("event_id", str(event_id))
         if user_id:
             q = q.eq("user_id", str(user_id))
-        res = q.execute()
+        res = q.order("registered_at", desc=True).execute()
 
         raw_regs = res.data or []
+        raw_regs.sort(key=lambda registration: str(registration.get("registered_at") or registration.get("created_at") or ""), reverse=True)
         if not raw_regs:
             return []
 
@@ -260,6 +262,7 @@ def load_registrations(hydrate_users: bool = True, event_id: str | None = None, 
                     r["email"] = u.get("email", "")
                     r["user_role"] = u.get("role", "")
             regs.append(r)
+        regs.sort(key=lambda registration: str(registration.get("created_at") or registration.get("registered_at") or ""), reverse=True)
         return regs
     except Exception as e:
         print("Error loading registrations from Supabase:", e)
