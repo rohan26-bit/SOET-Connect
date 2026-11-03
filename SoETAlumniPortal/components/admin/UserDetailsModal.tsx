@@ -2,15 +2,11 @@
 
 import React, { useEffect } from 'react';
 import {
-  BadgeCheck,
   BriefcaseBusiness,
-  CalendarDays,
   Code2,
   ExternalLink,
   GraduationCap,
   Mail,
-  MapPin,
-  Phone,
   ShieldCheck,
   UserRound,
   X,
