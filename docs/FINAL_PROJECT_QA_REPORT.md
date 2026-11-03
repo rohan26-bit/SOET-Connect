@@ -106,7 +106,7 @@ All endpoints and client interfaces are gated by strict role validation:
 The Supabase PostgreSQL database structure has been codified across 4 versioned SQL migrations (`supabase/migrations/`):
 
 1. **`001_initial_schema.sql`**: Core relational architecture (`users`, `student_profiles`, `alumni_profiles`, `jobs`, `job_applications`, `events`, `event_registrations`, `conversations`, `messages`, `announcements`, `notifications`, `achievements`).
-2. **`002_bug_reports.sql`**: Bug report submission and tracking table.
+2. **`002_bug_reports.sql`**: Historical schema migration; legacy records are archived and access-locked by migration `006_archive_bug_reports.sql`.
 3. **`003_content_deadlines_and_expiry.sql`**: Application deadlines on jobs and registration deadlines on events.
 4. **`004_gallery_notifications_password_recovery.sql`**: `gallery_photos`, `notification_preferences`, `notification_deliveries`, `password_reset_challenges`, `phone_verification_codes`, and private storage bucket access policies.
 
