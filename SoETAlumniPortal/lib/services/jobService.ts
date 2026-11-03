@@ -76,6 +76,14 @@ function normalizeJob(job: any): JobItem {
   };
 }
 
+function newestFirst<T extends { created_at?: string | null }>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const aTime = Date.parse(a.created_at || '');
+    const bTime = Date.parse(b.created_at || '');
+    return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+  });
+}
+
 export const jobService = {
 
   // ============================================================
@@ -98,7 +106,7 @@ export const jobService = {
       throw new Error(data.detail || 'Failed to load jobs.');
     }
 
-    let result: JobItem[] = (data || []).map(normalizeJob);
+    let result: JobItem[] = newestFirst((data || []).map(normalizeJob));
 
     if (
       filters?.employmentType &&
@@ -157,7 +165,7 @@ export const jobService = {
       );
     }
 
-    return (data || []).map(normalizeJob);
+    return newestFirst((data || []).map(normalizeJob));
   },
 
 
@@ -402,7 +410,7 @@ export const jobService = {
       );
     }
 
-    return (data || []).map(
+    return newestFirst((data || []).map(
       (app: any) => ({
         id: app.id,
         job_id: app.job_id,
@@ -413,7 +421,7 @@ export const jobService = {
         created_at: app.created_at,
         job: app.job,
       })
-    );
+    ));
   },
 
 
@@ -441,7 +449,7 @@ export const jobService = {
       );
     }
 
-    return (data || []).map(
+    return newestFirst((data || []).map(
       (app: any) => ({
         id: app.id,
         job_id: app.job_id,
@@ -454,7 +462,7 @@ export const jobService = {
         student_email: app.student_email,
         department: app.department,
       })
-    );
+    ));
   },
 
 
