@@ -4,9 +4,8 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import { adminService, AdminMetrics } from '@/lib/services/adminService';
-import { 
+import {
   Users, GraduationCap, Briefcase, Calendar,
-  ArrowRight, ShieldCheck, FileCheck
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -23,8 +22,6 @@ export default function AdminDashboard() {
     totalApplications: 0,
     totalRegistrations: 0,
   });
-  const [loading, setLoading] = useState(true);
-
   useEffect(() => {
     let isMounted = true;
     async function loadMetrics() {
@@ -33,8 +30,6 @@ export default function AdminDashboard() {
         if (isMounted) setMetrics(data);
       } catch (err) {
         console.error('Failed to load admin metrics:', err);
-      } finally {
-        if (isMounted) setLoading(false);
       }
     }
     loadMetrics();
@@ -59,7 +54,7 @@ export default function AdminDashboard() {
         <div>
           <h1 className="text-2xl font-black text-[#4A3832] tracking-tight">Admin Console</h1>
           <p className="text-xs text-[#6B6B6B] mt-1">
-            Platform metrics, verification queue, and moderations.
+            A snapshot of platform activity and growth.
           </p>
         </div>
       </div>
@@ -135,117 +130,6 @@ export default function AdminDashboard() {
 
       </div>
 
-      {/* Consolidated Pending Approvals */}
-      {(() => {
-        const pendingApprovalItems = [
-          {
-            title: 'Alumni Verification',
-            description: 'Review newly registered alumni and verify their credentials.',
-            count: metrics.pendingAlumni || 0,
-            href: '/admin/verify',
-            icon: ShieldCheck,
-            iconStyle: 'bg-[#F28C38]/10 text-[#F28C38]',
-          },
-          {
-            title: 'Student Verification',
-            description: 'Review student registration and enrollment requests.',
-            count: pendingStudents,
-            href: '/admin/students',
-            icon: GraduationCap,
-            iconStyle: 'bg-[#4A3832]/10 text-[#4A3832]',
-          },
-          {
-            title: 'Job Approvals',
-            description: 'Review career opportunities submitted by alumni.',
-            count: metrics.pendingJobs || 0,
-            href: '/admin/jobs',
-            icon: FileCheck,
-            iconStyle: 'bg-emerald-50 text-emerald-600',
-          },
-        ];
-        const totalPendingApprovals = pendingApprovalItems.reduce(
-          (total, item) => total + item.count,
-          0
-        );
-
-        return (
-          <section
-            aria-labelledby="pending-approvals-heading"
-            className="bg-white p-6 md:p-7 rounded-3xl border border-[#DDD7D2] shadow-sm"
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-              <div>
-                <h2 id="pending-approvals-heading" className="text-base font-bold text-[#4A3832]">
-                  Pending Approvals
-                </h2>
-                <p className="text-xs text-[#6B6B6B] mt-1">
-                  A single view of requests that need administrator attention.
-                </p>
-              </div>
-              <span
-                className={`inline-flex items-center self-start sm:self-auto rounded-full px-3 py-1.5 text-xs font-bold ${
-                  loading
-                    ? 'bg-gray-100 text-gray-600'
-                    : totalPendingApprovals > 0
-                    ? 'bg-orange-50 text-[#D97706]'
-                    : 'bg-emerald-50 text-emerald-700'
-                }`}
-                aria-live="polite"
-              >
-                {loading
-                  ? 'Checking queues…'
-                  : totalPendingApprovals > 0
-                  ? `${totalPendingApprovals} awaiting review`
-                  : 'All caught up'}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {pendingApprovalItems.map((item) => {
-                const ItemIcon = item.icon;
-
-                return (
-                  <Link
-                    key={item.title}
-                    href={item.href}
-                    className="group rounded-2xl border border-[#EAE5E1] p-4 hover:border-[#F28C38]/50 hover:shadow-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F28C38] focus-visible:ring-offset-2"
-                    aria-label={`${item.title}: ${loading ? 'loading' : `${item.count} pending`}. Open queue`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${item.iconStyle}`}>
-                        <ItemIcon className="w-5 h-5" aria-hidden="true" />
-                      </div>
-                      <span className={`text-2xl font-black tabular-nums ${
-                        loading
-                          ? 'text-gray-300'
-                          : item.count > 0
-                          ? 'text-[#D97706]'
-                          : 'text-[#4A3832]'
-                      }`}>
-                        {loading ? '—' : item.count}
-                      </span>
-                    </div>
-                    <h3 className="text-sm font-bold text-[#4A3832] mt-4">{item.title}</h3>
-                    <p className="text-xs text-[#6B6B6B] leading-relaxed mt-1 min-h-[2.5rem]">
-                      {item.description}
-                    </p>
-                    <div className="mt-4 flex items-center justify-between gap-2 text-xs font-bold">
-                      <span className={item.count > 0 && !loading ? 'text-[#D97706]' : 'text-emerald-700'}>
-                        {loading
-                          ? 'Loading status'
-                          : item.count > 0
-                          ? `${item.count} pending review`
-                          : 'No pending requests'}
-                      </span>
-                      <ArrowRight className="w-4 h-4 text-[#F28C38] group-hover:translate-x-1 transition-transform" aria-hidden="true" />
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          </section>
-        );
-      })()}
     </DashboardLayout>
   );
 }
