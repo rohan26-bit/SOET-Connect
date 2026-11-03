@@ -205,6 +205,8 @@ def get_pending_alumni(
             "email": alumni.get("email"),
             "alumni_id": profile.get("alumni_id"),
             "avatar_url": alumni.get("avatar_url"),
+            "phone": alumni.get("phone") or profile.get("phone"),
+            "is_phone_verified": alumni.get("is_phone_verified", False),
             "department": profile.get("department"),
             "degree": profile.get("degree"),
             "graduation_year": profile.get("graduation_year"),
@@ -222,7 +224,9 @@ def get_pending_alumni(
                 "verification_status",
                 "pending"
             ),
-            "created_at": alumni.get("created_at")
+            "is_active": alumni.get("is_active", True),
+            "created_at": alumni.get("created_at"),
+            "updated_at": alumni.get("updated_at")
         })
 
     return results

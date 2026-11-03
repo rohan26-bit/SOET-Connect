@@ -4,7 +4,8 @@ import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
 import { adminService, UserManagementItem } from '@/lib/services/adminService';
-import { Users, Search, Building, GraduationCap, Download, AlertCircle } from 'lucide-react';
+import { Users, Search, Download, AlertCircle, Eye } from 'lucide-react';
+import UserDetailsModal from '@/components/admin/UserDetailsModal';
 
 export default function AdminAlumniPage() {
   const [alumni, setAlumni] = useState<UserManagementItem[]>([]);
@@ -12,6 +13,7 @@ export default function AdminAlumniPage() {
   const [search, setSearch] = useState('');
   const [exporting, setExporting] = useState<boolean>(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [selectedAlumni, setSelectedAlumni] = useState<UserManagementItem | null>(null);
 
   const loadAlumni = async () => {
     setLoading(true);
@@ -42,7 +44,9 @@ export default function AdminAlumniPage() {
     (a) =>
       a.full_name.toLowerCase().includes(search.toLowerCase()) ||
       a.email.toLowerCase().includes(search.toLowerCase()) ||
+      a.alumni_id?.toLowerCase().includes(search.toLowerCase()) ||
       a.course_or_company?.toLowerCase().includes(search.toLowerCase()) ||
+      a.company?.toLowerCase().includes(search.toLowerCase()) ||
       a.department?.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -158,6 +162,7 @@ export default function AdminAlumniPage() {
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                         a.verification_status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
                         a.verification_status === 'rejected' ? 'bg-red-100 text-red-700' :
+                        a.verification_status === 'suspended' ? 'bg-purple-100 text-purple-700' :
                         'bg-amber-100 text-amber-700'
                       }`}>
                         {a.verification_status || 'Pending'}
@@ -171,16 +176,26 @@ export default function AdminAlumniPage() {
                       </span>
                     </td>
                     <td className="py-4 px-6 text-right">
-                      <button
-                        onClick={() => handleToggleActive(a)}
-                        className={`px-3 py-1.5 rounded-xl font-bold text-xs transition ${
-                          a.is_active
-                            ? 'bg-red-50 text-red-700 hover:bg-red-100'
-                            : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                        }`}
-                      >
-                        {a.is_active ? 'Suspend' : 'Reactivate'}
-                      </button>
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedAlumni(a)}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-[#DDD7D2] bg-white px-3 py-1.5 text-xs font-bold text-[#4A3832] transition hover:bg-[#F7F4EF]"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          View Details
+                        </button>
+                        <button
+                          onClick={() => handleToggleActive(a)}
+                          className={`px-3 py-1.5 rounded-xl font-bold text-xs transition ${
+                            a.is_active
+                              ? 'bg-red-50 text-red-700 hover:bg-red-100'
+                              : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                          }`}
+                        >
+                          {a.is_active ? 'Suspend' : 'Reactivate'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -189,6 +204,11 @@ export default function AdminAlumniPage() {
           </div>
         )}
       </div>
+
+      <UserDetailsModal
+        user={selectedAlumni}
+        onClose={() => setSelectedAlumni(null)}
+      />
     </DashboardLayout>
   );
 }

@@ -4,7 +4,8 @@ import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
 import { adminService, UserManagementItem } from '@/lib/services/adminService';
-import { GraduationCap, Search, Ban, CheckCircle2, UserCheck, Clock, XCircle, AlertCircle, Download } from 'lucide-react';
+import { GraduationCap, Search, Ban, CheckCircle2, UserCheck, Clock, XCircle, AlertCircle, Download, Eye } from 'lucide-react';
+import UserDetailsModal from '@/components/admin/UserDetailsModal';
 
 export default function AdminStudentsPage() {
   const [students, setStudents] = useState<UserManagementItem[]>([]);
@@ -14,6 +15,7 @@ export default function AdminStudentsPage() {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [exporting, setExporting] = useState<boolean>(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<UserManagementItem | null>(null);
 
   const loadStudents = async () => {
     setLoading(true);
@@ -283,25 +285,33 @@ export default function AdminStudentsPage() {
                         </span>
                       </td>
                       <td className="py-4 px-6 text-right">
-                        {isPending ? (
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              disabled={isBusy}
-                              onClick={() => handleVerifyStudent(s, 'approved')}
-                              className="px-3 py-1.5 rounded-xl font-bold text-xs bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition shadow-sm"
-                            >
-                              {isBusy ? 'Saving...' : 'Approve'}
-                            </button>
-                            <button
-                              disabled={isBusy}
-                              onClick={() => handleVerifyStudent(s, 'rejected')}
-                              className="px-3 py-1.5 rounded-xl font-bold text-xs bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 disabled:opacity-50 transition"
-                            >
-                              {isBusy ? 'Saving...' : 'Reject'}
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-end gap-2">
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedStudent(s)}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            View Details
+                          </button>
+                          {isPending ? (
+                            <>
+                              <button
+                                disabled={isBusy}
+                                onClick={() => handleVerifyStudent(s, 'approved')}
+                                className="px-3 py-1.5 rounded-xl font-bold text-xs bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition shadow-sm"
+                              >
+                                {isBusy ? 'Saving...' : 'Approve'}
+                              </button>
+                              <button
+                                disabled={isBusy}
+                                onClick={() => handleVerifyStudent(s, 'rejected')}
+                                className="px-3 py-1.5 rounded-xl font-bold text-xs bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 disabled:opacity-50 transition"
+                              >
+                                {isBusy ? 'Saving...' : 'Reject'}
+                              </button>
+                            </>
+                          ) : (
                             <button
                               disabled={isBusy}
                               onClick={() => handleToggleActive(s)}
@@ -317,8 +327,8 @@ export default function AdminStudentsPage() {
                                 ? 'Suspend Account'
                                 : 'Reactivate'}
                             </button>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -328,6 +338,11 @@ export default function AdminStudentsPage() {
           </div>
         )}
       </div>
+
+      <UserDetailsModal
+        user={selectedStudent}
+        onClose={() => setSelectedStudent(null)}
+      />
     </DashboardLayout>
   );
 }

@@ -5,9 +5,10 @@ import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
 import { adminService, UserManagementItem } from '@/lib/services/adminService';
+import UserDetailsModal from '@/components/admin/UserDetailsModal';
 import { 
   GraduationCap, Search, Ban, CheckCircle2, 
-  Clock, XCircle, AlertCircle, ArrowRight, RefreshCw, Download
+  Clock, XCircle, AlertCircle, ArrowRight, RefreshCw, Download, Eye
 } from 'lucide-react';
 
 export default function AdminStudentManagementPage() {
@@ -19,6 +20,7 @@ export default function AdminStudentManagementPage() {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [exporting, setExporting] = useState<boolean>(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<UserManagementItem | null>(null);
 
   const handleExportStudents = async () => {
     setExporting(true);
@@ -120,7 +122,7 @@ export default function AdminStudentManagementPage() {
 
   const filtered = students.filter((s) => {
     const term = search.toLowerCase().trim();
-    const studentId = ((s as any).student_id || (s as any).prn || s.id || '').toLowerCase();
+    const studentId = (s.student_id || '').toLowerCase();
     const department = (s.department || '').toLowerCase();
     const course = (s.course_or_company || s.degree || '').toLowerCase();
 
@@ -129,6 +131,7 @@ export default function AdminStudentManagementPage() {
       s.full_name.toLowerCase().includes(term) ||
       s.email.toLowerCase().includes(term) ||
       studentId.includes(term) ||
+      (s.academic_year || '').toLowerCase().includes(term) ||
       department.includes(term) ||
       course.includes(term);
 
@@ -305,7 +308,7 @@ export default function AdminStudentManagementPage() {
                   const isPending =
                     (s.verification_status || 'pending').toLowerCase() === 'pending';
                   const isBusy = processingId === s.id;
-                  const studentId = (s as any).student_id || (s as any).prn;
+                  const studentId = s.student_id;
 
                   return (
                     <tr key={s.id} className="hover:bg-[#FBFAF8] transition">
@@ -342,30 +345,40 @@ export default function AdminStudentManagementPage() {
                         </span>
                       </td>
                       <td className="py-4 px-6 text-right">
-                        {isPending ? (
-                          <Link
-                            href="/admin/students"
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-600 text-white transition shadow-sm"
-                          >
-                            Review Verification <ArrowRight className="w-3.5 h-3.5" />
-                          </Link>
-                        ) : (
+                        <div className="flex flex-wrap items-center justify-end gap-2">
                           <button
-                            disabled={isBusy}
-                            onClick={() => handleToggleActive(s)}
-                            className={`px-3 py-1.5 rounded-xl font-bold text-xs transition disabled:opacity-50 cursor-pointer ${
-                              s.is_active
-                                ? 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
-                                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
-                            }`}
+                            type="button"
+                            onClick={() => setSelectedStudent(s)}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-[#DDD7D2] bg-white px-3 py-1.5 text-xs font-bold text-[#4A3832] transition hover:bg-[#F7F4EF]"
                           >
-                            {isBusy
-                              ? 'Updating...'
-                              : s.is_active
-                              ? 'Suspend Account'
-                              : 'Reactivate'}
+                            <Eye className="h-3.5 w-3.5" />
+                            View Details
                           </button>
-                        )}
+                          {isPending ? (
+                            <Link
+                              href="/admin/students"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-600 text-white transition shadow-sm"
+                            >
+                              Review Verification <ArrowRight className="w-3.5 h-3.5" />
+                            </Link>
+                          ) : (
+                            <button
+                              disabled={isBusy}
+                              onClick={() => handleToggleActive(s)}
+                              className={`px-3 py-1.5 rounded-xl font-bold text-xs transition disabled:opacity-50 cursor-pointer ${
+                                s.is_active
+                                  ? 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
+                                  : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                              }`}
+                            >
+                              {isBusy
+                                ? 'Updating...'
+                                : s.is_active
+                                ? 'Suspend Account'
+                                : 'Reactivate'}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -375,6 +388,11 @@ export default function AdminStudentManagementPage() {
           </div>
         )}
       </div>
+
+      <UserDetailsModal
+        user={selectedStudent}
+        onClose={() => setSelectedStudent(null)}
+      />
     </DashboardLayout>
   );
 }

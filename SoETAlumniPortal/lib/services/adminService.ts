@@ -22,6 +22,11 @@ export interface PendingAlumni {
   email: string;
   alumni_id?: string;
   avatar_url?: string;
+  phone?: string;
+  is_phone_verified?: boolean;
+  is_active?: boolean;
+  verification_status?: string;
+  updated_at?: string;
   department?: string;
   degree?: string;
   graduation_year?: string;
@@ -44,8 +49,14 @@ export interface UserManagementItem {
   role: 'student' | 'alumni' | 'admin';
 
   avatar_url?: string;
+  phone?: string;
+  is_phone_verified?: boolean;
+  student_id?: string;
+  alumni_id?: string;
   department?: string;
   degree?: string;
+  course?: string;
+  academic_year?: string;
   graduation_year?: string;
 
   course_or_company?: string;
@@ -64,6 +75,7 @@ export interface UserManagementItem {
   verification_status?: string;
   is_active?: boolean;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface EventParticipationItem {
@@ -263,14 +275,21 @@ export const adminService = {
       email: s.email || '',
       role: s.role || ('student' as const),
       avatar_url: s.avatar_url,
+      phone: s.phone,
+      is_phone_verified: s.is_phone_verified ?? false,
+      student_id: s.student_id,
+      alumni_id: s.alumni_id,
       department: s.department,
       degree: s.degree,
+      course: s.course,
+      academic_year: s.academic_year,
       graduation_year: s.graduation_year,
       course_or_company: s.course_or_company || s.course || s.department || 'B.Tech',
       is_verified: typeof s.is_verified === 'boolean' ? s.is_verified : false,
       verification_status: s.verification_status || 'pending',
       is_active: s.is_active ?? true,
       created_at: s.created_at,
+      updated_at: s.updated_at,
     }));
   },
 
@@ -290,14 +309,20 @@ export const adminService = {
       email: s.email || '',
       role: 'student' as const,
       avatar_url: s.avatar_url,
+      phone: s.phone,
+      is_phone_verified: s.is_phone_verified ?? false,
+      student_id: s.student_id,
       department: s.department,
       degree: s.degree,
+      course: s.course,
+      academic_year: s.academic_year,
       graduation_year: s.graduation_year,
       course_or_company: s.course_or_company || s.course || s.department || 'B.Tech',
       is_verified: typeof s.is_verified === 'boolean' ? s.is_verified : false,
       verification_status: s.verification_status || 'pending',
       is_active: s.is_active ?? true,
       created_at: s.created_at,
+      updated_at: s.updated_at,
     }));
   },
 
@@ -320,85 +345,43 @@ export const adminService = {
   },
 
   async getAllAlumni(): Promise<UserManagementItem[]> {
-    const [directoryRes, pendingRes] = await Promise.all([
-      fetch(`${API_URL}/alumni/directory`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
-          'Content-Type': 'application/json',
-        },
-      }),
-      fetch(`${API_URL}/alumni/pending`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
-          'Content-Type': 'application/json',
-        },
-      }),
-    ]);
-
-    const directoryData = await parseResponse(directoryRes);
-    const pendingData = await parseResponse(pendingRes).catch(() => []);
-
-    const alumniMap = new Map<string, UserManagementItem>();
-
-    (directoryData || []).forEach((a: any) => {
-      alumniMap.set(a.id, {
-        id: a.id,
-        full_name: a.full_name || a.name || '',
-        email: a.email || '',
-        role: 'alumni' as const,
-        avatar_url: a.avatar_url,
-        department: a.department,
-        degree: a.degree,
-        graduation_year: a.graduation_year,
-        course_or_company: a.company || a.course_or_company || '—',
-        company: a.company,
-        designation: a.designation,
-        industry: a.industry,
-        location: a.location,
-        skills: a.skills || [],
-        linkedin: a.linkedin,
-        github: a.github,
-        website: a.website,
-        bio: a.bio,
-        is_verified: a.is_verified ?? true,
-        verification_status: a.verification_status || 'approved',
-        is_active: a.is_active ?? true,
-        created_at: a.created_at,
-      });
+    const response = await fetch(`${API_URL}/admin/alumni`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+        'Content-Type': 'application/json',
+      },
     });
 
-    (pendingData || []).forEach((a: any) => {
-      if (!alumniMap.has(a.id)) {
-        alumniMap.set(a.id, {
-          id: a.id,
-          full_name: a.full_name || a.name || '',
-          email: a.email || '',
-          role: 'alumni' as const,
-          avatar_url: a.avatar_url,
-          department: a.department,
-          degree: a.degree,
-          graduation_year: a.graduation_year,
-          course_or_company: a.company || a.course_or_company || '—',
-          company: a.company,
-          designation: a.designation,
-          industry: a.industry,
-          location: a.location,
-          skills: a.skills || [],
-          linkedin: a.linkedin,
-          github: a.github,
-          website: a.website,
-          bio: a.bio,
-          is_verified: false,
-          verification_status: a.verification_status || 'pending',
-          is_active: a.is_active ?? true,
-          created_at: a.created_at,
-        });
-      }
-    });
-
-    return Array.from(alumniMap.values());
+    const data = await parseResponse(response);
+    return (data || []).map((a: any) => ({
+      id: a.id,
+      full_name: a.full_name || a.name || '',
+      email: a.email || '',
+      role: 'alumni' as const,
+      avatar_url: a.avatar_url,
+      phone: a.phone,
+      is_phone_verified: a.is_phone_verified ?? false,
+      alumni_id: a.alumni_id,
+      department: a.department,
+      degree: a.degree,
+      graduation_year: a.graduation_year,
+      course_or_company: a.company || a.course_or_company || '—',
+      company: a.company,
+      designation: a.designation,
+      industry: a.industry,
+      location: a.location,
+      skills: a.skills || [],
+      linkedin: a.linkedin,
+      github: a.github,
+      website: a.website,
+      bio: a.bio,
+      is_verified: a.is_verified ?? false,
+      verification_status: a.verification_status || 'pending',
+      is_active: a.is_active ?? true,
+      created_at: a.created_at,
+      updated_at: a.updated_at,
+    }));
   },
 
   async toggleUserActive(
