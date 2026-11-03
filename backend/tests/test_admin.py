@@ -385,6 +385,99 @@ def test_students_response_has_expected_fields():
     assert "is_verified" in student
 
 
+def test_admin_alumni_endpoint_returns_complete_profiles_and_all_statuses(
+    client, admin_user, verified_alumni_user, unverified_alumni_user
+):
+    """Admin receives full profile fields for approved, pending, rejected and inactive alumni."""
+    users_collection.insert_one({
+        "_id": "rejected-inactive-alumni",
+        "name": "Rejected Alumni",
+        "email": "rejected.alumni@example.com",
+        "password_hash": "must-not-be-returned",
+        "role": "alumni",
+        "is_active": False,
+        "is_verified": False,
+        "verification_status": "rejected",
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "updated_at": "2026-01-02T00:00:00+00:00",
+        "phone": "9000000000",
+        "is_phone_verified": True,
+        "alumni_profile": {
+            "alumni_id": "ALU-REJECTED",
+            "department": "Computer Science",
+            "degree": "B.Tech",
+            "graduation_year": "2021",
+            "company": "Example Corp",
+            "designation": "Engineer",
+            "industry": "Technology",
+            "location": "Pune",
+            "skills": ["Python", "SQL"],
+            "linkedin": "https://linkedin.com/in/example",
+            "github": "https://github.com/example",
+            "website": "https://example.com",
+            "bio": "Example alumni profile",
+        },
+    })
+
+    response = client.get("/admin/alumni", headers=admin_user["headers"])
+    assert response.status_code == 200
+    records = response.json()
+
+    assert {row["id"] for row in records} >= {
+        verified_alumni_user["id"],
+        unverified_alumni_user["id"],
+        "rejected-inactive-alumni",
+    }
+
+    rejected = next(row for row in records if row["id"] == "rejected-inactive-alumni")
+    assert rejected["verification_status"] == "rejected"
+    assert rejected["is_active"] is False
+    assert rejected["alumni_id"] == "ALU-REJECTED"
+    assert rejected["company"] == "Example Corp"
+    assert rejected["skills"] == ["Python", "SQL"]
+    assert rejected["phone"] == "9000000000"
+    assert rejected["is_phone_verified"] is True
+
+    verified = next(row for row in records if row["id"] == verified_alumni_user["id"])
+    assert verified["alumni_id"] == "ALU001"
+    assert verified["degree"] == "B.Tech"
+    assert verified["graduation_year"] == "2022"
+    assert verified["skills"] == ["Python", "FastAPI"]
+
+    assert all(row["role"] == "alumni" for row in records)
+    assert all("password_hash" not in row and "password" not in row for row in records)
+
+
+def test_non_admin_cannot_retrieve_admin_alumni_profiles(
+    client, student_user, verified_alumni_user
+):
+    """Student and alumni accounts cannot access the complete admin alumni list."""
+    student_response = client.get("/admin/alumni", headers=student_user["headers"])
+    alumni_response = client.get("/admin/alumni", headers=verified_alumni_user["headers"])
+
+    assert student_response.status_code == 403
+    assert alumni_response.status_code == 403
+
+
+def test_admin_student_records_include_all_registration_profile_fields(
+    client, admin_user, student_user
+):
+    """Admin student records expose registration details but never password data."""
+    response = client.get("/admin/students", headers=admin_user["headers"])
+    assert response.status_code == 200
+
+    student = next(row for row in response.json() if row["id"] == student_user["id"])
+    assert student["student_id"] == "STU001"
+    assert student["department"] == "Computer Science"
+    assert student["course"] == "B.Tech"
+    assert student["academic_year"] == "3rd"
+    assert student["graduation_year"] == "2026"
+    assert student["phone"] == "9876543210"
+    assert student["is_phone_verified"] is False
+    assert "password_hash" not in student
+    assert "password" not in student
+
+
 # ============================================================
 # 7-8. RBAC — STUDENTS (origin/main)
 # ============================================================
