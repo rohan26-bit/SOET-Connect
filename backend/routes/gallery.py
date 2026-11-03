@@ -205,8 +205,10 @@ def get_approved_gallery_photos(
     category: Optional[str] = None,
     batch_year: Optional[str] = None,
     search: Optional[str] = None,
+    limit: int = Query(default=24, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
 ):
-    """List all approved gallery photos for portal users."""
+    """List approved gallery photos with pagination for public pages."""
     try:
         query = supabase.table("gallery_photos").select("*").eq("status", "approved").order("created_at", desc=True)
         if category and category != "all":
@@ -221,10 +223,14 @@ def get_approved_gallery_photos(
                 p for p in photos
                 if s in (p.get("title") or "").lower() or s in (p.get("event_name") or "").lower() or s in (p.get("caption") or "").lower()
             ]
-        formatted = [_format_photo_doc(p) for p in photos]
+        total = len(photos)
+        page = photos[offset:offset + limit]
+        formatted = [_format_photo_doc(p) for p in page]
         return {
             "photos": formatted,
-            "total": len(formatted),
+            "total": total,
+            "limit": limit,
+            "offset": offset,
         }
     except Exception as e:
         print("Error fetching approved gallery photos:", e)
