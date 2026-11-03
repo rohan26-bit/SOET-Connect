@@ -369,7 +369,7 @@ export default function JobsPage() {
                 <div key={app.id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <h3 className="text-sm font-bold text-slate-900">{app.job?.title || 'Job Position'}</h3>
-                    <p className="text-xs text-slate-500">{app.job?.company} • Applied on {new Date(app.created_at).toLocaleDateString()}</p>
+                    <p className="text-xs text-slate-500">{app.job?.company} • <PostedAt date={app.created_at} prefix="Applied" className="text-xs text-slate-500" /></p>
                   </div>
                   <div>
                     <span className={`px-3 py-1 text-xs font-bold rounded-full uppercase tracking-wider ${
