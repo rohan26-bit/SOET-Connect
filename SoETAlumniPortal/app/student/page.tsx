@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
+import PostedAt from '@/components/PostedAt';
 import { useAuth } from '@/components/AuthProvider';
 import { jobService, JobItem } from '@/lib/services/jobService';
 import { eventService, EventItem } from '@/lib/services/eventService';
@@ -145,6 +146,7 @@ export default function StudentDashboard() {
                   <div key={job.id} className="p-4 rounded-2xl border border-[#DDD7D2]/80 hover:border-[#F28C38]/40 hover:shadow-sm transition bg-[#FBFAF8] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <h3 className="font-bold text-[#4A3832] text-sm">{job.title}</h3>
+                      <PostedAt date={job.created_at} className="text-[10px] text-[#888888] block mt-1" />
                       <div className="flex flex-wrap items-center gap-3 text-xs text-[#6B6B6B] mt-1">
                         <span className="flex items-center gap-1"><Building className="w-3.5 h-3.5" /> {job.company}</span>
                         <span>•</span>
@@ -181,9 +183,9 @@ export default function StudentDashboard() {
                   <div key={a.id} className="p-4 bg-[#FBFAF8] rounded-2xl border border-[#DDD7D2]/80">
                     <h3 className="font-bold text-[#4A3832] text-sm">{a.title}</h3>
                     <p className="text-xs text-[#6B6B6B] mt-1 leading-relaxed">{a.content}</p>
-                    <span className="text-[10px] text-[#888888] mt-2 block font-medium">
-                      Posted by {a.creator_name || 'Admin'} • {new Date(a.created_at).toLocaleDateString()}
-                    </span>
+                    <div className="text-[10px] text-[#888888] mt-2 block font-medium">
+                      By {a.creator_name || 'Admin'} • <PostedAt date={a.created_at} className="text-[10px] text-[#888888]" />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -218,6 +220,7 @@ export default function StudentDashboard() {
                       <MapPin className="w-3.5 h-3.5 text-[#888888]" />
                       <span className="truncate">{event.location}</span>
                     </div>
+                    <PostedAt date={event.created_at} className="text-[10px] text-[#888888] block mt-1" />
                     <div className="mt-3 flex justify-between items-center">
                       <span className="text-[11px] text-[#888888] font-semibold">{event.registration_count} registered</span>
                       <Link href="/student/events" className="text-xs font-bold text-[#F28C38] hover:underline">
