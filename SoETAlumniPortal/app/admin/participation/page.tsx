@@ -25,6 +25,7 @@ import {
   AlertCircle,
   ArrowLeft,
   ChevronRight,
+  ChevronLeft,
   ExternalLink,
   MapPin,
   Clock,
@@ -78,6 +79,8 @@ export default function AdminParticipationPage() {
   const [applicantsList, setApplicantsList] = useState<JobApplicantDetail[]>([]);
   const [applicantSearch, setApplicantSearch] = useState<string>('');
   const [applicantStatusFilter, setApplicantStatusFilter] = useState<string>('all');
+  const [applicantPage, setApplicantPage] = useState<number>(1);
+  const APPLICANTS_PER_PAGE = 15;
 
   // Cover letter modal
   const [modalCoverLetter, setModalCoverLetter] = useState<{ name: string; text: string } | null>(null);
@@ -119,6 +122,16 @@ export default function AdminParticipationPage() {
       setRefreshing(false);
     }
   }, [fetchEventParticipation, fetchJobParticipation]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam === 'jobs') {
+        setActiveTab('jobs');
+      }
+    }
+  }, []);
 
   useEffect(() => {
     loadAllData();
@@ -165,6 +178,7 @@ export default function AdminParticipationPage() {
     setSelectedJob(job);
     setApplicantSearch('');
     setApplicantStatusFilter('all');
+    setApplicantPage(1);
     loadJobApplicants(job.id);
   };
 
@@ -223,13 +237,22 @@ export default function AdminParticipationPage() {
         a.name.toLowerCase().includes(q) ||
         a.email.toLowerCase().includes(q) ||
         a.identifier.toLowerCase().includes(q) ||
-        a.department.toLowerCase().includes(q);
+        (a.prn && a.prn.toLowerCase().includes(q)) ||
+        a.department.toLowerCase().includes(q) ||
+        (a.course && a.course.toLowerCase().includes(q)) ||
+        (a.degree && a.degree.toLowerCase().includes(q));
       const matchesStatus =
         applicantStatusFilter === 'all' ||
         a.status.toLowerCase() === applicantStatusFilter.toLowerCase();
       return matchesSearch && matchesStatus;
     });
   }, [applicantsList, applicantSearch, applicantStatusFilter]);
+
+  const totalApplicantPages = Math.max(1, Math.ceil(filteredApplicants.length / APPLICANTS_PER_PAGE));
+  const paginatedApplicants = useMemo(() => {
+    const start = (applicantPage - 1) * APPLICANTS_PER_PAGE;
+    return filteredApplicants.slice(start, start + APPLICANTS_PER_PAGE);
+  }, [filteredApplicants, applicantPage, APPLICANTS_PER_PAGE]);
 
   // Active filter detection flags
   const isParticipantFiltered = Boolean(participantSearch.trim()) || participantRoleFilter !== 'all';
@@ -1059,14 +1082,14 @@ export default function AdminParticipationPage() {
                           <tr>
                             <th className="py-3 px-4">Applicant</th>
                             <th className="py-3 px-4">Role & ID</th>
-                            <th className="py-3 px-4">Department</th>
+                            <th className="py-3 px-4">Department & Course</th>
                             <th className="py-3 px-4">Applied Date</th>
                             <th className="py-3 px-4">Status</th>
                             <th className="py-3 px-4 text-right">Materials</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#F0EDE8]">
-                          {filteredApplicants.map((a) => (
+                          {paginatedApplicants.map((a) => (
                             <tr key={a.application_id} className="hover:bg-[#FBFAF8] transition">
                               <td className="py-3.5 px-4">
                                 <div className="flex items-center gap-3">
@@ -1091,9 +1114,20 @@ export default function AdminParticipationPage() {
                                     {a.identifier}
                                   </div>
                                 )}
+                                {a.prn && a.prn !== a.identifier && (
+                                  <div className="font-mono text-[10px] text-[#888888]">
+                                    PRN: {a.prn}
+                                  </div>
+                                )}
                               </td>
                               <td className="py-3.5 px-4 text-[#4A3832]">
-                                {a.department || '—'}
+                                <div className="font-medium">{a.department || '—'}</div>
+                                {(a.course || a.degree) && (
+                                  <div className="text-[11px] text-[#888888] flex items-center gap-1 mt-0.5">
+                                    <GraduationCap className="w-3 h-3 text-[#888888]" />
+                                    {a.course || a.degree}
+                                  </div>
+                                )}
                               </td>
                               <td className="py-3.5 px-4 text-[#6B6B6B]">
                                 {formatDate(a.applied_at)}
@@ -1134,6 +1168,38 @@ export default function AdminParticipationPage() {
                           ))}
                         </tbody>
                       </table>
+                    </div>
+                  )}
+
+                  {/* Pagination Controls */}
+                  {filteredApplicants.length > APPLICANTS_PER_PAGE && (
+                    <div className="p-3 bg-[#FBFAF8] border-t border-[#DDD7D2] flex items-center justify-between text-xs text-[#6B6B6B]">
+                      <div>
+                        Showing {(applicantPage - 1) * APPLICANTS_PER_PAGE + 1} to{' '}
+                        {Math.min(applicantPage * APPLICANTS_PER_PAGE, filteredApplicants.length)} of{' '}
+                        {filteredApplicants.length} applicants
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setApplicantPage((p) => Math.max(1, p - 1))}
+                          disabled={applicantPage <= 1}
+                          className="px-2.5 py-1 rounded-lg border border-[#DDD7D2] bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 font-semibold"
+                        >
+                          <ChevronLeft className="w-3 h-3" /> Previous
+                        </button>
+                        <span className="font-semibold text-[#222222]">
+                          Page {applicantPage} of {totalApplicantPages}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setApplicantPage((p) => Math.min(totalApplicantPages, p + 1))}
+                          disabled={applicantPage >= totalApplicantPages}
+                          className="px-2.5 py-1 rounded-lg border border-[#DDD7D2] bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 font-semibold"
+                        >
+                          Next <ChevronRight className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

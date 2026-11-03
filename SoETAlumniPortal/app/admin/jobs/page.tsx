@@ -4,8 +4,27 @@ import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
 import { useAuth } from '@/components/AuthProvider';
+import Link from 'next/link';
 import { jobService, JobItem } from '@/lib/services/jobService';
-import { Briefcase, CheckCircle2, XCircle, Trash2, Building, MapPin, Plus, AlertCircle, X } from 'lucide-react';
+import { adminService, JobApplicantDetail } from '@/lib/services/adminService';
+import {
+  Briefcase,
+  CheckCircle2,
+  XCircle,
+  Trash2,
+  Building,
+  MapPin,
+  Plus,
+  AlertCircle,
+  X,
+  Users,
+  Eye,
+  FileText,
+  GraduationCap,
+  Mail,
+  ExternalLink,
+  RefreshCw,
+} from 'lucide-react';
 import DocumentAttachment, { DocumentAttachmentData, DocumentAttachmentView } from '@/components/DocumentAttachment';
 
 export default function AdminJobsPage() {
@@ -25,6 +44,14 @@ export default function AdminJobsPage() {
   const [newDeadlineToSet, setNewDeadlineToSet] = useState('');
   const [updatingDeadline, setUpdatingDeadline] = useState(false);
 
+  // Applicant counts & details modal state
+  const [applicantCounts, setApplicantCounts] = useState<Record<string, number>>({});
+  const [selectedJobForApplicants, setSelectedJobForApplicants] = useState<JobItem | null>(null);
+  const [modalApplicants, setModalApplicants] = useState<JobApplicantDetail[]>([]);
+  const [modalApplicantsLoading, setModalApplicantsLoading] = useState<boolean>(false);
+  const [modalApplicantsError, setModalApplicantsError] = useState<string | null>(null);
+  const [modalCoverLetter, setModalCoverLetter] = useState<{ name: string; text: string } | null>(null);
+
   const initialJobState = {
     title: '',
     company: '',
@@ -42,12 +69,38 @@ export default function AdminJobsPage() {
   const loadJobs = async () => {
     setLoading(true);
     try {
-      const data = await jobService.getAllJobsForAdmin();
-      setJobs(data);
+      const [jobsData, partData] = await Promise.all([
+        jobService.getAllJobsForAdmin(),
+        adminService.getJobParticipation().catch(() => null),
+      ]);
+      setJobs(jobsData);
+      if (partData && partData.jobs) {
+        const counts: Record<string, number> = {};
+        partData.jobs.forEach((pj) => {
+          counts[pj.id] = pj.application_count;
+        });
+        setApplicantCounts(counts);
+      }
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOpenApplicantsModal = async (job: JobItem) => {
+    setSelectedJobForApplicants(job);
+    setModalApplicantsLoading(true);
+    setModalApplicantsError(null);
+    try {
+      const res = await adminService.getJobApplicantsDetailed(job.id, { limit: 100 });
+      setModalApplicants(res.applicants || []);
+    } catch (err: any) {
+      console.error('Failed to load job applicants:', err);
+      setModalApplicantsError(err?.message || 'Failed to load applicants.');
+      setModalApplicants([]);
+    } finally {
+      setModalApplicantsLoading(false);
     }
   };
 
@@ -282,9 +335,24 @@ export default function AdminJobsPage() {
                     <DocumentAttachmentView attachment={job.attachment} label="Job Details" />
                   </div>
                 )}
+
+                {/* Applicant Count Banner */}
+                <div className="mt-3 flex items-center justify-between text-xs bg-blue-50/70 border border-blue-100 px-3.5 py-2.5 rounded-xl">
+                  <div className="flex items-center gap-2 font-bold text-blue-900">
+                    <Users className="w-4 h-4 text-blue-600" />
+                    <span>{applicantCounts[job.id] ?? 0} Total Applicants</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenApplicantsModal(job)}
+                    className="text-xs font-bold text-blue-700 hover:text-blue-900 underline flex items-center gap-1"
+                  >
+                    <span>View List</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+              <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
                 <button
                   onClick={() => handleDelete(job.id)}
                   className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 font-bold"
@@ -292,7 +360,16 @@ export default function AdminJobsPage() {
                   <Trash2 className="w-3.5 h-3.5" /> Remove
                 </button>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenApplicantsModal(job)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F28C38] hover:bg-[#E07D2E] text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>View Applicants</span>
+                  </button>
+
                   {job.status !== 'approved' && (
                     <button
                       onClick={() => handleStatusChange(job.id, 'approved')}
@@ -531,6 +608,235 @@ export default function AdminJobsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* APPLICANT DETAILS MODAL */}
+      {selectedJobForApplicants && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl relative border border-slate-200">
+            <button
+              onClick={() => {
+                setSelectedJobForApplicants(null);
+                setModalApplicants([]);
+                setModalApplicantsError(null);
+              }}
+              className="absolute top-6 right-6 p-2 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition"
+              title="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Modal Header */}
+            <div className="mb-6 pr-8">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <span className="px-2.5 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-bold rounded-lg uppercase">
+                  {selectedJobForApplicants.employment_type || 'Job'}
+                </span>
+                <span className="px-3 py-0.5 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-full border border-emerald-200">
+                  {modalApplicants.length} Total Applicant{modalApplicants.length === 1 ? '' : 's'}
+                </span>
+              </div>
+              <h3 className="text-xl font-bold text-slate-900">
+                {selectedJobForApplicants.title}
+              </h3>
+              <p className="text-xs text-slate-500 flex items-center gap-2 mt-1">
+                <span className="flex items-center gap-1 font-medium text-slate-700">
+                  <Building className="w-3.5 h-3.5 text-slate-400" />
+                  {selectedJobForApplicants.company}
+                </span>
+                <span>•</span>
+                <span>{selectedJobForApplicants.location || 'Location Not Specified'}</span>
+              </p>
+            </div>
+
+            {/* Modal Body */}
+            {modalApplicantsLoading ? (
+              <div className="py-16 text-center text-xs text-slate-500">
+                <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3 text-[#F28C38]" />
+                Loading applicant records from Supabase...
+              </div>
+            ) : modalApplicantsError ? (
+              <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-2xl text-xs flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2 font-medium">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{modalApplicantsError}</span>
+                </div>
+                <button
+                  onClick={() => handleOpenApplicantsModal(selectedJobForApplicants)}
+                  className="px-3 py-1 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 text-[11px]"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : modalApplicants.length === 0 ? (
+              <div className="p-12 text-center bg-slate-50 rounded-2xl border border-slate-200">
+                <Users className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                <h4 className="text-sm font-bold text-slate-800">No Applications Yet</h4>
+                <p className="text-xs text-slate-500 mt-1">
+                  No students or alumni have applied to this job posting.
+                </p>
+              </div>
+            ) : (
+              <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-slate-800">
+                    <thead className="bg-slate-50 text-slate-600 font-semibold text-[11px] uppercase tracking-wider border-b border-slate-200">
+                      <tr>
+                        <th className="py-3 px-4">Applicant</th>
+                        <th className="py-3 px-4">Role & ID</th>
+                        <th className="py-3 px-4">Department & Course</th>
+                        <th className="py-3 px-4">Applied Date</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4 text-right">Materials</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {modalApplicants.map((a) => (
+                        <tr key={a.application_id} className="hover:bg-slate-50/70 transition">
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs uppercase shrink-0">
+                                {a.name.charAt(0) || 'A'}
+                              </div>
+                              <div>
+                                <div className="font-bold text-slate-900">{a.name}</div>
+                                <div className="text-[11px] text-slate-500 flex items-center gap-1">
+                                  <Mail className="w-3 h-3 text-slate-400" />
+                                  {a.email || 'No email registered'}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 mb-0.5">
+                              {a.role}
+                            </span>
+                            {a.identifier && (
+                              <div className="font-mono text-[11px] text-slate-500">
+                                {a.identifier}
+                              </div>
+                            )}
+                            {a.prn && a.prn !== a.identifier && (
+                              <div className="font-mono text-[10px] text-slate-400">
+                                PRN: {a.prn}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-700">
+                            <div className="font-medium">{a.department || '—'}</div>
+                            {(a.course || a.degree) && (
+                              <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                                <GraduationCap className="w-3 h-3 text-slate-400" />
+                                {a.course || a.degree}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-500">
+                            {a.applied_at ? new Date(a.applied_at).toLocaleDateString() : '—'}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                              a.status === 'selected' ? 'bg-emerald-100 text-emerald-800' :
+                              a.status === 'shortlisted' ? 'bg-purple-100 text-purple-800' :
+                              a.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                              'bg-blue-100 text-blue-800'
+                            }`}>
+                              {a.status}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {a.cover_letter && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setModalCoverLetter({
+                                      name: a.name,
+                                      text: a.cover_letter,
+                                    })
+                                  }
+                                  className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
+                                  title="View cover letter"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              {a.resume_url ? (
+                                <a
+                                  href={a.resume_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-[#F28C38] hover:text-[#E07D2E] bg-[#F28C38]/10 hover:bg-[#F28C38]/20 rounded-lg transition"
+                                >
+                                  <FileText className="w-3 h-3" />
+                                  Resume
+                                </a>
+                              ) : (
+                                <span className="text-[11px] text-slate-300">No resume</span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Modal Footer */}
+            <div className="mt-6 flex items-center justify-between pt-4 border-t border-slate-100">
+              <Link
+                href="/admin/participation?tab=jobs"
+                className="text-xs font-bold text-[#F28C38] hover:underline flex items-center gap-1"
+              >
+                <span>Open in Participation Console</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedJobForApplicants(null);
+                  setModalApplicants([]);
+                  setModalApplicantsError(null);
+                }}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* COVER LETTER PREVIEW MODAL */}
+      {modalCoverLetter && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-[#DDD7D2] relative">
+            <button
+              onClick={() => setModalCoverLetter(null)}
+              className="absolute right-4 top-4 text-[#888888] hover:text-[#222222] p-1 rounded-lg"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <h3 className="text-base font-bold text-[#222222] mb-1">
+              Cover Letter — {modalCoverLetter.name}
+            </h3>
+            <p className="text-xs text-[#888888] mb-4">
+              Submitted application statement from candidate
+            </p>
+            <div className="max-h-80 overflow-y-auto p-4 bg-[#FBFAF8] rounded-xl border border-[#DDD7D2] text-xs text-[#4A3832] whitespace-pre-wrap leading-relaxed">
+              {modalCoverLetter.text}
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setModalCoverLetter(null)}
+                className="px-4 py-2 bg-[#F28C38] text-white text-xs font-bold rounded-xl hover:bg-[#E07D2E] transition"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

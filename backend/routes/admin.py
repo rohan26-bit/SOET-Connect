@@ -1345,8 +1345,29 @@ def get_admin_job_applicants(
     search_lower = search.strip().lower() if search else None
     status_filter = status.strip().lower() if status and status.lower() != "all" else None
 
-    for a in job_apps:
+    # Sort applications by applied_at desc and deduplicate to avoid duplicate application records
+    seen_applicant_ids: set[str] = set()
+    seen_app_ids: set[str] = set()
+    sorted_job_apps = sorted(
+        job_apps,
+        key=lambda x: str(x.get("applied_at") or x.get("created_at") or ""),
+        reverse=True,
+    )
+
+    for a in sorted_job_apps:
+        app_id = str(a.get("id") or "")
         uid = str(a.get("applicant_id") or a.get("student_id") or "")
+
+        # Deduplicate duplicate application rows
+        if app_id and app_id in seen_app_ids:
+            continue
+        if uid and uid in seen_applicant_ids:
+            continue
+        if app_id:
+            seen_app_ids.add(app_id)
+        if uid:
+            seen_applicant_ids.add(uid)
+
         u = user_map.get(uid, {})
 
         u_name = u.get("name") or a.get("student_name") or a.get("applicant_name") or "Applicant"
@@ -1357,7 +1378,10 @@ def get_admin_job_applicants(
         alumni_prof = u.get("alumni_profile") if isinstance(u.get("alumni_profile"), dict) else {}
 
         identifier = student_prof.get("student_id") or alumni_prof.get("alumni_id") or ""
+        prn = alumni_prof.get("prn") or student_prof.get("prn") or identifier
         department = student_prof.get("department") or alumni_prof.get("department") or a.get("department") or ""
+        course = student_prof.get("course") or alumni_prof.get("degree") or alumni_prof.get("course") or ""
+        degree = alumni_prof.get("degree") or student_prof.get("degree") or course
 
         app_status = (a.get("status") or "applied").lower()
         if app_status == "submitted":
@@ -1369,22 +1393,26 @@ def get_admin_job_applicants(
             continue
 
         if search_lower:
-            haystack = f"{u_name} {u_email} {identifier} {department}".lower()
+            haystack = f"{u_name} {u_email} {identifier} {prn} {department} {course} {degree}".lower()
             if search_lower not in haystack:
                 continue
 
         app_date = a.get("applied_at") or a.get("created_at") or ""
 
         applicants.append({
-            "application_id": str(a.get("id") or ""),
+            "application_id": app_id,
             "applicant_id": uid,
             "name": u_name,
             "email": u_email,
             "role": u_role,
             "identifier": identifier,
+            "prn": prn,
             "department": department,
+            "course": course,
+            "degree": degree,
             "status": app_status,
             "resume_url": a.get("resume_url") or "",
+            "has_resume": bool(a.get("resume_url")),
             "cover_letter": a.get("cover_letter") or "",
             "applied_at": app_date,
         })
