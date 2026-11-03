@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import PostedAt from '@/components/PostedAt';
 import { useAuth } from '@/components/AuthProvider';
 import { notificationService, NotificationItem } from '@/lib/services/notificationService';
 import { Bell, CheckCircle2, Briefcase, Calendar, Info, CheckCheck } from 'lucide-react';
@@ -104,9 +105,7 @@ export default function NotificationsPage() {
                   <div className="flex-1 min-w-0">
                     <h4 className="text-xs font-bold text-slate-900">{n.title}</h4>
                     <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">{n.message}</p>
-                    <span className="text-[10px] text-slate-400 mt-1.5 block">
-                      {new Date(n.created_at).toLocaleString()}
-                    </span>
+                    <PostedAt date={n.created_at} className="text-[10px] text-slate-400 mt-1.5 block" />
                   </div>
                   {!n.is_read && (
                     <span className="w-2 h-2 bg-blue-600 rounded-full shrink-0 mt-1.5" />
