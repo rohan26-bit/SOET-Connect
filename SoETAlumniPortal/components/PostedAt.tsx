@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 interface PostedAtProps {
   date?: string | null;
   className?: string;
+  prefix?: string;
 }
 
 /**
@@ -56,6 +57,7 @@ function formatRelativeDate(value: string): string {
 export default function PostedAt({
   date,
   className = 'text-[11px] text-slate-400',
+  prefix = 'Posted',
 }: PostedAtProps) {
   const [label, setLabel] = useState(() => (date ? formatAbsoluteDate(date) : ''));
 
@@ -89,7 +91,7 @@ export default function PostedAt({
       title={`Posted on ${fullDate} (IST)`}
       className={className}
     >
-      Posted {label}
+      {prefix} {label}
     </time>
   );
 }
