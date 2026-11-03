@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import PostedAt from '@/components/PostedAt';
 import LoadingState from '@/components/LoadingState';
 import { useAuth } from '@/components/AuthProvider';
 import {
@@ -761,7 +762,8 @@ export default function AdminParticipationPage() {
                                 </div>
                               </td>
                               <td className="py-3.5 px-4 text-[#6B6B6B]">
-                                {formatDate(p.registration_date)}
+                                <div>{formatDate(p.registration_date)}</div>
+                                <PostedAt date={p.registration_date} prefix="Registered" className="text-[10px] text-[#888888] block mt-1" />
                               </td>
                               <td className="py-3.5 px-4 text-right">
                                 {getStatusBadge(p.status)}
@@ -1132,7 +1134,8 @@ export default function AdminParticipationPage() {
                                 )}
                               </td>
                               <td className="py-3.5 px-4 text-[#6B6B6B]">
-                                {formatDate(a.applied_at)}
+                                <div>{formatDate(a.applied_at)}</div>
+                                <PostedAt date={a.applied_at} prefix="Applied" className="text-[10px] text-[#888888] block mt-1" />
                               </td>
                               <td className="py-3.5 px-4">{getStatusBadge(a.status)}</td>
                               <td className="py-3.5 px-4 text-right">

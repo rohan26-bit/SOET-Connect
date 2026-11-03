@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
+import PostedAt from '@/components/PostedAt';
 import { useAuth } from '@/components/AuthProvider';
 import Link from 'next/link';
 import { jobService, JobItem } from '@/lib/services/jobService';
@@ -293,6 +294,7 @@ export default function AdminJobsPage() {
                       {job.employment_type}
                     </span>
                     <h3 className="text-base font-bold text-slate-900 mt-2">{job.title}</h3>
+                    <PostedAt date={job.created_at} className="text-[11px] text-slate-400 block mt-1" />
                     <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
                       <Building className="w-3.5 h-3.5" /> {job.company} • <MapPin className="w-3.5 h-3.5" /> {job.location}
                     </p>

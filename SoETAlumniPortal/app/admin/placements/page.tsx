@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import PostedAt from '@/components/PostedAt';
 import { useAuth } from '@/components/AuthProvider';
 import { useRouter } from 'next/navigation';
 import { placementService, PlacementCelebration } from '@/lib/services/placementService';
@@ -186,6 +187,7 @@ export default function AdminPlacementsPage() {
                     <h3 className="font-bold text-[#4A3832] truncate">{record.alumni_name}</h3>
                     <p className="text-sm text-[#A75A24] font-semibold">{record.company_name}</p>
                     <p className="text-xs text-[#8C8178] mt-1">{record.designation || 'Placement'}{record.batch_year ? ` · ${record.batch_year}` : ''}</p>
+                    <PostedAt date={record.created_at} prefix="Added" className="text-[10px] text-[#8C8178] block mt-1" />
                     <span className={`inline-flex mt-2 rounded-full px-2 py-1 text-[10px] font-bold ${record.is_published ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>{record.is_published ? 'Published' : 'Draft'}</span>
                     <div className="flex items-center gap-3 mt-3">
                       <button onClick={() => handleTogglePublish(record)} className="inline-flex items-center gap-1 text-[11px] font-bold text-[#A75A24]">

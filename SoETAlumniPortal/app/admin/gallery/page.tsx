@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import PostedAt from '@/components/PostedAt';
 import { useAuth } from '@/components/AuthProvider';
 import { useRouter } from 'next/navigation';
 import {
@@ -284,9 +285,7 @@ export default function AdminGalleryPage() {
                             Event: {photo.event_name}
                           </p>
                         )}
-                        <p className="text-[10px] text-[#888888]">
-                          Submitted {new Date(photo.created_at).toLocaleDateString()}
-                        </p>
+                        <PostedAt date={photo.created_at} prefix="Submitted" className="text-[10px] text-[#888888]" />
                       </div>
 
                       {photo.status === 'rejected' && photo.rejection_reason && (

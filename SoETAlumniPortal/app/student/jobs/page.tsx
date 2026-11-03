@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
+import PostedAt from '@/components/PostedAt';
 import { useAuth } from '@/components/AuthProvider';
 import { jobService, JobItem, JobApplicationItem } from '@/lib/services/jobService';
 import { 
@@ -278,6 +279,7 @@ export default function JobsPage() {
                           {job.employment_type}
                         </span>
                         <h3 className="text-base font-bold text-slate-900 leading-snug">{job.title}</h3>
+                        <PostedAt date={job.created_at} className="text-[11px] text-slate-400 block mt-1" />
                         <p className="text-xs font-semibold text-slate-600 flex items-center gap-1.5 mt-1">
                           <Building className="w-3.5 h-3.5 text-slate-400" /> {job.company}
                         </p>
@@ -367,7 +369,7 @@ export default function JobsPage() {
                 <div key={app.id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <h3 className="text-sm font-bold text-slate-900">{app.job?.title || 'Job Position'}</h3>
-                    <p className="text-xs text-slate-500">{app.job?.company} • Applied on {new Date(app.created_at).toLocaleDateString()}</p>
+                    <p className="text-xs text-slate-500">{app.job?.company} • <PostedAt date={app.created_at} prefix="Applied" className="text-xs text-slate-500" /></p>
                   </div>
                   <div>
                     <span className={`px-3 py-1 text-xs font-bold rounded-full uppercase tracking-wider ${
@@ -402,6 +404,7 @@ export default function JobsPage() {
                   <div>
                     <h3 className="text-sm font-bold text-slate-900">{j.title}</h3>
                     <p className="text-xs text-slate-500">{j.company} • {j.location} • {j.employment_type}</p>
+                    <PostedAt date={j.created_at} className="text-[11px] text-slate-400 block mt-1" />
                   </div>
                   <div className="flex items-center gap-3">
                     {j.is_expired && (

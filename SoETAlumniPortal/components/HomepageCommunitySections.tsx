@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowRight, Award, Image as ImageIcon, Sparkles } from 'lucide-react';
 import { placementService, PlacementCelebration } from '@/lib/services/placementService';
 import { GalleryPhoto } from '@/lib/services/galleryService';
+import PostedAt from '@/components/PostedAt';
 
 export default function HomepageCommunitySections() {
   const [placements, setPlacements] = useState<PlacementCelebration[]>([]);
@@ -87,6 +88,7 @@ export default function HomepageCommunitySections() {
                     <p className="text-[11px] text-[#8C8178] mt-2">
                       {[placement.department, placement.batch_year ? `Batch ${placement.batch_year}` : ''].filter(Boolean).join(' · ') || 'SOET Alumni'}
                     </p>
+                    <PostedAt date={placement.created_at} className="text-[10px] text-[#8C8178] block mt-1" />
                     {placement.message && <p className="text-xs text-[#6B6B6B] mt-3 line-clamp-3">{placement.message}</p>}
                   </div>
                 </article>
@@ -126,6 +128,7 @@ export default function HomepageCommunitySections() {
                   <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/75 to-transparent text-white">
                     <p className="text-xs sm:text-sm font-bold truncate">{photo.title || photo.event_name || 'SOET Memory'}</p>
                     <p className="text-[10px] text-white/80 truncate">{photo.event_name || photo.user_name || 'SOET Community'}</p>
+                    <PostedAt date={photo.created_at} className="text-[10px] text-white/80 block mt-1" />
                   </div>
                 </Link>
               ))}

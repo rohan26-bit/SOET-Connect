@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
+import PostedAt from '@/components/PostedAt';
 import LoadingState, { ButtonSpinner } from '@/components/LoadingState';
 import {
   bugReportService,
@@ -388,9 +389,10 @@ export default function AdminBugReportsPage() {
                         <div className="text-[11px] text-[#6B6B6B]">
                           {report.reporter?.email || ''}
                         </div>
-                        <span className="text-[10px] text-[#888888] capitalize">
-                          {report.reporter?.role || 'user'} • {new Date(report.created_at).toLocaleDateString()}
-                        </span>
+                        <div className="text-[10px] text-[#888888] capitalize">
+                          {report.reporter?.role || 'user'}
+                          <PostedAt date={report.created_at} prefix="Submitted" className="block normal-case" />
+                        </div>
                       </td>
 
                       {/* Status */}
@@ -569,7 +571,7 @@ export default function AdminBugReportsPage() {
                       Logged At
                     </span>
                     <div className="px-3.5 py-2.5 bg-slate-100 rounded-xl text-xs text-slate-600 font-mono">
-                      {new Date(selectedReport.created_at).toLocaleString()}
+                      <PostedAt date={selectedReport.created_at} prefix="Submitted" className="text-xs text-[#888888]" />
                     </div>
                   </div>
                 </div>

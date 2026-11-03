@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import PostedAt from '@/components/PostedAt';
 import { useAuth } from '@/components/AuthProvider';
 import {
   galleryService,
@@ -389,6 +390,7 @@ export default function GalleryPage() {
                         </p>
                       )}
                     </div>
+                    <PostedAt date={photo.created_at} className="text-[10px] text-[#888888] block mt-2" />
 
                     <div className="flex items-center justify-between pt-3 mt-2 border-t border-[#F0EBE6] text-[11px] text-[#888888]">
                       <span>{photo.user_name || 'Alumnus'}</span>
@@ -475,7 +477,7 @@ export default function GalleryPage() {
                     {selectedPhoto.created_at && (
                       <span className="flex items-center gap-1">
                         <Clock className="w-3.5 h-3.5" />
-                        {new Date(selectedPhoto.created_at).toLocaleDateString()}
+                        <PostedAt date={selectedPhoto.created_at} className="text-xs text-[#888888]" />
                       </span>
                     )}
                   </div>

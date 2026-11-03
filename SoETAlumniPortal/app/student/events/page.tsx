@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
+import PostedAt from '@/components/PostedAt';
 import { useAuth } from '@/components/AuthProvider';
 import { eventService, EventItem, EventAttendeeItem } from '@/lib/services/eventService';
 import { Calendar, MapPin, Clock, Plus, Users, CheckCircle2, AlertCircle, X } from 'lucide-react';
@@ -187,7 +188,8 @@ export default function EventsPage() {
                   </p>
                 )}
 
-                <h3 className="text-base font-bold text-slate-900 leading-snug mb-2">{event.title}</h3>
+                <h3 className="text-base font-bold text-slate-900 leading-snug mb-1">{event.title}</h3>
+                <PostedAt date={event.created_at} className="text-[11px] text-slate-400 block mb-2" />
                 <p className="text-xs text-slate-500 flex items-center gap-1.5 mb-3">
                   <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   <span className="truncate">{event.location}</span>
