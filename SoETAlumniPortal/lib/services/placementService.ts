@@ -44,7 +44,7 @@ export interface PlacementInput {
 }
 
 export const placementService = {
-  async getPublished(limit = 8): Promise<PlacementCelebration[]> {
+  async getPublished(limit = 100): Promise<PlacementCelebration[]> {
     const response = await fetch(`${API_URL}/placements?limit=${limit}`, { cache: 'no-store' });
     const data = await parseResponse(response);
     return Array.isArray(data) ? data : [];
