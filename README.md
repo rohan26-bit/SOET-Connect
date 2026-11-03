@@ -21,7 +21,6 @@ The current codebase includes modules for:
 - **Messaging** — conversation and message functionality.
 - **Gallery** — media and gallery management.
 - **Administration** — administrative operations and management endpoints.
-- **Bug reports** — in-app issue reporting.
 
 ## Screenshots
 
