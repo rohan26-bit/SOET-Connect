@@ -51,7 +51,7 @@ export default function AlumniRegisterPage() {
       setError('Full name must be at least 2 characters long.');
       return;
     }
-    if (!/^[\\p{L} ]+$/u.test(trimmedName)) {
+    if (!/^[\p{L} ]+$/u.test(trimmedName)) {
       setError('Full name can contain letters and spaces only.');
       return;
     }
@@ -173,7 +173,7 @@ export default function AlumniRegisterPage() {
                     value={formData.fullName}
                     onChange={(e) => setFormData({
                       ...formData,
-                      fullName: e.target.value.replace(/[^\\p{L} ]/gu, ''),
+                      fullName: e.target.value.replace(/[^\p{L} ]/gu, ''),
                     })}
                     placeholder="e.g. Ananya Patel"
                     className="w-full px-3.5 py-2.5 bg-[#FBFAF8] border border-[#DDD7D2] rounded-xl text-[#222222] text-sm focus:ring-2 focus:ring-[#F28C38] focus:border-[#F28C38] focus:bg-white outline-none transition"
