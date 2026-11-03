@@ -13,6 +13,7 @@ import {
   ShieldCheck, ShieldAlert, ArrowRight, Building, MapPin, Clock, Award, CheckCircle2
 } from 'lucide-react';
 import LoadingState from '@/components/LoadingState';
+import PostedAt from '@/components/PostedAt';
 
 export default function AlumniDashboard() {
   const { user } = useAuth();
@@ -325,6 +326,7 @@ export default function AlumniDashboard() {
                   <div>
                     <h3 className="text-xs font-bold text-[#4A3832]">{j.title}</h3>
                     <p className="text-[11px] text-[#6B6B6B]">{j.company} • {j.location}</p>
+                    <PostedAt date={j.created_at} className="text-[10px] text-[#888888] block mt-1" />
                   </div>
                   <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full uppercase ${
                     j.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
@@ -357,9 +359,7 @@ export default function AlumniDashboard() {
                 <div key={a.id} className="p-4 bg-[#FBFAF8] rounded-2xl border border-[#DDD7D2]/80">
                   <h3 className="text-xs font-bold text-[#4A3832]">{a.title}</h3>
                   <p className="text-xs text-[#6B6B6B] mt-1 leading-relaxed">{a.content}</p>
-                  <span className="text-[10px] text-[#888888] mt-2 block font-medium">
-                    {new Date(a.created_at).toLocaleDateString()}
-                  </span>
+                  <PostedAt date={a.created_at} className="text-[10px] text-[#888888] mt-2 block font-medium" />
                 </div>
               ))}
             </div>
