@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
+import PostedAt from '@/components/PostedAt';
 import { useAuth } from '@/components/AuthProvider';
 import { jobService, JobItem, JobApplicationItem } from '@/lib/services/jobService';
 import { 
@@ -278,6 +279,7 @@ export default function JobsPage() {
                           {job.employment_type}
                         </span>
                         <h3 className="text-base font-bold text-slate-900 leading-snug">{job.title}</h3>
+                        <PostedAt date={job.created_at} className="text-[11px] text-slate-400 block mt-1" />
                         <p className="text-xs font-semibold text-slate-600 flex items-center gap-1.5 mt-1">
                           <Building className="w-3.5 h-3.5 text-slate-400" /> {job.company}
                         </p>
