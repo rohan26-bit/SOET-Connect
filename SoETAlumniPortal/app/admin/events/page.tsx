@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
+import PostedAt from '@/components/PostedAt';
 import { eventService, EventItem } from '@/lib/services/eventService';
 import { useAuth } from '@/components/AuthProvider';
 import {
@@ -274,6 +275,7 @@ export default function AdminEventsPage() {
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex-1">
                     <h3 className="text-base font-bold text-slate-900">{event.title}</h3>
+                    <PostedAt date={event.created_at} className="text-[11px] text-slate-400 block mt-1" />
                     <div className="flex items-center gap-3 mt-1.5">
                       <p className="text-xs text-slate-500 flex items-center gap-1">
                         <Calendar className="w-3.5 h-3.5 text-blue-600" />
