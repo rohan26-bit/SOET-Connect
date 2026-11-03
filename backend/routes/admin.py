@@ -11,7 +11,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 
-from database import users_collection, supabase
+import os
+from urllib.parse import urlsplit
+
+from database import users_collection, supabase, get_supabase_config
 from security.dependencies import get_current_user
 from services.notifications import NOTIFICATION_TYPES, create_notification_once
 
