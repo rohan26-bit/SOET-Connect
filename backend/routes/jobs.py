@@ -325,13 +325,28 @@ def get_job_details(
             detail="Job not found."
         )
     job = res.data[0]
+    role = current_user.get("role")
+    user_id = str(current_user.get("user_id"))
+    is_owner = str(job.get("posted_by")) == user_id
+    expired = is_job_expired(job)
+
+    # Expired, pending, rejected, and closed postings remain available to
+    # admins and their owner, but cannot be opened from a public user account.
+    if role != "admin" and not is_owner and (
+        job.get("status") != "approved" or expired
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail="Job posting not found."
+        )
+
     job["employment_type"] = job.get("job_type", "")
     job["experience"] = job.get("experience_level", "")
     job["salary"] = job.get("salary_range", "")
     deadline_val = job.get("application_deadline") or job.get("deadline")
     job["deadline"] = deadline_val
     job["application_deadline"] = deadline_val
-    job["is_expired"] = is_job_expired(job)
+    job["is_expired"] = expired
     return job
 
 
