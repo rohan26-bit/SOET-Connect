@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Q
 from pydantic import BaseModel
 
 from database import supabase, users_collection
-from security.dependencies import get_current_user
+from security.dependencies import get_current_user, get_optional_current_user
 from services.gallery import validate_image_file, generate_watermarked_display
 from services.notifications import create_notification_once
 
@@ -321,13 +321,22 @@ def get_gallery_photo_details(
 @router.get("/{photo_id}/image")
 def get_gallery_photo_image(
     photo_id: str,
+    current_user: Optional[dict] = Depends(get_optional_current_user),
 ):
-    """Serve the watermarked, compressed WebP display image safely."""
+    """Serve approved public images and keep pending/rejected images private."""
     res = supabase.table("gallery_photos").select("*").eq("id", photo_id).limit(1).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="Photo not found.")
 
     photo = res.data[0]
+    role = current_user.get("role") if current_user else None
+    user_id = str(current_user.get("user_id")) if current_user else ""
+    is_public = photo.get("status") == "approved"
+    is_owner = bool(user_id) and str(photo.get("uploader_id")) == user_id
+
+    if not is_public and role != "admin" and not is_owner:
+        raise HTTPException(status_code=404, detail="Photo not found.")
+
     display_path = photo.get("display_path")
     if not display_path:
         raise HTTPException(status_code=404, detail="Display image not available.")
@@ -343,7 +352,7 @@ def get_gallery_photo_image(
             media_type="image/webp",
             headers={
                 "Content-Disposition": "inline",
-                "Cache-Control": "public, max-age=86400",
+                "Cache-Control": "public, max-age=86400" if is_public else "private, no-store",
                 "X-Content-Type-Options": "nosniff",
             }
         )

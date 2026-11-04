@@ -167,7 +167,7 @@ def test_public_gallery_shows_only_approved_photos(
 
 
 def test_admin_approve_and_reject_photo(
-    client: TestClient, verified_alumni_user: dict, admin_user: dict
+    client: TestClient, verified_alumni_user: dict, admin_user: dict, student_user: dict
 ):
     """Admin can approve or reject pending submissions and provide feedback."""
     img_bytes = _create_test_image_bytes()
@@ -178,6 +178,19 @@ def test_admin_approve_and_reject_photo(
         files={"file": ("s.jpg", img_bytes, "image/jpeg")},
     )
     photo_id = upload_res.json()["id"]
+    image_url = f"/api/gallery/{photo_id}/image"
+
+    # Pending images are available only to their uploader and administrators.
+    assert client.get(image_url).status_code == 404
+    assert client.get(image_url, headers=student_user["headers"]).status_code == 404
+
+    owner_preview = client.get(image_url, headers=verified_alumni_user["headers"])
+    assert owner_preview.status_code == 200
+    assert owner_preview.headers["cache-control"] == "private, no-store"
+
+    admin_preview = client.get(image_url, headers=admin_user["headers"])
+    assert admin_preview.status_code == 200
+    assert admin_preview.headers["cache-control"] == "private, no-store"
 
     # Reject photo
     reject_res = client.patch(
@@ -190,6 +203,11 @@ def test_admin_approve_and_reject_photo(
     assert res_data["status"] == "rejected"
     assert res_data["rejection_reason"] == "Low resolution image"
 
+    # Rejected images remain hidden from the public and unrelated users.
+    assert client.get(image_url).status_code == 404
+    assert client.get(image_url, headers=student_user["headers"]).status_code == 404
+    assert client.get(image_url, headers=admin_user["headers"]).status_code == 200
+
     # Re-approve photo
     approve_res = client.patch(
         f"/api/gallery/{photo_id}/status",
@@ -198,6 +216,11 @@ def test_admin_approve_and_reject_photo(
     )
     assert approve_res.status_code == 200
     assert approve_res.json()["status"] == "approved"
+
+    # Once approved, the image is publicly viewable and may use public caching.
+    public_image = client.get(image_url)
+    assert public_image.status_code == 200
+    assert public_image.headers["cache-control"] == "public, max-age=86400"
 
 
 def test_non_admin_cannot_moderate(client: TestClient, verified_alumni_user: dict):
