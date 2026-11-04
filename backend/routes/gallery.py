@@ -280,6 +280,11 @@ def get_admin_gallery_photos(
             q = q.eq("status", status)
         res = q.order("created_at", desc=True).execute()
         photos = res.data or []
+        photos = [
+            p for p in photos
+            if (p.get("category") or "").strip().lower() != "placement"
+            and not (p.get("title") or "").strip().lower().startswith("placement celebration")
+        ]
         return [_format_photo_doc(p, is_admin=True) for p in photos]
     except Exception as e:
         print("Error fetching admin gallery photos:", e)
