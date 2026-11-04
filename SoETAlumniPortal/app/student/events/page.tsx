@@ -270,7 +270,7 @@ export default function EventsPage() {
         event={viewingEvent}
         onClose={() => setViewingEvent(null)}
         actionLabel={
-          viewingEvent?.is_registered
+          viewingEvent?.is_registered && !viewingEvent.is_past
             ? 'Cancel Registration'
             : viewingEvent?.is_past
               ? 'Event Has Ended'
@@ -279,7 +279,7 @@ export default function EventsPage() {
                 : 'Register for Event'
         }
         onAction={
-          viewingEvent && !viewingEvent.is_past && !viewingEvent.is_registration_closed
+          viewingEvent && !viewingEvent.is_past && (viewingEvent.is_registered || !viewingEvent.is_registration_closed)
             ? () => {
                 if (viewingEvent.is_registered) {
                   void handleCancelRegistration(viewingEvent.id);
@@ -290,7 +290,11 @@ export default function EventsPage() {
               }
             : undefined
         }
-        actionDisabled={Boolean(viewingEvent && actionLoading === viewingEvent.id) || Boolean(viewingEvent?.is_past || viewingEvent?.is_registration_closed)}
+        actionDisabled={
+          Boolean(viewingEvent && actionLoading === viewingEvent.id) ||
+          Boolean(viewingEvent?.is_past) ||
+          Boolean(viewingEvent?.is_registration_closed && !viewingEvent?.is_registered)
+        }
         actionVariant={viewingEvent?.is_registered ? 'danger' : 'primary'}
       />
 
