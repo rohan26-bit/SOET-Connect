@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -57,8 +57,9 @@ def parse_iso_datetime(dt_str: str | None) -> datetime | None:
         return None
     try:
         if len(s) == 10 and s[4] == '-' and s[7] == '-':
-            # Treat date-only deadline as end of that day in UTC
-            return datetime.fromisoformat(s).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+            # Date-only deadlines expire at the end of that calendar day in India.
+            ist = timezone(timedelta(hours=5, minutes=30))
+            return datetime.fromisoformat(s).replace(hour=23, minute=59, second=59, tzinfo=ist)
         if s.endswith("Z"):
             s = s[:-1] + "+00:00"
         dt = datetime.fromisoformat(s)
