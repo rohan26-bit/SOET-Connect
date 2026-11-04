@@ -27,6 +27,7 @@ from services.chat import (
     serialize_conversation,
     send_conversation_attachments,
     get_message_attachment,
+    ensure_conversation_participant,
 )
 
 router = APIRouter(
@@ -259,6 +260,9 @@ async def send_attachments(
 ):
     if len(files) > MAX_CHAT_ATTACHMENTS_PER_MESSAGE:
         raise HTTPException(status_code=400, detail="Share up to 5 files in one message.")
+
+    # Authenticate access before consuming potentially large multipart file bodies.
+    ensure_conversation_participant(conversation_id, current_user["user_id"])
 
     validated_files = []
     for upload in files:
