@@ -378,6 +378,20 @@ def send_conversation_message(conversation_id: str, sender_id: str, content: str
 
 
 
+
+def ensure_conversation_participant(conversation_id: str, current_user_id: str) -> None:
+    """Reject file uploads before reading their bodies unless the caller is a conversation participant."""
+    conv_id = parse_object_id(conversation_id, "Conversation not found.")
+    conv = conversations_collection.find_one({"_id": conv_id})
+    if not conv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
+    participant_ids = [str(uid) for uid in conv.get("participant_ids", [])]
+    if current_user_id not in participant_ids:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this conversation.")
+    if current_user_id in [str(uid) for uid in conv.get("deleted_for", [])]:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
+
+
 def send_conversation_attachments(
     conversation_id: str,
     sender_id: str,
