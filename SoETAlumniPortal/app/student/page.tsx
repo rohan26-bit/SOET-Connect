@@ -5,6 +5,7 @@ import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
 import PostedAt from '@/components/PostedAt';
+import JobDetailsModal from '@/components/JobDetailsModal';
 import { useAuth } from '@/components/AuthProvider';
 import { jobService, JobItem } from '@/lib/services/jobService';
 import { eventService, EventItem } from '@/lib/services/eventService';
@@ -14,6 +15,7 @@ import { Briefcase, Calendar, Megaphone, ArrowRight, MapPin, Building, Clock } f
 export default function StudentDashboard() {
   const { user, loading: authLoading } = useAuth();
   const [jobs, setJobs] = useState<JobItem[]>([]);
+  const [viewingJob, setViewingJob] = useState<JobItem | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [jobsLoading, setJobsLoading] = useState(true);
@@ -157,12 +159,21 @@ export default function StudentDashboard() {
                         </span>
                       </div>
                     </div>
-                    <Link
-                      href="/student/jobs"
-                      className="px-4 py-2 bg-white hover:bg-[#F28C38] hover:text-white border border-[#DDD7D2] text-[#4A3832] text-xs font-bold rounded-xl transition text-center shrink-0"
-                    >
-                      View & Apply
-                    </Link>
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setViewingJob(job)}
+                        className="rounded-xl border border-[#DDD7D2] bg-white px-3 py-2 text-xs font-bold text-[#4A3832] transition hover:border-[#F28C38] hover:text-[#E07D2E]"
+                      >
+                        View Details
+                      </button>
+                      <Link
+                        href="/student/jobs"
+                        className="rounded-xl border border-[#DDD7D2] bg-white px-4 py-2 text-center text-xs font-bold text-[#4A3832] transition hover:bg-[#F28C38] hover:text-white"
+                      >
+                        View & Apply
+                      </Link>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -236,6 +247,7 @@ export default function StudentDashboard() {
         </div>
 
       </div>
+      <JobDetailsModal job={viewingJob} onClose={() => setViewingJob(null)} />
     </DashboardLayout>
   );
 }

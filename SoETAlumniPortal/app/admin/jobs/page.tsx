@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
+import JobDetailsModal from '@/components/JobDetailsModal';
 import PostedAt from '@/components/PostedAt';
 import { useAuth } from '@/components/AuthProvider';
 import Link from 'next/link';
@@ -33,6 +34,7 @@ import DocumentAttachment, { DocumentAttachmentData, DocumentAttachmentView } fr
 export default function AdminJobsPage() {
   const { user } = useAuth();
   const [jobs, setJobs] = useState<JobItem[]>([]);
+  const [viewingJobDetails, setViewingJobDetails] = useState<JobItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'expired'>('all');
 
@@ -344,6 +346,13 @@ export default function AdminJobsPage() {
                 <p className="text-xs text-slate-600 line-clamp-3 my-3 bg-slate-50 p-3 rounded-xl leading-relaxed">
                   {job.description}
                 </p>
+                <button
+                  type="button"
+                  onClick={() => setViewingJobDetails(job)}
+                  className="mb-3 inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 hover:text-blue-900 hover:underline"
+                >
+                  View Full Details <Eye className="h-3.5 w-3.5" />
+                </button>
 
                 <div className="text-[11px] text-slate-400">
                   Posted by: <span className="font-semibold text-slate-700">{job.poster_name || 'Alumni'}</span> ({job.poster_email || '—'})
@@ -895,6 +904,7 @@ export default function AdminJobsPage() {
           </div>
         </div>
       )}
+      <JobDetailsModal job={viewingJobDetails} onClose={() => setViewingJobDetails(null)} />
     </DashboardLayout>
   );
 }

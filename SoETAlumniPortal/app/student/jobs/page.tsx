@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
+import JobDetailsModal from '@/components/JobDetailsModal';
 import PostedAt from '@/components/PostedAt';
 import { useAuth } from '@/components/AuthProvider';
 import { jobService, JobItem, JobApplicationItem } from '@/lib/services/jobService';
@@ -24,6 +25,7 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [viewingJob, setViewingJob] = useState<JobItem | null>(null);
 
   // Application Modal state
   const [selectedJob, setSelectedJob] = useState<JobItem | null>(null);
@@ -296,6 +298,16 @@ export default function JobsPage() {
                       {job.description}
                     </p>
 
+                    <div className="mb-4">
+                      <button
+                        type="button"
+                        onClick={() => setViewingJob(job)}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 hover:text-blue-900 hover:underline"
+                      >
+                        View Full Details <span aria-hidden="true">→</span>
+                      </button>
+                    </div>
+
                     {job.skills && job.skills.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mb-4">
                         {job.skills.map((s, idx) => (
@@ -407,6 +419,13 @@ export default function JobsPage() {
                     <PostedAt date={j.created_at} className="text-[11px] text-slate-400 block mt-1" />
                   </div>
                   <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setViewingJob(j)}
+                      className="text-xs font-bold text-blue-700 hover:underline"
+                    >
+                      View Details
+                    </button>
                     {j.is_expired && (
                       <span className="px-2.5 py-1 text-[10px] font-bold rounded-full uppercase bg-slate-200 text-slate-700">
                         Expired
@@ -437,6 +456,28 @@ export default function JobsPage() {
           )}
         </div>
       )}
+
+      <JobDetailsModal
+        job={viewingJob}
+        onClose={() => setViewingJob(null)}
+        actionLabel={
+          viewingJob &&
+          !viewingJob.is_expired &&
+          !(user && viewingJob.posted_by && String(viewingJob.posted_by) === String(user.id))
+            ? 'Apply Now'
+            : undefined
+        }
+        onAction={
+          viewingJob &&
+          !viewingJob.is_expired &&
+          !(user && viewingJob.posted_by && String(viewingJob.posted_by) === String(user.id))
+            ? () => {
+                setSelectedJob(viewingJob);
+                setViewingJob(null);
+              }
+            : undefined
+        }
+      />
 
       {/* Application Modal */}
       {selectedJob && (
