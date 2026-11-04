@@ -60,6 +60,7 @@ function ChatAttachmentCard({ messageId, attachment }: { messageId: string; atta
         const blob = await chatService.downloadAttachment(messageId, attachment.id);
         objectUrl = URL.createObjectURL(blob);
         if (active) setPreviewUrl(objectUrl);
+        else URL.revokeObjectURL(objectUrl);
       } catch {
         // The attachment card remains downloadable even when a preview cannot be generated.
       }
@@ -545,7 +546,7 @@ function ChatContent() {
                             {msg.content}
                           </div>
                         )}
-                        {msg.attachments?.length > 0 && (
+                        {Boolean(msg.attachments?.length) && (
                           <div className="mt-2 flex w-full max-w-sm flex-col gap-2">
                             {msg.attachments.map((attachment) => (
                               <ChatAttachmentCard key={attachment.id} messageId={msg.id} attachment={attachment} />
