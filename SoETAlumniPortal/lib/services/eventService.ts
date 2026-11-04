@@ -10,6 +10,7 @@ export interface EventItem {
   title: string;
   description: string;
   event_date: string;
+  end_date?: string;
   start_time?: string;
   end_time?: string;
   location: string;
@@ -17,7 +18,7 @@ export interface EventItem {
   registration_deadline?: string;
   event_type?: string;
   tags?: string[];
-  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'completed';
   created_at: string;
   updated_at?: string;
   creator_name?: string;
@@ -26,6 +27,7 @@ export interface EventItem {
   is_registered?: boolean;
   is_past?: boolean;
   is_registration_closed?: boolean;
+  is_expired?: boolean;
   attachment?: {
     name: string;
     type: string;
@@ -68,10 +70,11 @@ function normalizeEvent(e: any): EventItem {
     title: e.title,
     description: parsed.cleanText,
     event_date: e.event_date || e.start_date || '',
+    end_date: e.end_date || '',
     start_time: e.start_time,
     end_time: e.end_time,
     location: e.location,
-    image_url: e.image_url,
+    image_url: e.image_url || e.virtual_link || '',
     registration_deadline: e.registration_deadline,
     event_type: e.event_type,
     tags: e.tags,
@@ -81,6 +84,9 @@ function normalizeEvent(e: any): EventItem {
     creator_name: e.creator_name,
     registration_count: e.registration_count || 0,
     is_registered: !!e.is_registered,
+    is_past: !!e.is_past,
+    is_registration_closed: !!e.is_registration_closed,
+    is_expired: !!e.is_expired,
     attachment: e.attachment || parsed.attachment || null,
   };
 }
