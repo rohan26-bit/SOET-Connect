@@ -160,6 +160,10 @@ function ChatContent() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    setPendingFiles([]);
+  }, [selectedConversationId]);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
