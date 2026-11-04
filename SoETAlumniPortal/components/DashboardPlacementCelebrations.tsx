@@ -23,13 +23,13 @@ export default function DashboardPlacementCelebrations() {
   }, []);
 
   return (
-    <section className="mb-8 rounded-3xl border border-[#E7DED6] bg-white p-5 sm:p-6 shadow-sm">
+    <section aria-labelledby="dashboard-placement-celebrations-title" className="mb-8 rounded-3xl border border-[#E7DED6] bg-white p-5 sm:p-6 shadow-sm">
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="mb-1 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#C56A25]">
             <Sparkles className="h-3.5 w-3.5" /> Proud moments
           </p>
-          <h2 className="text-xl font-black text-[#4A3832]">Placement Celebrations</h2>
+          <h2 id="dashboard-placement-celebrations-title" className="text-xl font-black text-[#4A3832]">Placement Celebrations</h2>
           <p className="mt-1 text-xs text-[#6B6B6B]">Celebrating SOET alumni and their career achievements.</p>
         </div>
         {user?.role === 'admin' && (
@@ -56,7 +56,7 @@ export default function DashboardPlacementCelebrations() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={placement.photo_url} alt={placement.alumni_name} loading="lazy" className="h-full w-full object-cover" />
                 ) : (
-                  <div className="flex h-full items-center justify-center text-[#B77A4C]"><Award className="h-9 w-9" /></div>
+                  <div className="flex h-full items-center justify-center text-[#B77A4C]"><Award className="h-9 w-9" aria-hidden="true" /></div>
                 )}
               </div>
               <div className="min-w-0 flex-1 p-3">
