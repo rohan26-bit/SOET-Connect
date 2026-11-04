@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import PostedAt from '@/components/PostedAt';
+import PlacementDetailsModal from '@/components/PlacementDetailsModal';
 import { useAuth } from '@/components/AuthProvider';
 import { placementService, PlacementCelebration } from '@/lib/services/placementService';
 import { Award, ArrowLeft, ArrowRight, Search, Sparkles } from 'lucide-react';
@@ -17,6 +18,7 @@ export default function PlacementCelebrationsPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [viewingPlacement, setViewingPlacement] = useState<PlacementCelebration | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -185,10 +187,17 @@ export default function PlacementCelebrationsPage() {
                       {[placement.department, placement.batch_year ? `Batch ${placement.batch_year}` : ''].filter(Boolean).join(' · ') || 'SOET Alumni'}
                     </p>
                     {placement.message && (
-                      <p className="mt-3 line-clamp-3 text-xs leading-relaxed text-[#6B6B6B]">{placement.message}</p>
+                      <p className="mt-3 line-clamp-3 whitespace-pre-wrap text-xs leading-relaxed text-[#6B6B6B]">{placement.message}</p>
                     )}
                     <div className="mt-auto border-t border-[#F0EBE6] pt-3">
                       <PostedAt date={placement.created_at} className="block text-[10px] text-[#8C8178]" />
+                      <button
+                        type="button"
+                        onClick={() => setViewingPlacement(placement)}
+                        className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-[#A75A24] transition hover:text-[#7C3E16] hover:underline"
+                      >
+                        View Full Story <ArrowRight className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   </div>
                 </article>
@@ -227,6 +236,7 @@ export default function PlacementCelebrationsPage() {
           </>
         )}
       </div>
+      <PlacementDetailsModal placement={viewingPlacement} onClose={() => setViewingPlacement(null)} />
     </DashboardLayout>
   );
 }

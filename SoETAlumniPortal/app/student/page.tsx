@@ -7,6 +7,7 @@ import LoadingState from '@/components/LoadingState';
 import PostedAt from '@/components/PostedAt';
 import JobDetailsModal from '@/components/JobDetailsModal';
 import EventDetailsModal from '@/components/EventDetailsModal';
+import AnnouncementDetailsModal from '@/components/AnnouncementDetailsModal';
 import { useAuth } from '@/components/AuthProvider';
 import { jobService, JobItem } from '@/lib/services/jobService';
 import { eventService, EventItem } from '@/lib/services/eventService';
@@ -18,6 +19,7 @@ export default function StudentDashboard() {
   const [jobs, setJobs] = useState<JobItem[]>([]);
   const [viewingJob, setViewingJob] = useState<JobItem | null>(null);
   const [viewingEvent, setViewingEvent] = useState<EventItem | null>(null);
+  const [viewingAnnouncement, setViewingAnnouncement] = useState<AnnouncementItem | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [jobsLoading, setJobsLoading] = useState(true);
@@ -196,9 +198,18 @@ export default function StudentDashboard() {
                 {announcements.slice(0, 2).map((a) => (
                   <div key={a.id} className="p-4 bg-[#FBFAF8] rounded-2xl border border-[#DDD7D2]/80">
                     <h3 className="font-bold text-[#4A3832] text-sm">{a.title}</h3>
-                    <p className="text-xs text-[#6B6B6B] mt-1 leading-relaxed">{a.content}</p>
-                    <div className="text-[10px] text-[#888888] mt-2 block font-medium">
-                      By {a.creator_name || 'Admin'} • <PostedAt date={a.created_at} className="text-[10px] text-[#888888]" />
+                    <p className="text-xs text-[#6B6B6B] mt-1 leading-relaxed line-clamp-3 whitespace-pre-wrap">{a.content}</p>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span className="text-[10px] text-[#888888] block font-medium">
+                        By {a.creator_name || 'Admin'} • <PostedAt date={a.created_at} className="text-[10px] text-[#888888]" />
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setViewingAnnouncement(a)}
+                        className="shrink-0 text-[11px] font-bold text-[#A75A24] hover:underline"
+                      >
+                        View Full Notice
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -242,7 +253,7 @@ export default function StudentDashboard() {
                         onClick={() => setViewingEvent(event)}
                         className="text-xs font-bold text-[#F28C38] hover:underline"
                       >
-                        View Details →
+                        View Full Details →
                       </button>
                     </div>
                   </div>
@@ -255,6 +266,7 @@ export default function StudentDashboard() {
       </div>
       <JobDetailsModal job={viewingJob} onClose={() => setViewingJob(null)} />
       <EventDetailsModal event={viewingEvent} onClose={() => setViewingEvent(null)} />
+      <AnnouncementDetailsModal announcement={viewingAnnouncement} onClose={() => setViewingAnnouncement(null)} />
     </DashboardLayout>
   );
 }

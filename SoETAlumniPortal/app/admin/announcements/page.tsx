@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
 import PostedAt from '@/components/PostedAt';
+import AnnouncementDetailsModal from '@/components/AnnouncementDetailsModal';
 import { useAuth } from '@/components/AuthProvider';
 import { announcementService, AnnouncementItem } from '@/lib/services/announcementService';
 import { Megaphone, Plus, Trash2, Users, GraduationCap, Globe, AlertCircle, X } from 'lucide-react';
@@ -15,6 +16,7 @@ import DocumentAttachment, {
 export default function AdminAnnouncementsPage() {
   const { user } = useAuth();
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
+  const [viewingAnnouncement, setViewingAnnouncement] = useState<AnnouncementItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -195,9 +197,18 @@ export default function AdminAnnouncementsPage() {
                 </div>
 
                 <h3 className="text-base font-bold text-slate-900 mb-2">{a.title}</h3>
-                <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3.5 rounded-2xl mb-4">
-                  {a.content}
-                </p>
+                <div className="mb-4 rounded-2xl bg-slate-50 p-3.5">
+                  <p className="line-clamp-3 whitespace-pre-wrap text-xs leading-relaxed text-slate-600">
+                    {a.content}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setViewingAnnouncement(a)}
+                    className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-blue-700 hover:text-blue-900 hover:underline"
+                  >
+                    View Full Announcement
+                  </button>
+                </div>
 
                 {/* Document Attachment Display */}
                 {a.attachment && a.attachment.name && (
@@ -220,6 +231,8 @@ export default function AdminAnnouncementsPage() {
           ))}
         </div>
       )}
+
+      <AnnouncementDetailsModal announcement={viewingAnnouncement} onClose={() => setViewingAnnouncement(null)} />
 
       {/* Create Announcement Modal */}
       {showModal && (

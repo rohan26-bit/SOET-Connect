@@ -7,7 +7,7 @@ import PostedAt from '@/components/PostedAt';
 import EventDetailsModal from '@/components/EventDetailsModal';
 import { useAuth } from '@/components/AuthProvider';
 import { eventService, EventItem, EventAttendeeItem } from '@/lib/services/eventService';
-import { Calendar, MapPin, Clock, Plus, Users, CheckCircle2, AlertCircle, X } from 'lucide-react';
+import { Calendar, MapPin, Clock, Plus, Users, CheckCircle2, AlertCircle, X, ArrowRight } from 'lucide-react';
 import DocumentAttachment, {
   DocumentAttachmentData,
   DocumentAttachmentView,
@@ -197,9 +197,18 @@ export default function EventsPage() {
                   <span className="truncate">{event.location}</span>
                 </p>
 
-                <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed mb-4">
+                <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed mb-3">
                   {event.description}
                 </p>
+
+                {/* Full details are opened separately so event cards stay compact. */}
+                <button
+                  type="button"
+                  onClick={() => setViewingEvent(event)}
+                  className="mb-4 inline-flex items-center gap-1.5 rounded-xl border border-[#F28C38]/30 bg-[#FFF6EE] px-3.5 py-2 text-xs font-bold text-[#A75A24] transition hover:border-[#F28C38] hover:bg-[#FCEBDD] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F28C38] focus-visible:ring-offset-2"
+                >
+                  View Full Event Details <ArrowRight className="h-3.5 w-3.5" />
+                </button>
 
                 {/* Document Attachment Display */}
                 {event.attachment && event.attachment.name && (
@@ -219,13 +228,6 @@ export default function EventsPage() {
                 </div>
 
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setViewingEvent(event)}
-                    className="px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-xs font-bold text-blue-700 transition hover:bg-blue-100"
-                  >
-                    View Full Details
-                  </button>
                   {(event.created_by === user?.id || user?.role === 'admin') && (
                     <button
                       onClick={() => viewAttendees(event.id)}
