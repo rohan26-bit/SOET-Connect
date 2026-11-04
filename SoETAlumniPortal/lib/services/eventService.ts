@@ -18,7 +18,7 @@ export interface EventItem {
   registration_deadline?: string;
   event_type?: string;
   tags?: string[];
-  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'completed';
   created_at: string;
   updated_at?: string;
   creator_name?: string;
