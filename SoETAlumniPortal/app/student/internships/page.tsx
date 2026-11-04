@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
+import JobDetailsModal from '@/components/JobDetailsModal';
 import PostedAt from '@/components/PostedAt';
 import { jobService, JobItem } from '@/lib/services/jobService';
 import { Briefcase, Building, MapPin, ArrowRight } from 'lucide-react';
@@ -12,6 +13,7 @@ import { DocumentAttachmentView } from '@/components/DocumentAttachment';
 export default function InternshipsPage() {
   const [internships, setInternships] = useState<JobItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewingJob, setViewingJob] = useState<JobItem | null>(null);
 
   useEffect(() => {
     async function loadInternships() {
@@ -84,6 +86,13 @@ export default function InternshipsPage() {
                 </div>
               )}
 
+              <button
+                type="button"
+                onClick={() => setViewingJob(job)}
+                className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100"
+              >
+                View Details
+              </button>
               <Link
                 href="/student/jobs"
                 className="px-5 py-2.5 bg-slate-900 hover:bg-blue-600 text-white text-xs font-bold rounded-xl transition text-center shrink-0"
@@ -94,6 +103,7 @@ export default function InternshipsPage() {
           ))}
         </div>
       )}
+      <JobDetailsModal job={viewingJob} onClose={() => setViewingJob(null)} />
     </DashboardLayout>
   );
 }
