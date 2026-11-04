@@ -500,3 +500,133 @@ def test_additional_error_cases(client, student_user, verified_alumni_user, othe
     # Mark read on non-existent message returns 404
     assert client.patch(f"/chat/messages/{ObjectId()}/read", headers=student_user["headers"]).status_code == 404
 
+# ============================================================
+# CHAT ATTACHMENT TESTS
+# ============================================================
+
+def test_send_and_download_chat_attachment(client, student_user, verified_alumni_user, other_student_user):
+    conv_res = client.post(
+        "/chat/conversations",
+        headers=student_user["headers"],
+        json={"participant_id": verified_alumni_user["id"]},
+    )
+    conv_id = conv_res.json()["id"]
+    pdf_bytes = b"%PDF-1.7\\nSOET Connect test attachment\\n"
+
+    upload_res = client.post(
+        f"/chat/conversations/{conv_id}/attachments",
+        headers=student_user["headers"],
+        data={"content": "Please review this document."},
+        files=[("files", ("placement-letter.pdf", pdf_bytes, "application/pdf"))],
+    )
+    assert upload_res.status_code == 201
+    message = upload_res.json()
+    assert message["content"] == "Please review this document."
+    assert len(message["attachments"]) == 1
+    attachment = message["attachments"][0]
+    assert attachment["file_name"] == "placement-letter.pdf"
+    assert attachment["mime_type"] == "application/pdf"
+    assert attachment["size_bytes"] == len(pdf_bytes)
+    assert "storage_path" not in attachment
+
+    # Both participants can retrieve the attachment.
+    download_url = f"/chat/messages/{message['id']}/attachments/{attachment['id']}"
+    student_download = client.get(download_url, headers=student_user["headers"])
+    assert student_download.status_code == 200
+    assert student_download.content == pdf_bytes
+    assert student_download.headers["content-type"] == "application/pdf"
+    assert "placement-letter.pdf" in student_download.headers["content-disposition"]
+
+    alumni_download = client.get(download_url, headers=verified_alumni_user["headers"])
+    assert alumni_download.status_code == 200
+    assert alumni_download.content == pdf_bytes
+
+    # A non-participant cannot access another conversation's attachment.
+    forbidden = client.get(download_url, headers=other_student_user["headers"])
+    assert forbidden.status_code == 403
+
+    # Attachments are included when the conversation history is loaded again.
+    history = client.get(
+        f"/chat/conversations/{conv_id}/messages",
+        headers=verified_alumni_user["headers"],
+    )
+    assert history.status_code == 200
+    assert history.json()[0]["attachments"][0]["id"] == attachment["id"]
+
+
+def test_chat_attachment_message_supports_multiple_files(client, student_user, verified_alumni_user):
+    conv_res = client.post(
+        "/chat/conversations",
+        headers=student_user["headers"],
+        json={"participant_id": verified_alumni_user["id"]},
+    )
+    conv_id = conv_res.json()["id"]
+
+    files = [
+        ("files", ("resume.pdf", b"%PDF-1.7\\nresume\\n", "application/pdf")),
+        ("files", ("notes.txt", b"Interview preparation notes", "text/plain")),
+    ]
+    response = client.post(
+        f"/chat/conversations/{conv_id}/attachments",
+        headers=student_user["headers"],
+        files=files,
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["content"] == "Shared 2 attachments"
+    assert [item["file_name"] for item in data["attachments"]] == ["resume.pdf", "notes.txt"]
+
+
+def test_chat_attachment_rejects_unsupported_and_invalid_files(client, student_user, verified_alumni_user):
+    conv_res = client.post(
+        "/chat/conversations",
+        headers=student_user["headers"],
+        json={"participant_id": verified_alumni_user["id"]},
+    )
+    conv_id = conv_res.json()["id"]
+
+    unsupported = client.post(
+        f"/chat/conversations/{conv_id}/attachments",
+        headers=student_user["headers"],
+        files=[("files", ("malware.exe", b"MZ\\x00", "application/octet-stream"))],
+    )
+    assert unsupported.status_code == 415
+
+    invalid_pdf = client.post(
+        f"/chat/conversations/{conv_id}/attachments",
+        headers=student_user["headers"],
+        files=[("files", ("fake.pdf", b"not a PDF", "application/pdf"))],
+    )
+    assert invalid_pdf.status_code == 415
+
+
+def test_chat_attachment_limits_and_authorization(client, student_user, verified_alumni_user, other_student_user):
+    conv_res = client.post(
+        "/chat/conversations",
+        headers=student_user["headers"],
+        json={"participant_id": verified_alumni_user["id"]},
+    )
+    conv_id = conv_res.json()["id"]
+    pdf = b"%PDF-1.7\\nsmall\\n"
+
+    too_many = client.post(
+        f"/chat/conversations/{conv_id}/attachments",
+        headers=student_user["headers"],
+        files=[("files", (f"file-{i}.pdf", pdf, "application/pdf")) for i in range(6)],
+    )
+    assert too_many.status_code == 400
+    assert "5 files" in too_many.json()["detail"]
+
+    forbidden = client.post(
+        f"/chat/conversations/{conv_id}/attachments",
+        headers=other_student_user["headers"],
+        files=[("files", ("private.pdf", pdf, "application/pdf"))],
+    )
+    assert forbidden.status_code == 403
+
+    unauthenticated = client.post(
+        f"/chat/conversations/{conv_id}/attachments",
+        files=[("files", ("private.pdf", pdf, "application/pdf"))],
+    )
+    assert unauthenticated.status_code == 401
+

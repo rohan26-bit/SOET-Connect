@@ -23,11 +23,19 @@ class MessageCreateRequest(BaseModel):
         return trimmed
 
 
+class MessageAttachmentResponse(BaseModel):
+    id: str
+    file_name: str
+    mime_type: str
+    size_bytes: int
+
+
 class MessageResponse(BaseModel):
     id: str
     conversation_id: str
     sender_id: str
     content: str
+    attachments: list[MessageAttachmentResponse] = Field(default_factory=list)
     created_at: datetime
     read_by: list[str] = Field(default_factory=list)
     read_at: Optional[datetime] = None

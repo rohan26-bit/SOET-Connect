@@ -7,6 +7,7 @@ Supports both live PostgREST execution and fast isolated in-memory mock mode.
 """
 
 import os
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
@@ -147,7 +148,42 @@ _mock_store: Dict[str, List[dict]] = {
     "phone_verification_codes": [],
 }
 
+
 _mock_storage: Dict[str, bytes] = {}
+
+CHAT_ATTACHMENT_BUCKET = "chat-attachments"
+CHAT_ATTACHMENT_MESSAGE_PREFIX = "__SOET_CHAT_ATTACHMENTS_V1__:"
+
+
+def encode_chat_attachment_message(content: str, attachments: list[dict]) -> str:
+    """Store attachment metadata in the existing message content column without a DB migration."""
+    payload = {"version": 1, "content": content, "attachments": attachments}
+    return CHAT_ATTACHMENT_MESSAGE_PREFIX + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+def decode_chat_attachment_message(raw_content: str) -> dict:
+    """Decode attachment metadata while remaining compatible with all existing text messages."""
+    raw = raw_content or ""
+    if not raw.startswith(CHAT_ATTACHMENT_MESSAGE_PREFIX):
+        return {"content": raw, "attachments": []}
+
+    try:
+        payload = json.loads(raw[len(CHAT_ATTACHMENT_MESSAGE_PREFIX):])
+        attachments = payload.get("attachments", [])
+        if not isinstance(attachments, list):
+            attachments = []
+        content = str(payload.get("content") or "")
+        if not content and attachments:
+            count = len(attachments)
+            content = f"Shared {count} {'attachment' if count == 1 else 'attachments'}"
+        return {"content": content, "attachments": attachments}
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {"content": raw, "attachments": []}
+
+
+def chat_message_preview(raw_content: str) -> str:
+    """Return a short conversation-list preview instead of an internal metadata envelope."""
+    return decode_chat_attachment_message(raw_content).get("content", raw_content or "")
 
 
 def reset_mock_db():
@@ -577,6 +613,7 @@ class MockStorageBucket:
 
 
 class SupabaseStorageBucket:
+    _ensured_storage_buckets: set[str] = set()
     """Supabase Storage API bucket client."""
 
     def __init__(self, bucket: str, timeout: float = 10.0):
@@ -589,7 +626,45 @@ class SupabaseStorageBucket:
             "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
         }
 
+    def _ensure_chat_bucket(self) -> None:
+        """Create the private chat bucket on first use; existing buckets are left unchanged."""
+        if self.bucket != CHAT_ATTACHMENT_BUCKET or self.bucket in self._ensured_storage_buckets:
+            return
+
+        client = get_http_client(self.timeout)
+        bucket_url = f"{self.storage_url}/bucket/{self.bucket}"
+        check = client.get(bucket_url, headers=self.headers)
+        if check.status_code == 404:
+            create = client.post(
+                f"{self.storage_url}/bucket",
+                headers={**self.headers, "Content-Type": "application/json"},
+                json={
+                    "id": CHAT_ATTACHMENT_BUCKET,
+                    "name": CHAT_ATTACHMENT_BUCKET,
+                    "public": False,
+                    "file_size_limit": 10 * 1024 * 1024,
+                    "allowed_mime_types": [
+                        "application/pdf",
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        "image/jpeg",
+                        "image/png",
+                        "image/webp",
+                        "text/plain",
+                        "text/csv",
+                    ],
+                },
+            )
+            if not create.is_success and create.status_code != 409:
+                raise RuntimeError(f"Could not initialize private chat storage ({create.status_code}): {create.text}")
+        elif not check.is_success:
+            raise RuntimeError(f"Could not verify private chat storage ({check.status_code}): {check.text}")
+
+        self._ensured_storage_buckets.add(self.bucket)
+
     def upload(self, path: str, file_bytes: bytes, content_type: str = "application/octet-stream") -> dict:
+        self._ensure_chat_bucket()
         client = get_http_client(self.timeout)
         headers = {**self.headers, "Content-Type": content_type}
         url = f"{self.storage_url}/object/{self.bucket}/{path.lstrip('/')}"
@@ -1125,7 +1200,7 @@ class SupabaseConversationsCollection:
                 last_msg = {
                     "id": str(m["id"]),
                     "sender_id": str(m["sender_id"]),
-                    "content": m["content"],
+                    "content": chat_message_preview(m["content"]),
                     "created_at": m["created_at"],
                 }
                 last_msg_at = m["created_at"]

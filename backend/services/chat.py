@@ -1,8 +1,14 @@
 from datetime import datetime, timezone
+import uuid
 from typing import Optional, Union
 
 from fastapi import Depends, HTTPException, status
-from database import users_collection, conversations_collection, messages_collection
+from database import users_collection, conversations_collection, messages_collection, supabase
+from database_supabase import (
+    CHAT_ATTACHMENT_BUCKET,
+    decode_chat_attachment_message,
+    encode_chat_attachment_message,
+)
 from security.dependencies import get_current_user
 
 
@@ -67,12 +73,14 @@ def parse_object_id(id_val: str, error_detail: str = "Resource not found.") -> s
 
 
 def serialize_message(msg_doc: dict) -> dict:
-    """Format message document to API response dict."""
+    """Format message document and safely expose decoded attachment metadata."""
+    decoded = decode_chat_attachment_message(msg_doc.get("content", ""))
     return {
         "id": str(msg_doc["_id"]),
         "conversation_id": str(msg_doc.get("conversation_id")),
         "sender_id": str(msg_doc.get("sender_id")),
-        "content": msg_doc.get("content", ""),
+        "content": decoded["content"],
+        "attachments": decoded["attachments"],
         "created_at": msg_doc.get("created_at"),
         "read_by": [str(uid) for uid in msg_doc.get("read_by", [])],
         "read_at": msg_doc.get("read_at"),
@@ -367,6 +375,142 @@ def send_conversation_message(conversation_id: str, sender_id: str, content: str
     )
 
     return serialize_message(msg_doc)
+
+
+
+
+def ensure_conversation_participant(conversation_id: str, current_user_id: str) -> None:
+    """Reject file uploads before reading their bodies unless the caller is a conversation participant."""
+    conv_id = parse_object_id(conversation_id, "Conversation not found.")
+    conv = conversations_collection.find_one({"_id": conv_id})
+    if not conv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
+    participant_ids = [str(uid) for uid in conv.get("participant_ids", [])]
+    if current_user_id not in participant_ids:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this conversation.")
+    if current_user_id in [str(uid) for uid in conv.get("deleted_for", [])]:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
+
+
+def send_conversation_attachments(
+    conversation_id: str,
+    sender_id: str,
+    content: str,
+    files: list[dict],
+) -> dict:
+    """Upload validated attachments privately and send one message containing them."""
+    conv_id = parse_object_id(conversation_id, "Conversation not found.")
+    conv = conversations_collection.find_one({"_id": conv_id})
+    if not conv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
+
+    participant_ids = [str(uid) for uid in conv.get("participant_ids", [])]
+    if sender_id not in participant_ids:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this conversation.")
+
+    trimmed = (content or "").strip()
+    if len(trimmed) > 5000:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Message content exceeds maximum allowed length of 5000 characters.")
+    if not files:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Select at least one attachment.")
+
+    bucket = supabase.storage.from_(CHAT_ATTACHMENT_BUCKET)
+    upload_group = str(uuid.uuid4())
+    uploaded_paths: list[str] = []
+    attachment_records: list[dict] = []
+    message_saved = False
+
+    try:
+        for item in files:
+            attachment_id = str(uuid.uuid4())
+            safe_name = str(item["file_name"])
+            storage_path = f"{conv_id}/{upload_group}/{attachment_id}_{safe_name}"
+            bucket.upload(storage_path, item["content"], item["mime_type"])
+            uploaded_paths.append(storage_path)
+            attachment_records.append({
+                "id": attachment_id,
+                "file_name": safe_name,
+                "mime_type": item["mime_type"],
+                "size_bytes": len(item["content"]),
+                "storage_path": storage_path,
+            })
+
+        now = datetime.now(timezone.utc)
+        stored_content = encode_chat_attachment_message(trimmed, attachment_records)
+        msg_doc = {
+            "conversation_id": str(conv_id),
+            "sender_id": sender_id,
+            "content": stored_content,
+            "created_at": now.isoformat(),
+            "read_by": [sender_id],
+            "read_at": now.isoformat(),
+        }
+        result = messages_collection.insert_one(msg_doc)
+        msg_doc["_id"] = str(result.inserted_id)
+        message_saved = True
+
+        try:
+            conversations_collection.update_one(
+                {"_id": conv_id},
+                {
+                    "$set": {
+                        "last_message_at": now.isoformat(),
+                        "updated_at": now.isoformat(),
+                        "deleted_for": [],
+                    }
+                }
+            )
+        except Exception as update_error:
+            # The message is already committed; keep its uploaded files intact.
+            print("Warning: failed to update chat activity after attachment send:", update_error)
+        return serialize_message(msg_doc)
+    except Exception:
+        if uploaded_paths and not message_saved:
+            try:
+                bucket.delete(uploaded_paths)
+            except Exception as cleanup_error:
+                print("Warning: failed to clean up chat attachment upload:", cleanup_error)
+        raise
+
+
+def get_message_attachment(message_id: str, attachment_id: str, current_user_id: str) -> dict:
+    """Return an attachment only to an active participant of the message conversation."""
+    msg_id = parse_object_id(message_id, "Message not found.")
+    msg = messages_collection.find_one({"_id": msg_id})
+    if not msg:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found.")
+
+    conv_id = str(msg.get("conversation_id", "")).strip()
+    conv = conversations_collection.find_one({"_id": conv_id})
+    if not conv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
+
+    participant_ids = [str(uid) for uid in conv.get("participant_ids", [])]
+    if current_user_id not in participant_ids:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this attachment.")
+
+    decoded = decode_chat_attachment_message(msg.get("content", ""))
+    attachment = next(
+        (item for item in decoded["attachments"] if str(item.get("id")) == str(attachment_id)),
+        None,
+    )
+    if not attachment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found.")
+
+    storage_path = str(attachment.get("storage_path") or "")
+    if not storage_path.startswith(f"{conv_id}/") or ".." in storage_path.split("/"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found.")
+
+    content = supabase.storage.from_(CHAT_ATTACHMENT_BUCKET).download(storage_path)
+    if content is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment file is no longer available.")
+
+    return {
+        "content": content,
+        "file_name": str(attachment.get("file_name") or "attachment"),
+        "mime_type": str(attachment.get("mime_type") or "application/octet-stream"),
+        "size_bytes": len(content),
+    }
 
 
 def mark_message_as_read(message_id: str, current_user_id: str) -> dict:
