@@ -211,7 +211,6 @@ export default function StudentDashboard() {
                         View Full Notice
                       </button>
                     </div>
-                    <div className="hidden">
                   </div>
                 ))}
               </div>
