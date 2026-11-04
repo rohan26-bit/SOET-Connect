@@ -70,7 +70,7 @@ _CHAT_FILE_TYPES = {
 def _safe_chat_filename(filename: str, extension: str) -> str:
     raw = (filename or "").replace("\\", "/").split("/")[-1]
     stem = raw.rsplit(".", 1)[0] if "." in raw else "attachment"
-    safe_stem = re.sub(r"[^A-Za-z0-9 _-]", "_", stem).strip(" ._") or "attachment"
+    safe_stem = re.sub(r"[^A-Za-z0-9_-]", "_", stem).strip("._") or "attachment"
     return f"{safe_stem[:100]}{extension}"
 
 
