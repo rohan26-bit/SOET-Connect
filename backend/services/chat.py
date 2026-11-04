@@ -489,6 +489,16 @@ def get_message_attachment(message_id: str, attachment_id: str, current_user_id:
     if current_user_id not in participant_ids:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this attachment.")
 
+    # Archiving hides a conversation only for the participant who archived it.
+    # Match get_user_conversation/get_conversation_messages so that a hidden
+    # conversation's attachments are no longer accessible to that participant.
+    deleted_for = [str(uid) for uid in conv.get("deleted_for", [])]
+    if current_user_id in deleted_for:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found.",
+        )
+
     decoded = decode_chat_attachment_message(msg.get("content", ""))
     attachment = next(
         (item for item in decoded["attachments"] if str(item.get("id")) == str(attachment_id)),
