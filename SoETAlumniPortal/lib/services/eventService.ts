@@ -27,6 +27,7 @@ export interface EventItem {
   is_registered?: boolean;
   is_past?: boolean;
   is_registration_closed?: boolean;
+  is_expired?: boolean;
   attachment?: {
     name: string;
     type: string;
