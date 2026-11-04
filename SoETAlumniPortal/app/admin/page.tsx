@@ -4,7 +4,6 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import { adminService, AdminMetrics } from '@/lib/services/adminService';
-import DashboardPlacementCelebrations from '@/components/DashboardPlacementCelebrations';
 import {
   Users, GraduationCap, Briefcase, Calendar,
 } from 'lucide-react';
@@ -131,7 +130,6 @@ export default function AdminDashboard() {
 
       </div>
 
-      <DashboardPlacementCelebrations />
     </DashboardLayout>
   );
 }
