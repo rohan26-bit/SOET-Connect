@@ -51,3 +51,14 @@ def get_current_user(
         "role": user.get("role", payload.get("role")),
     }
 
+
+def get_optional_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security)
+) -> dict | None:
+    """Return the authenticated user when a token is supplied, otherwise None.
+
+    Invalid or expired tokens still fail closed through get_current_user.
+    """
+    if credentials is None:
+        return None
+    return get_current_user(credentials)
