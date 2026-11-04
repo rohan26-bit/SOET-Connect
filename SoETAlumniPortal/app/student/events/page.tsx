@@ -7,7 +7,7 @@ import PostedAt from '@/components/PostedAt';
 import EventDetailsModal from '@/components/EventDetailsModal';
 import { useAuth } from '@/components/AuthProvider';
 import { eventService, EventItem, EventAttendeeItem } from '@/lib/services/eventService';
-import { Calendar, MapPin, Clock, Plus, Users, CheckCircle2, AlertCircle, X } from 'lucide-react';
+import { Calendar, MapPin, Clock, Plus, Users, CheckCircle2, AlertCircle, X, ArrowRight } from 'lucide-react';
 import DocumentAttachment, {
   DocumentAttachmentData,
   DocumentAttachmentView,
