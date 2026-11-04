@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { authService } from '@/lib/services/authService';
 import { AlertCircle, ArrowRight, ShieldAlert } from 'lucide-react';
 import { ButtonSpinner } from '@/components/LoadingState';
+import PasswordInput from '@/components/PasswordInput';
 
 const DEPARTMENTS = [
   'Computer Engineering',
@@ -185,8 +186,7 @@ export default function StudentRegisterPage() {
                   <label className="block text-xs font-semibold text-[#4A3832] uppercase tracking-wider mb-1.5">
                     Password *
                   </label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     required
                     minLength={8}
                     value={formData.password}

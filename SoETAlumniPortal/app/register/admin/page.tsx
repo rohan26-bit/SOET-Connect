@@ -10,6 +10,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { ButtonSpinner } from '@/components/LoadingState';
+import PasswordInput from '@/components/PasswordInput';
 
 export default function AdminRegisterPage() {
   const router = useRouter();
@@ -164,8 +165,7 @@ export default function AdminRegisterPage() {
                   Password *
                 </label>
 
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   minLength={8}
                   value={formData.password}
@@ -186,8 +186,7 @@ export default function AdminRegisterPage() {
                   Admin Secret *
                 </label>
 
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   value={formData.adminSecret}
                   onChange={(e) =>
