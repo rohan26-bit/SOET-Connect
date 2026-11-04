@@ -30,11 +30,19 @@ export interface ParticipantInfo {
   role: string;
 }
 
+export interface ChatAttachment {
+  id: string;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number;
+}
+
 export interface ChatMessage {
   id: string;
   conversation_id: string;
   sender_id: string;
   content: string;
+  attachments: ChatAttachment[];
   created_at: string;
   read_by: string[];
   read_at?: string;
@@ -166,6 +174,43 @@ export const chatService = {
     );
 
     return await parseResponse(response);
+  },
+
+  // ============================================================
+  // SEND FILE ATTACHMENTS
+  // ============================================================
+
+  async sendAttachments(
+    conversationId: string,
+    content: string,
+    files: File[]
+  ): Promise<ChatMessage> {
+    const formData = new FormData();
+    formData.append('content', content);
+    files.forEach((file) => formData.append('files', file));
+
+    const response = await fetch(
+      API_URL + '/chat/conversations/' + encodeURIComponent(conversationId) + '/attachments',
+      {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + getToken() },
+        body: formData,
+      }
+    );
+    return await parseResponse(response);
+  },
+
+  async downloadAttachment(messageId: string, attachmentId: string): Promise<Blob> {
+    const response = await fetch(
+      API_URL + '/chat/messages/' + encodeURIComponent(messageId) + '/attachments/' + encodeURIComponent(attachmentId),
+      { headers: { Authorization: 'Bearer ' + getToken() } }
+    );
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      const detail = typeof data.detail === 'string' ? data.detail : 'Could not download this attachment.';
+      throw new Error(detail);
+    }
+    return response.blob();
   },
 
   // ============================================================
