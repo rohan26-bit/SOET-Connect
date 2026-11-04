@@ -6,6 +6,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
 import PostedAt from '@/components/PostedAt';
 import JobDetailsModal from '@/components/JobDetailsModal';
+import EventDetailsModal from '@/components/EventDetailsModal';
 import { useAuth } from '@/components/AuthProvider';
 import { jobService, JobItem } from '@/lib/services/jobService';
 import { eventService, EventItem } from '@/lib/services/eventService';
@@ -16,6 +17,7 @@ export default function StudentDashboard() {
   const { user, loading: authLoading } = useAuth();
   const [jobs, setJobs] = useState<JobItem[]>([]);
   const [viewingJob, setViewingJob] = useState<JobItem | null>(null);
+  const [viewingEvent, setViewingEvent] = useState<EventItem | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [jobsLoading, setJobsLoading] = useState(true);
@@ -235,9 +237,13 @@ export default function StudentDashboard() {
                     <PostedAt date={event.created_at} className="text-[10px] text-[#888888] block mt-1" />
                     <div className="mt-3 flex justify-between items-center">
                       <span className="text-[11px] text-[#888888] font-semibold">{event.registration_count} registered</span>
-                      <Link href="/student/events" className="text-xs font-bold text-[#F28C38] hover:underline">
-                        Details →
-                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => setViewingEvent(event)}
+                        className="text-xs font-bold text-[#F28C38] hover:underline"
+                      >
+                        View Details →
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -248,6 +254,7 @@ export default function StudentDashboard() {
 
       </div>
       <JobDetailsModal job={viewingJob} onClose={() => setViewingJob(null)} />
+      <EventDetailsModal event={viewingEvent} onClose={() => setViewingEvent(null)} />
     </DashboardLayout>
   );
 }
