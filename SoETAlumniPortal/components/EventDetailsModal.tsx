@@ -9,7 +9,6 @@ import {
   UserRound,
   Tag,
   X,
-  Image as ImageIcon,
 } from 'lucide-react';
 import { EventItem } from '@/lib/services/eventService';
 import { DocumentAttachmentView } from '@/components/DocumentAttachment';
@@ -38,15 +37,18 @@ function formatEventDate(value?: string): string {
 
 function formatEventDateTime(value?: string): string {
   const date = parseEventDate(value);
-  return date
-    ? date.toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
-    : 'Not specified';
+  if (!date) return 'Not specified';
+  if (value && /^\\d{4}-\\d{2}-\\d{2}$/.test(value)) {
+    return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  return date.toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
 function getSafeImageUrl(value?: string): string | null {
   if (!value) return null;
+  if (value.startsWith('/') && !value.startsWith('//')) return value;
   try {
-    const url = new URL(value, window.location.origin);
+    const url = new URL(value);
     return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null;
   } catch {
     return null;
@@ -73,6 +75,9 @@ export default function EventDetailsModal({
   if (!event) return null;
 
   const imageUrl = getSafeImageUrl(event.image_url);
+  const dateRange = event.end_date && event.end_date !== event.event_date
+    ? `${formatEventDate(event.event_date)} – ${formatEventDate(event.end_date)}`
+    : formatEventDate(event.event_date);
   const timeRange = [event.start_time, event.end_time].filter(Boolean).join(' – ');
   const actionClass = actionVariant === 'danger'
     ? 'bg-red-600 hover:bg-red-700'
@@ -154,7 +159,7 @@ export default function EventDetailsModal({
               <CalendarDays className="h-4 w-4 shrink-0 text-blue-600" />
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Event date</p>
-                <p className="break-words text-sm font-semibold text-slate-800">{formatEventDate(event.event_date)}</p>
+                <p className="break-words text-sm font-semibold text-slate-800">{dateRange}</p>
               </div>
             </div>
             <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3">
@@ -185,6 +190,15 @@ export default function EventDetailsModal({
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Registrations</p>
                 <p className="break-words text-sm font-semibold text-slate-800">{event.registration_count ?? 0} registered</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+              <Users className="h-4 w-4 shrink-0 text-emerald-600" />
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Your registration</p>
+                <p className={`break-words text-sm font-semibold ${event.is_registered ? 'text-emerald-700' : 'text-slate-800'}`}>
+                  {event.is_registered ? 'You are registered' : 'Not registered'}
+                </p>
               </div>
             </div>
           </div>
