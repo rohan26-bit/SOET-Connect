@@ -404,6 +404,7 @@ def send_conversation_attachments(
     upload_group = str(uuid.uuid4())
     uploaded_paths: list[str] = []
     attachment_records: list[dict] = []
+    message_saved = False
 
     try:
         for item in files:
@@ -432,20 +433,25 @@ def send_conversation_attachments(
         }
         result = messages_collection.insert_one(msg_doc)
         msg_doc["_id"] = str(result.inserted_id)
+        message_saved = True
 
-        conversations_collection.update_one(
-            {"_id": conv_id},
-            {
-                "$set": {
-                    "last_message_at": now.isoformat(),
-                    "updated_at": now.isoformat(),
-                    "deleted_for": [],
+        try:
+            conversations_collection.update_one(
+                {"_id": conv_id},
+                {
+                    "$set": {
+                        "last_message_at": now.isoformat(),
+                        "updated_at": now.isoformat(),
+                        "deleted_for": [],
+                    }
                 }
-            }
-        )
+            )
+        except Exception as update_error:
+            # The message is already committed; keep its uploaded files intact.
+            print("Warning: failed to update chat activity after attachment send:", update_error)
         return serialize_message(msg_doc)
     except Exception:
-        if uploaded_paths:
+        if uploaded_paths and not message_saved:
             try:
                 bucket.delete(uploaded_paths)
             except Exception as cleanup_error:
