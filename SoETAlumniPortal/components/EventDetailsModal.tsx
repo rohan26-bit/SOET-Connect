@@ -247,11 +247,11 @@ export default function EventDetailsModal({
           >
             Close
           </button>
-          {actionLabel && onAction && (
+          {actionLabel && (
             <button
               type="button"
               onClick={onAction}
-              disabled={actionDisabled}
+              disabled={actionDisabled || !onAction}
               className={`rounded-xl px-5 py-2.5 text-xs font-bold text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50 ${actionClass}`}
             >
               {actionLabel}
