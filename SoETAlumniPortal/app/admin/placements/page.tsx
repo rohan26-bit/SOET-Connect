@@ -66,7 +66,7 @@ export default function AdminPlacementsPage() {
       const uploaded = await galleryService.uploadPhoto({
         title: `Placement celebration — ${form.alumni_name.trim()}`,
         description: `Placement at ${form.company_name.trim()}`,
-        category: 'other',
+        category: 'placement',
         batch_year: form.batch_year || undefined,
         file: photoFile,
       });
@@ -152,7 +152,7 @@ export default function AdminPlacementsPage() {
             <label className="block text-xs font-semibold text-[#5D5048] mb-2">Alumni photograph * (JPG, PNG or WebP; max 8 MB)</label>
             <input type="file" required accept="image/jpeg,image/png,image/webp" onChange={(e) => setPhotoFile(e.target.files?.[0] || null)} className="block w-full text-xs text-[#6B6B6B] file:mr-3 file:rounded-lg file:border-0 file:bg-[#F28C38] file:px-3 file:py-2 file:text-white" />
             {photoFile && <p className="text-xs text-[#6B6B6B] mt-2 flex items-center gap-1"><ImagePlus className="w-3.5 h-3.5" />{photoFile.name}</p>}
-            <p className="text-[11px] text-[#83766D] mt-2">The photo is also submitted to the public alumni gallery using the existing gallery upload flow.</p>
+            <p className="text-[11px] text-[#83766D] mt-2">This image is stored securely for the placement celebration only. It will not appear in the Alumni Photo Gallery.</p>
           </div>
 
           <label className="flex items-start gap-2 text-xs text-[#5D5048]">

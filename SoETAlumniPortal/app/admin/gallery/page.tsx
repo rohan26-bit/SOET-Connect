@@ -40,6 +40,11 @@ export default function AdminGalleryPage() {
   const [rejectingPhoto, setRejectingPhoto] = useState<GalleryPhoto | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const [adminUploadFile, setAdminUploadFile] = useState<File | null>(null);
+  const [adminUploadTitle, setAdminUploadTitle] = useState('');
+  const [adminUploadCategory, setAdminUploadCategory] = useState('campus');
+  const [adminUploadDescription, setAdminUploadDescription] = useState('');
+  const [adminUploadLoading, setAdminUploadLoading] = useState(false);
 
   // Redirect non-admins
   useEffect(() => {
@@ -67,6 +72,32 @@ export default function AdminGalleryPage() {
       loadPhotos();
     }
   }, [user, loadPhotos]);
+
+  // Admin can add a gallery memory directly; admin submissions are published immediately.
+  const handleAdminUpload = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!adminUploadFile || !adminUploadTitle.trim()) return;
+    setAdminUploadLoading(true);
+    setError(null);
+    try {
+      await galleryService.uploadPhoto({
+        file: adminUploadFile,
+        title: adminUploadTitle.trim(),
+        description: adminUploadDescription.trim() || undefined,
+        category: adminUploadCategory,
+      });
+      setAdminUploadFile(null);
+      setAdminUploadTitle('');
+      setAdminUploadDescription('');
+      const fileInput = document.getElementById('admin-gallery-upload') as HTMLInputElement | null;
+      if (fileInput) fileInput.value = '';
+      await loadPhotos();
+    } catch (err: any) {
+      setError(err.message || 'Failed to add gallery photo.');
+    } finally {
+      setAdminUploadLoading(false);
+    }
+  };
 
   // Handle Approve
   const handleApprove = async (photoId: string) => {
@@ -154,6 +185,25 @@ export default function AdminGalleryPage() {
             </p>
           </div>
         </div>
+
+        {/* Admin gallery upload */}
+        <form onSubmit={handleAdminUpload} className="rounded-2xl border border-[#E5DDD5] bg-white p-4 sm:p-5 space-y-3">
+          <div>
+            <h2 className="text-sm font-bold text-[#4A3832]">Add Alumni Gallery Photo</h2>
+            <p className="text-xs text-[#83766D] mt-1">Administrator uploads are approved and published immediately. Placement celebrations belong in the separate Placement Celebrations section.</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <input required value={adminUploadTitle} onChange={(e) => setAdminUploadTitle(e.target.value)} placeholder="Photo title" className="w-full rounded-xl border border-[#DDD7D2] bg-[#FBF9F6] px-3 py-2.5 text-sm" />
+            <select value={adminUploadCategory} onChange={(e) => setAdminUploadCategory(e.target.value)} className="w-full rounded-xl border border-[#DDD7D2] bg-[#FBF9F6] px-3 py-2.5 text-sm">
+              <option value="reunion">Reunion</option><option value="campus">Campus Life</option><option value="convocation">Convocation</option><option value="sports">Sports</option><option value="cultural">Cultural</option><option value="other">Other</option>
+            </select>
+            <input value={adminUploadDescription} onChange={(e) => setAdminUploadDescription(e.target.value)} placeholder="Caption or memory note (optional)" className="w-full rounded-xl border border-[#DDD7D2] bg-[#FBF9F6] px-3 py-2.5 text-sm" />
+            <input id="admin-gallery-upload" type="file" required accept="image/jpeg,image/png,image/webp" onChange={(e) => setAdminUploadFile(e.target.files?.[0] || null)} className="w-full text-xs text-[#6B6B6B]" />
+          </div>
+          <div className="flex justify-end">
+            <button type="submit" disabled={adminUploadLoading || !adminUploadFile || !adminUploadTitle.trim()} className="rounded-xl bg-[#F28C38] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{adminUploadLoading ? 'Uploading…' : 'Publish Gallery Photo'}</button>
+          </div>
+        </form>
 
         {/* Status Tab Switcher */}
         <div className="flex gap-2 border-b border-[#E0DCD7] pb-2">
