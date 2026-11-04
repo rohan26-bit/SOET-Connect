@@ -342,8 +342,18 @@ export default function GalleryPage() {
               return (
                 <div
                   key={photo.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-haspopup="dialog"
+                  aria-label={`Open photo: ${photo.title}`}
                   onClick={() => setSelectedPhoto(photo)}
-                  className="group bg-white rounded-2xl border border-[#E0DCD7] overflow-hidden shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setSelectedPhoto(photo);
+                    }
+                  }}
+                  className="group bg-white rounded-2xl border border-[#E0DCD7] overflow-hidden shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F28C38] focus-visible:ring-offset-2"
                 >
                   {/* Photo container with anti-copy style */}
                   <div className="relative aspect-[4/3] bg-[#F7F4EF] overflow-hidden select-none">
@@ -412,10 +422,14 @@ export default function GalleryPage() {
         {/* LIGHTBOX VIEW MODAL */}
         {selectedPhoto && (
           <div
+            role="presentation"
             className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4"
             onClick={() => setSelectedPhoto(null)}
           >
             <div
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Photo details: ${selectedPhoto.title}`}
               className="bg-white rounded-3xl max-w-4xl w-full overflow-hidden shadow-2xl border border-white/20 animate-fadeIn"
               onClick={(e) => e.stopPropagation()}
             >
