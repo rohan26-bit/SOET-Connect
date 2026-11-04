@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { authService } from '@/lib/services/authService';
 import { Shield, GraduationCap, Users, AlertCircle, ArrowRight, Lock, Mail } from 'lucide-react';
 import { ButtonSpinner } from '@/components/LoadingState';
+import PasswordInput from '@/components/PasswordInput';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -148,17 +149,14 @@ export default function LoginPage() {
                   Forgot password?
                 </Link>
               </div>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-[#888888] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="block w-full pl-10 pr-4 py-3 bg-[#FBFAF8] border border-[#DDD7D2] rounded-xl text-[#222222] placeholder-[#888888] text-sm focus:outline-none focus:ring-2 focus:ring-[#F28C38] focus:border-[#F28C38] focus:bg-white transition"
-                />
-              </div>
+              <PasswordInput
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                leadingIcon={<Lock className="w-4 h-4 text-[#888888] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />}
+                className="block w-full pl-10 py-3 bg-[#FBFAF8] border border-[#DDD7D2] rounded-xl text-[#222222] placeholder-[#888888] text-sm focus:outline-none focus:ring-2 focus:ring-[#F28C38] focus:border-[#F28C38] focus:bg-white transition"
+              />
             </div>
 
             <button
