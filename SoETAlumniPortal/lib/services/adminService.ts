@@ -402,6 +402,21 @@ export const adminService = {
     return parseResponse(response);
   },
 
+  async deleteUserAccount(userId: string) {
+    const response = await fetch(
+      `${API_URL}/admin/users/${encodeURIComponent(userId)}`,
+      {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    return parseResponse(response);
+  },
+
   // ============================================================
   // PARTICIPATION & REGISTRATION MANAGEMENT
   // ============================================================

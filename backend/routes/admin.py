@@ -714,6 +714,76 @@ def toggle_user_active(
     }
 
 
+@router.delete("/users/{user_id}")
+def delete_user_account(
+    user_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Permanently delete a student or alumni account. Admin accounts are protected."""
+    _require_admin(current_user)
+
+    target_user = _find_user_by_id(user_id)
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    current_identity = str(current_user.get("user_id") or "")
+    target_identities = {
+        str(value)
+        for value in (
+            target_user.get("_id"),
+            target_user.get("id"),
+            target_user.get("_db_id"),
+            target_user.get("legacy_mongo_id"),
+        )
+        if value is not None
+    }
+    if current_identity and current_identity in target_identities:
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot delete your own account.",
+        )
+
+    target_role = target_user.get("role")
+    if target_role == "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Admin accounts cannot be deleted through user management.",
+        )
+    if target_role not in {"student", "alumni"}:
+        raise HTTPException(status_code=403, detail="This account type cannot be deleted here.")
+
+    database_user_id = target_user.get("_db_id") or target_user.get("id")
+    if not database_user_id:
+        raise HTTPException(status_code=404, detail="User record could not be resolved.")
+
+    try:
+        deleted_rows = (
+            supabase.table("users")
+            .delete()
+            .eq("id", str(database_user_id))
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "The account could not be deleted because a linked record prevented removal. "
+                "Suspend the account instead or review the database relationships."
+            ),
+        )
+
+    if not deleted_rows:
+        raise HTTPException(status_code=404, detail="User not found or already deleted.")
+
+    return {
+        "message": "User account permanently deleted.",
+        "user_id": str(user_id),
+        "role": target_role,
+    }
+
+
 # ============================================================
 # PARTICIPATION & REGISTRATIONS MANAGEMENT
 # ============================================================

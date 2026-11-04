@@ -6,9 +6,10 @@ import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
 import { adminService, UserManagementItem } from '@/lib/services/adminService';
 import UserDetailsModal from '@/components/admin/UserDetailsModal';
+import DeleteUserConfirmationModal from '@/components/admin/DeleteUserConfirmationModal';
 import { 
   GraduationCap, Search, Ban, CheckCircle2, 
-  Clock, XCircle, AlertCircle, ArrowRight, RefreshCw, Download, Eye
+  Clock, XCircle, AlertCircle, ArrowRight, RefreshCw, Download, Eye, Trash2
 } from 'lucide-react';
 
 export default function AdminStudentManagementPage() {
@@ -21,6 +22,9 @@ export default function AdminStudentManagementPage() {
   const [exporting, setExporting] = useState<boolean>(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<UserManagementItem | null>(null);
+  const [userToDelete, setUserToDelete] = useState<UserManagementItem | null>(null);
+  const [deletingUser, setDeletingUser] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const handleExportStudents = async () => {
     setExporting(true);
@@ -66,6 +70,22 @@ export default function AdminStudentManagementPage() {
       alert(err.message || 'Action failed');
     } finally {
       setProcessingId(null);
+    }
+  };
+
+  const handleDeleteStudent = async () => {
+    if (!userToDelete || deletingUser) return;
+    const target = userToDelete;
+    setDeletingUser(true);
+    setDeleteError(null);
+    try {
+      await adminService.deleteUserAccount(target.id);
+      setStudents((current) => current.filter((item) => item.id !== target.id));
+      setUserToDelete(null);
+    } catch (err: any) {
+      setDeleteError(err?.message || 'Failed to delete this account.');
+    } finally {
+      setDeletingUser(false);
     }
   };
 
@@ -354,30 +374,43 @@ export default function AdminStudentManagementPage() {
                             <Eye className="h-3.5 w-3.5" />
                             View Details
                           </button>
-                          {isPending ? (
+                          {isPending && (
                             <Link
                               href="/admin/students"
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-600 text-white transition shadow-sm"
                             >
                               Review Verification <ArrowRight className="w-3.5 h-3.5" />
                             </Link>
-                          ) : (
-                            <button
-                              disabled={isBusy}
-                              onClick={() => handleToggleActive(s)}
-                              className={`px-3 py-1.5 rounded-xl font-bold text-xs transition disabled:opacity-50 cursor-pointer ${
-                                s.is_active
-                                  ? 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
-                                  : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
-                              }`}
-                            >
-                              {isBusy
-                                ? 'Updating...'
-                                : s.is_active
-                                ? 'Suspend Account'
-                                : 'Reactivate'}
-                            </button>
                           )}
+                          <button
+                            disabled={isBusy}
+                            onClick={() => handleToggleActive(s)}
+                            className={`px-3 py-1.5 rounded-xl font-bold text-xs transition disabled:opacity-50 cursor-pointer ${
+                              s.is_active
+                                ? 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
+                                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                            }`}
+                          >
+                            {isBusy
+                              ? 'Updating...'
+                              : s.is_active
+                              ? 'Suspend Account'
+                              : 'Reactivate'}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={deletingUser}
+                            onClick={() => {
+                              setDeleteError(null);
+                              setUserToDelete(s);
+                            }}
+                            title={`Delete ${s.full_name} account permanently`}
+                            aria-label={`Delete ${s.full_name} account permanently`}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Delete
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -392,6 +425,18 @@ export default function AdminStudentManagementPage() {
       <UserDetailsModal
         user={selectedStudent}
         onClose={() => setSelectedStudent(null)}
+      />
+      <DeleteUserConfirmationModal
+        user={userToDelete}
+        isDeleting={deletingUser}
+        error={deleteError}
+        onClose={() => {
+          if (!deletingUser) {
+            setUserToDelete(null);
+            setDeleteError(null);
+          }
+        }}
+        onConfirm={handleDeleteStudent}
       />
     </DashboardLayout>
   );

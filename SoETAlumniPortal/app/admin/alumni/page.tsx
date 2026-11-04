@@ -4,8 +4,9 @@ import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
 import { adminService, UserManagementItem } from '@/lib/services/adminService';
-import { Users, Search, Download, AlertCircle, Eye } from 'lucide-react';
+import { Users, Search, Download, AlertCircle, Eye, Trash2 } from 'lucide-react';
 import UserDetailsModal from '@/components/admin/UserDetailsModal';
+import DeleteUserConfirmationModal from '@/components/admin/DeleteUserConfirmationModal';
 
 export default function AdminAlumniPage() {
   const [alumni, setAlumni] = useState<UserManagementItem[]>([]);
@@ -14,6 +15,9 @@ export default function AdminAlumniPage() {
   const [exporting, setExporting] = useState<boolean>(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [selectedAlumni, setSelectedAlumni] = useState<UserManagementItem | null>(null);
+  const [userToDelete, setUserToDelete] = useState<UserManagementItem | null>(null);
+  const [deletingUser, setDeletingUser] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const loadAlumni = async () => {
     setLoading(true);
@@ -37,6 +41,22 @@ export default function AdminAlumniPage() {
       loadAlumni();
     } catch (err: any) {
       alert(err.message || 'Action failed');
+    }
+  };
+
+  const handleDeleteAlumni = async () => {
+    if (!userToDelete || deletingUser) return;
+    const target = userToDelete;
+    setDeletingUser(true);
+    setDeleteError(null);
+    try {
+      await adminService.deleteUserAccount(target.id);
+      setAlumni((current) => current.filter((item) => item.id !== target.id));
+      setUserToDelete(null);
+    } catch (err: any) {
+      setDeleteError(err?.message || 'Failed to delete this account.');
+    } finally {
+      setDeletingUser(false);
     }
   };
 
@@ -195,6 +215,19 @@ export default function AdminAlumniPage() {
                         >
                           {a.is_active ? 'Suspend' : 'Reactivate'}
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeleteError(null);
+                            setUserToDelete(a);
+                          }}
+                          title={`Delete ${a.full_name} account permanently`}
+                          aria-label={`Delete ${a.full_name} account permanently`}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 transition hover:bg-rose-100"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -208,6 +241,18 @@ export default function AdminAlumniPage() {
       <UserDetailsModal
         user={selectedAlumni}
         onClose={() => setSelectedAlumni(null)}
+      />
+      <DeleteUserConfirmationModal
+        user={userToDelete}
+        isDeleting={deletingUser}
+        error={deleteError}
+        onClose={() => {
+          if (!deletingUser) {
+            setUserToDelete(null);
+            setDeleteError(null);
+          }
+        }}
+        onConfirm={handleDeleteAlumni}
       />
     </DashboardLayout>
   );
