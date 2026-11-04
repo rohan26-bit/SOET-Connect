@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import LoadingState from '@/components/LoadingState';
 import PostedAt from '@/components/PostedAt';
+import DashboardPlacementCelebrations from '@/components/DashboardPlacementCelebrations';
 
 export default function AlumniDashboard() {
   const { user } = useAuth();
@@ -367,6 +368,7 @@ export default function AlumniDashboard() {
         </div>
 
       </div>
+      <DashboardPlacementCelebrations />
     </DashboardLayout>
   );
 }
