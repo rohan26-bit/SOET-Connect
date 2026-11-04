@@ -93,9 +93,9 @@ async def _read_chat_upload(upload: UploadFile) -> dict:
 
     if extension == ".pdf" and not data.startswith(b"%PDF-"):
         raise HTTPException(status_code=415, detail="This file is not a valid PDF.")
-    elif extension in {".jpg", ".jpeg"} and not data.startswith(b"\\xff\\xd8\\xff"):
+    elif extension in {".jpg", ".jpeg"} and not data.startswith(b"\xff\xd8\xff"):
         raise HTTPException(status_code=415, detail="This file is not a valid JPEG image.")
-    elif extension == ".png" and not data.startswith(b"\\x89PNG\\r\\n\\x1a\\n"):
+    elif extension == ".png" and not data.startswith(b"\x89PNG\r\n\x1a\n"):
         raise HTTPException(status_code=415, detail="This file is not a valid PNG image.")
     elif extension == ".webp" and not (data.startswith(b"RIFF") and data[8:12] == b"WEBP"):
         raise HTTPException(status_code=415, detail="This file is not a valid WebP image.")
@@ -114,7 +114,7 @@ async def _read_chat_upload(upload: UploadFile) -> dict:
             data.decode("utf-8-sig")
         except UnicodeDecodeError:
             raise HTTPException(status_code=415, detail="Text and CSV attachments must use UTF-8 encoding.")
-        if b"\\x00" in data:
+        if b"\x00" in data:
             raise HTTPException(status_code=415, detail="The text attachment contains unsupported binary data.")
 
     return {
