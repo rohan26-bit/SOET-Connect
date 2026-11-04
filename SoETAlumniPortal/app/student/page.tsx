@@ -253,7 +253,7 @@ export default function StudentDashboard() {
                         onClick={() => setViewingEvent(event)}
                         className="text-xs font-bold text-[#F28C38] hover:underline"
                       >
-                        View Details →
+                        View Full Details →
                       </button>
                     </div>
                   </div>
