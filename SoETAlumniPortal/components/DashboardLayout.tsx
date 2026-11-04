@@ -34,7 +34,10 @@ const mainNavItems: NavItem[] = [
     id: 'gallery',
     name: 'Gallery',
     icon: ImageIcon,
-    children: [{ name: 'Explore Gallery', href: '/gallery' }],
+    children: [
+      { name: 'Explore Gallery', href: '/gallery' },
+      { name: 'Placement Celebrations', href: '/gallery/placements' },
+    ],
   },
   { name: 'Notifications', icon: Bell, href: '/student/notifications' },
   { name: 'My Profile', icon: User, href: '/student/profile' },
@@ -60,6 +63,7 @@ const alumniNavItems: NavItem[] = [
     children: [
       { name: 'Explore Gallery', href: '/gallery' },
       { name: 'My Submissions', href: '/gallery#mine' },
+      { name: 'Placement Celebrations', href: '/gallery/placements' },
     ],
   },
   { name: 'Notifications', icon: Bell, href: '/student/notifications' },
@@ -103,10 +107,11 @@ const adminNavItems: NavItem[] = [
     icon: ImageIcon,
     children: [
       { name: 'Public Gallery', href: '/gallery' },
+      { name: 'Placement Celebrations', href: '/gallery/placements' },
       { name: 'Gallery Moderation', href: '/admin/gallery' },
+      { name: 'Manage Placements', href: '/admin/placements' },
     ],
   },
-  { name: 'Placement Celebrations', icon: Award, href: '/admin/placements' },
   { name: 'Announcements', icon: Megaphone, href: '/admin/announcements' },
 ];
 
@@ -134,7 +139,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         ? 'alumni'
         : pathname === '/admin/students' || pathname.startsWith('/admin/student-management')
         ? 'students'
-        : pathname === '/admin/gallery' || pathname === '/gallery'
+        : pathname === '/admin/gallery' || pathname.startsWith('/gallery') || pathname === '/admin/placements'
         ? 'gallery'
         : null;
 
@@ -146,7 +151,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [pathname, user?.role]);
 
   useEffect(() => {
-    if (pathname === '/gallery') {
+    if (pathname === '/gallery' || pathname.startsWith('/gallery/')) {
       setExpandedAdminGroups((current) =>
         current.includes('gallery') ? current : [...current, 'gallery']
       );
@@ -184,7 +189,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Public visitors can browse the gallery without receiving a default student
   // dashboard menu. Keep navigation limited to the actual public destinations.
-  if (pathname === '/gallery' && !user) {
+  if (pathname.startsWith('/gallery') && !user) {
     return (
       <div className="min-h-screen bg-[#F7F4EF] font-sans text-[#222222]">
         <header className="sticky top-0 z-40 border-b border-[#DDD7D2] bg-white/95 shadow-sm backdrop-blur-md">
@@ -284,7 +289,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <div id={`sidebar-nav-${item.id}`} className="mt-1 ml-4 pl-3 border-l border-[#6B5147] space-y-1">
                     {item.children.map((child) => {
                       const childPath = child.href.split('?')[0];
-                      const isActive = pathname === childPath || pathname.startsWith(`${childPath}/`);
+                      const isActive = pathname === childPath || (childPath !== '/gallery' && pathname.startsWith(`${childPath}/`));
                       return (
                         <Link
                           key={child.href}

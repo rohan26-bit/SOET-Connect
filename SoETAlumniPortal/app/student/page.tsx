@@ -5,7 +5,6 @@ import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
 import PostedAt from '@/components/PostedAt';
-import DashboardPlacementCelebrations from '@/components/DashboardPlacementCelebrations';
 import { useAuth } from '@/components/AuthProvider';
 import { jobService, JobItem } from '@/lib/services/jobService';
 import { eventService, EventItem } from '@/lib/services/eventService';
@@ -88,7 +87,6 @@ export default function StudentDashboard() {
         </div>
       </div>
 
-      <DashboardPlacementCelebrations />
 
       {/* Metrics Row */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
