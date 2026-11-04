@@ -149,6 +149,56 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return <LoadingState message="Checking your session" fullPage />;
   }
 
+  // Public visitors can browse the gallery without receiving a default student
+  // dashboard menu. Keep navigation limited to the actual public destinations.
+  if (pathname === '/gallery' && !user) {
+    return (
+      <div className="min-h-screen bg-[#F7F4EF] font-sans text-[#222222]">
+        <header className="sticky top-0 z-40 border-b border-[#DDD7D2] bg-white/95 shadow-sm backdrop-blur-md">
+          <div className="mx-auto flex h-16 w-full max-w-[1600px] items-center justify-between px-4 sm:px-8">
+            <Link href="/" className="flex min-w-0 items-center gap-3" aria-label="SOET Connect home">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#DDD7D2] bg-white p-1 shadow-sm">
+                <img
+                  src="/mgm-university-logo.svg"
+                  alt="MGM University Logo"
+                  className="h-full w-full object-contain"
+                />
+              </span>
+              <span className="truncate text-sm font-bold text-[#4A3832] sm:text-base">
+                SOET Connect - Alumni Portal
+              </span>
+            </Link>
+            <nav aria-label="Public navigation" className="flex shrink-0 items-center gap-2 sm:gap-3">
+              <Link
+                href="/"
+                className="rounded-xl px-3 py-2 text-xs font-bold text-[#4A3832] transition hover:bg-[#F7F4EF] sm:px-4 sm:text-sm"
+              >
+                Home
+              </Link>
+              <Link
+                href="/login"
+                className="rounded-xl bg-[#F28C38] px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#E07D2E] sm:px-5 sm:text-sm"
+              >
+                Sign in
+              </Link>
+            </nav>
+          </div>
+        </header>
+
+        <main className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-8 sm:py-8">
+          {children}
+        </main>
+
+        <footer className="border-t border-[#DDD7D2] bg-white px-4 py-5 text-center text-xs text-[#6B6B6B]">
+          © {new Date().getFullYear()} SOET Connect - Alumni Portal. All rights reserved.
+          <Link href="/" className="ml-2 font-semibold text-[#C66A22] hover:underline">
+            Return to homepage
+          </Link>
+        </footer>
+      </div>
+    );
+  }
+
   const userName = user?.full_name || 'User';
   const userInitials = getInitials(userName);
   const firstName = getFirstName(userName);
