@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import PostedAt from '@/components/PostedAt';
+import PlacementDetailsModal from '@/components/PlacementDetailsModal';
 import { useAuth } from '@/components/AuthProvider';
 import { useRouter } from 'next/navigation';
 import { placementService, PlacementCelebration } from '@/lib/services/placementService';
@@ -13,6 +14,7 @@ export default function AdminPlacementsPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [records, setRecords] = useState<PlacementCelebration[]>([]);
+  const [viewingPlacement, setViewingPlacement] = useState<PlacementCelebration | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -189,7 +191,14 @@ export default function AdminPlacementsPage() {
                     <p className="text-xs text-[#8C8178] mt-1">{record.designation || 'Placement'}{record.batch_year ? ` · ${record.batch_year}` : ''}</p>
                     <PostedAt date={record.created_at} prefix="Added" className="text-[10px] text-[#8C8178] block mt-1" />
                     <span className={`inline-flex mt-2 rounded-full px-2 py-1 text-[10px] font-bold ${record.is_published ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>{record.is_published ? 'Published' : 'Draft'}</span>
-                    <div className="flex items-center gap-3 mt-3">
+                    <div className="flex flex-wrap items-center gap-3 mt-3">
+                      <button
+                        type="button"
+                        onClick={() => setViewingPlacement(record)}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 hover:underline"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> View Full Details
+                      </button>
                       <button onClick={() => handleTogglePublish(record)} className="inline-flex items-center gap-1 text-[11px] font-bold text-[#A75A24]">
                         {record.is_published ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}{record.is_published ? 'Unpublish' : 'Publish'}
                       </button>
@@ -202,6 +211,7 @@ export default function AdminPlacementsPage() {
           )}
         </section>
       </div>
+      <PlacementDetailsModal placement={viewingPlacement} onClose={() => setViewingPlacement(null)} showPublishingStatus />
     </DashboardLayout>
   );
 }
