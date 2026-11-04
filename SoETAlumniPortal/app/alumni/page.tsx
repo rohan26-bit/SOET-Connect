@@ -14,10 +14,12 @@ import {
 } from 'lucide-react';
 import LoadingState from '@/components/LoadingState';
 import PostedAt from '@/components/PostedAt';
+import JobDetailsModal from '@/components/JobDetailsModal';
 
 export default function AlumniDashboard() {
   const { user } = useAuth();
   const [myJobs, setMyJobs] = useState<JobItem[]>([]);
+  const [viewingJob, setViewingJob] = useState<JobItem | null>(null);
   const [myEvents, setMyEvents] = useState<EventItem[]>([]);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [aciData, setAciData] = useState<AlumniAciResponse | null>(null);
@@ -328,12 +330,21 @@ export default function AlumniDashboard() {
                     <p className="text-[11px] text-[#6B6B6B]">{j.company} • {j.location}</p>
                     <PostedAt date={j.created_at} className="text-[10px] text-[#888888] block mt-1" />
                   </div>
-                  <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full uppercase ${
-                    j.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
-                    j.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
-                  }`}>
-                    {j.status}
-                  </span>
+                  <div className="flex flex-col items-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setViewingJob(j)}
+                      className="text-[11px] font-bold text-blue-700 hover:underline"
+                    >
+                      View Details
+                    </button>
+                    <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full uppercase ${
+                      j.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                      j.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                    }`}>
+                      {j.status}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -367,6 +378,7 @@ export default function AlumniDashboard() {
         </div>
 
       </div>
+      <JobDetailsModal job={viewingJob} onClose={() => setViewingJob(null)} />
     </DashboardLayout>
   );
 }
