@@ -726,15 +726,6 @@ def delete_user_account(
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found.")
 
-    target_role = target_user.get("role")
-    if target_role == "admin":
-        raise HTTPException(
-            status_code=403,
-            detail="Admin accounts cannot be deleted through user management.",
-        )
-    if target_role not in {"student", "alumni"}:
-        raise HTTPException(status_code=403, detail="This account type cannot be deleted here.")
-
     current_identity = str(current_user.get("user_id") or "")
     target_identities = {
         str(value)
@@ -751,6 +742,15 @@ def delete_user_account(
             status_code=400,
             detail="You cannot delete your own account.",
         )
+
+    target_role = target_user.get("role")
+    if target_role == "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Admin accounts cannot be deleted through user management.",
+        )
+    if target_role not in {"student", "alumni"}:
+        raise HTTPException(status_code=403, detail="This account type cannot be deleted here.")
 
     database_user_id = target_user.get("_db_id") or target_user.get("id")
     if not database_user_id:
