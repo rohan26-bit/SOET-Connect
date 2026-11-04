@@ -478,6 +478,46 @@ def test_change_password_success(client, admin_user):
     assert login_new.status_code == 200
 
 
+@pytest.mark.parametrize("user_fixture", ["student_user", "verified_alumni_user"])
+def test_student_and_alumni_can_change_password(client, request, user_fixture):
+    """Students and verified alumni can securely change their own password from Account Settings."""
+    from routes.auth import password_hash
+    from database import users_collection
+
+    account = request.getfixturevalue(user_fixture)
+    old_password = "ExistingPassword123!"
+    new_password = "UpdatedPassword456!"
+
+    users_collection.update_one(
+        {"_id": account["id"]},
+        {"$set": {"password_hash": password_hash.hash(old_password)}},
+    )
+
+    response = client.post(
+        "/auth/change-password",
+        headers=account["headers"],
+        json={
+            "current_password": old_password,
+            "new_password": new_password,
+            "confirm_new_password": new_password,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["message"] == "Password changed successfully."
+
+    old_login = client.post(
+        "/auth/login",
+        json={"email": account["email"], "password": old_password},
+    )
+    assert old_login.status_code == 401
+
+    new_login = client.post(
+        "/auth/login",
+        json={"email": account["email"], "password": new_password},
+    )
+    assert new_login.status_code == 200
+
+
 def test_change_password_incorrect_current_password(client, admin_user):
     """Fails when current password does not match."""
     from routes.auth import password_hash

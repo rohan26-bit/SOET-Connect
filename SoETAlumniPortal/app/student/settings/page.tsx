@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import NotificationPreferencesCard from '@/components/NotificationPreferencesCard';
+import PasswordSecurityCard from '@/components/PasswordSecurityCard';
 import { Shield } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -48,6 +49,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="max-w-3xl space-y-8">
+        <PasswordSecurityCard />
         <NotificationPreferencesCard />
 
         {/* Privacy & Profile Visibility */}
