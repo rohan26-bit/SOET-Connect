@@ -9,7 +9,7 @@ import { eventService, EventItem } from '@/lib/services/eventService';
 import { useAuth } from '@/components/AuthProvider';
 import {
   Calendar, Plus, Trash2, MapPin, Clock, Users, X, Edit3,
-  CheckCircle2, XCircle, Eye, EyeOff, Search, Filter, ChevronDown, ChevronUp
+  CheckCircle2, XCircle, Eye, EyeOff, Search, Filter
 } from 'lucide-react';
 import DocumentAttachment, {
   DocumentAttachmentData,
@@ -115,7 +115,7 @@ export default function AdminEventsPage() {
       event_date: event.event_date,
       start_time: event.start_time || '',
       location: event.location,
-      event_type: '',
+      event_type: event.event_type || '',
       registration_deadline: event.registration_deadline || '',
       visibility: 'Everyone',
       attachment: event.attachment || null,
