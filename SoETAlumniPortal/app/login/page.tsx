@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { authService } from '@/lib/services/authService';
-import { Shield, GraduationCap, Users, AlertCircle, ArrowRight, Lock, Mail } from 'lucide-react';
+import { Shield, GraduationCap, Users, AlertCircle, ArrowRight, Lock, Mail, KeyRound } from 'lucide-react';
 import { ButtonSpinner } from '@/components/LoadingState';
 import PasswordInput from '@/components/PasswordInput';
 
@@ -138,16 +138,10 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-2">
+              <div className="mb-2">
                 <label className="block text-xs font-semibold text-[#4A3832] uppercase tracking-wider">
                   Password
                 </label>
-                <Link
-                  href="/forgot-password"
-                  className="text-xs font-semibold text-[#F28C38] hover:text-[#E07D2E] transition"
-                >
-                  Forgot password?
-                </Link>
               </div>
               <PasswordInput
                 required
@@ -177,6 +171,26 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+
+          <div className="mt-5 rounded-2xl border border-[#F28C38]/20 bg-[#FFF8F1] p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F28C38]/10 text-[#B86222]">
+                <KeyRound className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-[#4A3832]">Forgot your password?</p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-[#6B6B6B]">
+                  Recover your {role === 'student' ? 'student' : role === 'alumni' ? 'alumni' : 'admin'} account using your registered email or verified phone.
+                </p>
+              </div>
+              <Link
+                href="/forgot-password"
+                className="inline-flex shrink-0 items-center gap-1 rounded-xl bg-white px-3 py-2 text-[11px] font-bold text-[#A75A24] shadow-sm ring-1 ring-[#EAD8C7] transition hover:bg-[#FCEBDD] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F28C38]"
+              >
+                Reset <ArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
+          </div>
 
           <div className="mt-6 text-center border-t border-[#DDD7D2] pt-5">
             <p className="text-xs text-[#6B6B6B]">
