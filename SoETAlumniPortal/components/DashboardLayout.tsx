@@ -59,7 +59,7 @@ const alumniNavItems: NavItem[] = [
     icon: ImageIcon,
     children: [
       { name: 'Explore Gallery', href: '/gallery' },
-      { name: 'My Submissions', href: '/gallery?tab=mine' },
+      { name: 'My Submissions', href: '/gallery#mine' },
     ],
   },
   { name: 'Notifications', icon: Bell, href: '/student/notifications' },
