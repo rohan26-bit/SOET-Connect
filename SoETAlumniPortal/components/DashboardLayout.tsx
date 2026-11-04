@@ -289,7 +289,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <div id={`sidebar-nav-${item.id}`} className="mt-1 ml-4 pl-3 border-l border-[#6B5147] space-y-1">
                     {item.children.map((child) => {
                       const childPath = child.href.split('?')[0];
-                      const isActive = pathname === childPath || pathname.startsWith(`${childPath}/`);
+                      const isActive = pathname === childPath || (childPath !== '/gallery' && pathname.startsWith(`${childPath}/`));
                       return (
                         <Link
                           key={child.href}
