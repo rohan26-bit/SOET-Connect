@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
 import PostedAt from '@/components/PostedAt';
+import EventDetailsModal from '@/components/EventDetailsModal';
 import { useAuth } from '@/components/AuthProvider';
 import { eventService, EventItem, EventAttendeeItem } from '@/lib/services/eventService';
 import { Calendar, MapPin, Clock, Plus, Users, CheckCircle2, AlertCircle, X } from 'lucide-react';
@@ -17,6 +18,7 @@ export default function EventsPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [viewingEvent, setViewingEvent] = useState<EventItem | null>(null);
 
   // Create Event Modal
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -217,6 +219,13 @@ export default function EventsPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setViewingEvent(event)}
+                    className="px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-xs font-bold text-blue-700 transition hover:bg-blue-100"
+                  >
+                    View Full Details
+                  </button>
                   {(event.created_by === user?.id || user?.role === 'admin') && (
                     <button
                       onClick={() => viewAttendees(event.id)}
@@ -256,6 +265,34 @@ export default function EventsPage() {
           ))}
         </div>
       )}
+
+      <EventDetailsModal
+        event={viewingEvent}
+        onClose={() => setViewingEvent(null)}
+        actionLabel={
+          viewingEvent?.is_registered
+            ? 'Cancel Registration'
+            : viewingEvent?.is_past
+              ? 'Event Has Ended'
+              : viewingEvent?.is_registration_closed
+                ? 'Registration Closed'
+                : 'Register for Event'
+        }
+        onAction={
+          viewingEvent && !viewingEvent.is_past && !viewingEvent.is_registration_closed
+            ? () => {
+                if (viewingEvent.is_registered) {
+                  void handleCancelRegistration(viewingEvent.id);
+                } else {
+                  void handleRegister(viewingEvent.id);
+                }
+                setViewingEvent(null);
+              }
+            : undefined
+        }
+        actionDisabled={Boolean(viewingEvent && actionLoading === viewingEvent.id) || Boolean(viewingEvent?.is_past || viewingEvent?.is_registration_closed)}
+        actionVariant={viewingEvent?.is_registered ? 'danger' : 'primary'}
+      />
 
       {/* Attendees Modal */}
       {selectedEventId && (
