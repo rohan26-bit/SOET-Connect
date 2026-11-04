@@ -926,3 +926,84 @@ def test_existing_alumni_verification_flow_still_works():
     u = users_collection.find_one({"_id": alumni_id})
     assert u["is_verified"] is True
     assert u["verification_status"] == "approved"
+
+
+# ============================================================
+# PERMANENT USER ACCOUNT DELETION
+# ============================================================
+
+def test_admin_can_permanently_delete_student(client, admin_user, student_user):
+    """Admin can permanently delete a student account."""
+    assert users_collection.find_one({"_id": student_user["id"]}) is not None
+
+    response = client.delete(
+        f"/admin/users/{student_user['id']}",
+        headers=admin_user["headers"],
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "User account permanently deleted."
+    assert response.json()["role"] == "student"
+    assert users_collection.find_one({"_id": student_user["id"]}) is None
+
+
+def test_admin_can_permanently_delete_alumni(client, admin_user, verified_alumni_user):
+    """Admin can permanently delete an alumni account."""
+    assert users_collection.find_one({"_id": verified_alumni_user["id"]}) is not None
+
+    response = client.delete(
+        f"/admin/users/{verified_alumni_user['id']}",
+        headers=admin_user["headers"],
+    )
+
+    assert response.status_code == 200
+    assert response.json()["role"] == "alumni"
+    assert users_collection.find_one({"_id": verified_alumni_user["id"]}) is None
+
+
+def test_admin_cannot_delete_own_or_another_admin_account(client, admin_user):
+    """An admin cannot delete their own account or another admin account."""
+    own_response = client.delete(
+        f"/admin/users/{admin_user['id']}",
+        headers=admin_user["headers"],
+    )
+    assert own_response.status_code == 400
+    assert "own account" in own_response.json()["detail"].lower()
+
+    other_admin_id = "second-admin-account"
+    users_collection.insert_one({
+        "_id": other_admin_id,
+        "name": "Second Admin",
+        "email": "second.admin@example.com",
+        "password_hash": "test-hash",
+        "role": "admin",
+        "is_active": True,
+        "is_verified": True,
+        "verification_status": "approved",
+    })
+    other_response = client.delete(
+        f"/admin/users/{other_admin_id}",
+        headers=admin_user["headers"],
+    )
+    assert other_response.status_code == 403
+    assert "admin accounts" in other_response.json()["detail"].lower()
+    assert users_collection.find_one({"_id": other_admin_id}) is not None
+
+
+def test_delete_user_requires_admin_and_existing_target(client, student_user, admin_user):
+    """Only admins can delete users, and missing accounts return 404."""
+    unauthenticated = client.delete(f"/admin/users/{student_user['id']}")
+    assert unauthenticated.status_code == 401
+
+    non_admin = client.delete(
+        f"/admin/users/{student_user['id']}",
+        headers=student_user["headers"],
+    )
+    assert non_admin.status_code == 403
+    assert users_collection.find_one({"_id": student_user["id"]}) is not None
+
+    missing = client.delete(
+        "/admin/users/nonexistent-account-id",
+        headers=admin_user["headers"],
+    )
+    assert missing.status_code == 404
