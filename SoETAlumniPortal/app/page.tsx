@@ -6,7 +6,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#F7F4EF] flex flex-col font-sans text-[#222222] overflow-x-hidden">
       {/* Navigation */}
-      <nav className="h-16 flex items-center px-6 sm:px-8 bg-white/95 backdrop-blur-md border-b border-[#DDD7D2] sticky top-0 z-40 shadow-sm">
+      <nav className="h-16 flex items-center justify-between gap-4 px-6 sm:px-8 bg-white/95 backdrop-blur-md border-b border-[#DDD7D2] sticky top-0 z-40 shadow-sm">
         <div className="flex items-center gap-3 font-semibold text-base sm:text-lg text-[#4A3832]">
           <div className="w-10 h-10 sm:w-11 sm:h-11 bg-white rounded-xl flex items-center justify-center p-1 shadow-sm border border-[#DDD7D2] shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -18,6 +18,12 @@ export default function LandingPage() {
           </div>
           <span className="truncate">SOET Connect - Alumni Portal</span>
         </div>
+        <Link
+          href="/gallery"
+          className="shrink-0 rounded-xl border border-[#DDD7D2] px-4 py-2 text-xs font-bold text-[#4A3832] transition hover:border-[#F28C38] hover:bg-[#FBFAF8] sm:text-sm"
+        >
+          Photo Gallery
+        </Link>
       </nav>
 
       {/* Hero Section - Full-Width Campus Photo with Layered Gradient Overlay */}
