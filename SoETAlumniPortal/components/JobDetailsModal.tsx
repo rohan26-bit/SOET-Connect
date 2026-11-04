@@ -31,6 +31,16 @@ function formatDeadline(value?: string): string | null {
     : date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+function safeApplicationUrl(value?: string): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function JobDetailsModal({
   job,
   onClose,
@@ -50,6 +60,9 @@ export default function JobDetailsModal({
   if (!job) return null;
 
   const deadline = formatDeadline(job.application_deadline || job.deadline);
+  const applicationUrl = safeApplicationUrl(job.application_url);
+  const postedDate = new Date(job.created_at);
+  const postedDateLabel = Number.isNaN(postedDate.getTime()) ? 'Date unavailable' : postedDate.toLocaleDateString();
 
   return (
     <div
@@ -152,16 +165,16 @@ export default function JobDetailsModal({
             </section>
           )}
 
-          {job.application_url && (
+          {applicationUrl && (
             <section>
               <h3 className="mb-2 text-sm font-extrabold text-slate-900">Application Link</h3>
               <a
-                href={job.application_url}
+                href={applicationUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex max-w-full items-center gap-2 break-all text-sm font-semibold text-blue-700 hover:underline"
               >
-                {job.application_url}
+                {applicationUrl}
                 <ExternalLink className="h-3.5 w-3.5 shrink-0" />
               </a>
             </section>
@@ -172,7 +185,7 @@ export default function JobDetailsModal({
               <UserRound className="h-3.5 w-3.5" />
               Posted by {job.poster_name || 'SOET Alumni'}
             </span>
-            <span>Posted {new Date(job.created_at).toLocaleDateString()}</span>
+            <span>Posted {postedDateLabel}</span>
           </div>
         </div>
 
