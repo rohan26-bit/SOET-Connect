@@ -218,7 +218,7 @@ export default function EventsPage() {
                   <span>{event.registration_count} Attendees</span>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2">
                   <button
                     type="button"
                     onClick={() => setViewingEvent(event)}
