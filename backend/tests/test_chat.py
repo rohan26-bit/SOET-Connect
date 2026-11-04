@@ -553,6 +553,32 @@ def test_send_and_download_chat_attachment(client, student_user, verified_alumni
     assert history.status_code == 200
     assert history.json()[0]["attachments"][0]["id"] == attachment["id"]
 
+    # Archiving hides the conversation and its attachments only for that user.
+    archived = client.delete(
+        f"/chat/conversations/{conv_id}",
+        headers=student_user["headers"],
+    )
+    assert archived.status_code == 200
+
+    hidden_download = client.get(download_url, headers=student_user["headers"])
+    assert hidden_download.status_code == 404
+
+    # Upload attempts are also rejected while the sender's conversation is archived.
+    archived_upload = client.post(
+        f"/chat/conversations/{conv_id}/attachments",
+        headers=student_user["headers"],
+        files=[("files", ("another.pdf", pdf_bytes, "application/pdf"))],
+    )
+    assert archived_upload.status_code == 404
+
+    # The other participant's view is unaffected by someone else's archive.
+    other_participant_download = client.get(
+        download_url,
+        headers=verified_alumni_user["headers"],
+    )
+    assert other_participant_download.status_code == 200
+    assert other_participant_download.content == pdf_bytes
+
 
 def test_chat_attachment_message_supports_multiple_files(client, student_user, verified_alumni_user):
     conv_res = client.post(
