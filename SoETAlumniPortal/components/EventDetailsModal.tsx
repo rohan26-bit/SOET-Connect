@@ -38,7 +38,7 @@ function formatEventDate(value?: string): string {
 function formatEventDateTime(value?: string): string {
   const date = parseEventDate(value);
   if (!date) return 'Not specified';
-  if (value && /^\\d{4}-\\d{2}-\\d{2}$/.test(value)) {
+  if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
   }
   return date.toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
