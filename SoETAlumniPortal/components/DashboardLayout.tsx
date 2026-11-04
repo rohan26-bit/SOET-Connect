@@ -29,7 +29,13 @@ const mainNavItems: NavItem[] = [
   { name: 'Jobs & Internships', icon: Briefcase, href: '/student/jobs' },
   { name: 'Events', icon: Calendar, href: '/student/events' },
   { name: 'Messages & Chat', icon: MessageSquare, href: '/student/chat' },
-  { name: 'Gallery', icon: ImageIcon, href: '/gallery' },
+  {
+    type: 'group',
+    id: 'gallery',
+    name: 'Gallery',
+    icon: ImageIcon,
+    children: [{ name: 'Explore Gallery', href: '/gallery' }],
+  },
   { name: 'Notifications', icon: Bell, href: '/student/notifications' },
   { name: 'My Profile', icon: User, href: '/student/profile' },
 ];
@@ -46,7 +52,16 @@ const alumniNavItems: NavItem[] = [
   { name: 'Events', icon: Calendar, href: '/student/events' },
   { name: 'Achievements', icon: Award, href: '/alumni/achievements' },
   { name: 'Messages & Chat', icon: MessageSquare, href: '/student/chat' },
-  { name: 'Gallery', icon: ImageIcon, href: '/gallery' },
+  {
+    type: 'group',
+    id: 'gallery',
+    name: 'Gallery',
+    icon: ImageIcon,
+    children: [
+      { name: 'Explore Gallery', href: '/gallery' },
+      { name: 'My Submissions', href: '/gallery#mine' },
+    ],
+  },
   { name: 'Notifications', icon: Bell, href: '/student/notifications' },
   { name: 'My Profile', icon: User, href: '/student/profile' },
 ];
@@ -81,13 +96,21 @@ const adminNavItems: NavItem[] = [
   { name: 'Job Approvals', icon: Briefcase, href: '/admin/jobs' },
   { name: 'Participation & Registrations', icon: UserCheck, href: '/admin/participation' },
   { name: 'Events', icon: Calendar, href: '/admin/events' },
-  { name: 'Gallery Moderation', icon: ImageIcon, href: '/admin/gallery' },
+  {
+    type: 'group',
+    id: 'gallery',
+    name: 'Gallery',
+    icon: ImageIcon,
+    children: [
+      { name: 'Public Gallery', href: '/gallery' },
+      { name: 'Gallery Moderation', href: '/admin/gallery' },
+    ],
+  },
   { name: 'Placement Celebrations', icon: Award, href: '/admin/placements' },
   { name: 'Announcements', icon: Megaphone, href: '/admin/announcements' },
 ];
 
 const adminMoreNavItems = [
-  { name: 'Public Gallery', icon: ImageIcon, href: '/gallery' },
   { name: 'Settings', icon: Settings, href: '/admin/settings' },
 ];
 
@@ -111,6 +134,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         ? 'alumni'
         : pathname === '/admin/students' || pathname.startsWith('/admin/student-management')
         ? 'students'
+        : pathname === '/admin/gallery' || pathname === '/gallery'
+        ? 'gallery'
         : null;
 
     if (activeGroup) {
@@ -119,6 +144,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       );
     }
   }, [pathname, user?.role]);
+
+  useEffect(() => {
+    if (pathname === '/gallery') {
+      setExpandedAdminGroups((current) =>
+        current.includes('gallery') ? current : [...current, 'gallery']
+      );
+    }
+  }, [pathname]);
 
   // Close mobile navigation on Escape key press
   useEffect(() => {
@@ -233,7 +266,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   type="button"
                   onClick={() => toggleAdminGroup(item.id)}
                   aria-expanded={isExpanded}
-                  aria-controls={`admin-nav-${item.id}`}
+                  aria-controls={`sidebar-nav-${item.id}`}
                   className={`flex items-center justify-between w-full px-3 py-2.5 rounded-xl transition-all duration-150 ${
                     isGroupActive
                       ? 'bg-[#5A453D] text-white font-semibold'
@@ -248,9 +281,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </button>
 
                 {isExpanded && (
-                  <div id={`admin-nav-${item.id}`} className="mt-1 ml-4 pl-3 border-l border-[#6B5147] space-y-1">
+                  <div id={`sidebar-nav-${item.id}`} className="mt-1 ml-4 pl-3 border-l border-[#6B5147] space-y-1">
                     {item.children.map((child) => {
-                      const isActive = pathname === child.href || pathname.startsWith(`${child.href}/`);
+                      const childPath = child.href.split('?')[0];
+                      const isActive = pathname === childPath || pathname.startsWith(`${childPath}/`);
                       return (
                         <Link
                           key={child.href}

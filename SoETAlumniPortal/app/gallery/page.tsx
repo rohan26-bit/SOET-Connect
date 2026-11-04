@@ -44,6 +44,16 @@ export default function GalleryPage() {
   // View state: 'explore' | 'mine'
   const [activeTab, setActiveTab] = useState<'explore' | 'mine'>('explore');
 
+  // Allow role-specific sidebar shortcuts to open the relevant gallery view.
+  useEffect(() => {
+    const syncTabFromHash = () => {
+      setActiveTab(window.location.hash === '#mine' ? 'mine' : 'explore');
+    };
+    syncTabFromHash();
+    window.addEventListener('hashchange', syncTabFromHash);
+    return () => window.removeEventListener('hashchange', syncTabFromHash);
+  }, []);
+
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
