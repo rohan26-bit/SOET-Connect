@@ -6,11 +6,13 @@ import { ArrowRight, Award, Image as ImageIcon, Sparkles } from 'lucide-react';
 import { placementService, PlacementCelebration } from '@/lib/services/placementService';
 import { GalleryPhoto } from '@/lib/services/galleryService';
 import PostedAt from '@/components/PostedAt';
+import PlacementDetailsModal from '@/components/PlacementDetailsModal';
 
 export default function HomepageCommunitySections() {
   const [placements, setPlacements] = useState<PlacementCelebration[]>([]);
   const [photos, setPhotos] = useState<GalleryPhoto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewingPlacement, setViewingPlacement] = useState<PlacementCelebration | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -89,7 +91,14 @@ export default function HomepageCommunitySections() {
                       {[placement.department, placement.batch_year ? `Batch ${placement.batch_year}` : ''].filter(Boolean).join(' · ') || 'SOET Alumni'}
                     </p>
                     <PostedAt date={placement.created_at} className="text-[10px] text-[#8C8178] block mt-1" />
-                    {placement.message && <p className="text-xs text-[#6B6B6B] mt-3 line-clamp-3">{placement.message}</p>}
+                    {placement.message && <p className="text-xs text-[#6B6B6B] mt-3 line-clamp-3 whitespace-pre-wrap">{placement.message}</p>}
+                    <button
+                      type="button"
+                      onClick={() => setViewingPlacement(placement)}
+                      className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-[#A75A24] hover:text-[#7C3E16] hover:underline"
+                    >
+                      Read Full Story <ArrowRight className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 </article>
               ))}
@@ -136,6 +145,7 @@ export default function HomepageCommunitySections() {
           )}
         </div>
       </section>
+      <PlacementDetailsModal placement={viewingPlacement} onClose={() => setViewingPlacement(null)} />
       <style jsx global>{`
         @keyframes soet-placement-marquee {
           from { transform: translateX(0); }
