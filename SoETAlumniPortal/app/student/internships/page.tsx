@@ -86,19 +86,21 @@ export default function InternshipsPage() {
                 </div>
               )}
 
-              <button
-                type="button"
-                onClick={() => setViewingJob(job)}
-                className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100"
-              >
-                View Details
-              </button>
-              <Link
-                href="/student/jobs"
-                className="px-5 py-2.5 bg-slate-900 hover:bg-blue-600 text-white text-xs font-bold rounded-xl transition text-center shrink-0"
-              >
-                Apply via Jobs Portal
-              </Link>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setViewingJob(job)}
+                  className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100"
+                >
+                  View Details
+                </button>
+                <Link
+                  href="/student/jobs"
+                  className="rounded-xl bg-slate-900 px-5 py-2.5 text-center text-xs font-bold text-white transition hover:bg-blue-600"
+                >
+                  Apply via Jobs Portal
+                </Link>
+              </div>
             </div>
           ))}
         </div>
