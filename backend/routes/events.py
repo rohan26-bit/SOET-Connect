@@ -37,8 +37,8 @@ def parse_iso_datetime(dt_str: str | None) -> datetime | None:
         return None
     try:
         if len(s) == 10 and s[4] == '-' and s[7] == '-':
-            # Treat date-only deadline as end of that day in UTC
-            return datetime.fromisoformat(s).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+            # Date-only deadlines expire at the end of that calendar day in India.
+            return datetime.fromisoformat(s).replace(hour=23, minute=59, second=59, tzinfo=KOLKATA_TZ)
         if s.endswith("Z"):
             s = s[:-1] + "+00:00"
         dt = datetime.fromisoformat(s)
@@ -62,6 +62,14 @@ def is_event_past(event: dict) -> bool:
         return event_dt < today_ist
     except Exception:
         return False
+
+
+def is_event_expired(event: dict) -> bool:
+    """Return True when an event's explicit registration deadline or event date has passed."""
+    if is_event_past(event):
+        return True
+    deadline = parse_iso_datetime(event.get("registration_deadline"))
+    return bool(deadline and datetime.now(timezone.utc) > deadline)
 
 
 def is_event_registration_closed(event: dict) -> bool:
@@ -321,10 +329,12 @@ def get_events(
         status = event.get("status")
         creator_id = str(event.get("created_by"))
 
-        # Visibility: Admin sees all; non-admin sees approved unexpired events or own events
-        is_past = event.get("is_past", False)
-        if role == "admin" or creator_id == user_id or (status == "approved" and not is_past):
+        # Keep expired records available to admins and their creators, but remove
+        # them from every public active feed once the deadline/event date passes.
+        expired = is_event_expired(event)
+        if role == "admin" or creator_id == user_id or (status == "approved" and not expired):
             ev_copy = dict(event)
+            ev_copy["is_expired"] = expired
             if not ev_copy.get("event_date") and ev_copy.get("start_date"):
                 ev_copy["event_date"] = ev_copy["start_date"]
 
@@ -455,7 +465,10 @@ def get_event_details(
 
     if (
         role != "admin"
-        and event.get("status") != "approved"
+        and (
+            event.get("status") != "approved"
+            or is_event_expired(event)
+        )
         and str(event.get("created_by")) != user_id
     ):
         raise HTTPException(
@@ -476,6 +489,8 @@ def get_event_details(
 
     ev_copy["registration_count"] = reg_count
     ev_copy["is_registered"] = is_reg
+    ev_copy["is_expired"] = is_event_expired(event)
+    ev_copy["is_registration_closed"] = is_event_registration_closed(event)
 
     return ev_copy
 
