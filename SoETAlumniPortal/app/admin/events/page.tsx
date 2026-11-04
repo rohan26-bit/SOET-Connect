@@ -8,7 +8,7 @@ import { eventService, EventItem } from '@/lib/services/eventService';
 import { useAuth } from '@/components/AuthProvider';
 import {
   Calendar, Plus, Trash2, MapPin, Clock, Users, X, Edit3,
-  CheckCircle2, XCircle, Eye, EyeOff, Search, Filter
+  CheckCircle2, XCircle, Eye, EyeOff, Search, Filter, ChevronDown, ChevronUp
 } from 'lucide-react';
 import DocumentAttachment, {
   DocumentAttachmentData,
@@ -54,6 +54,7 @@ export default function AdminEventsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'past'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [expandedEventDescriptions, setExpandedEventDescriptions] = useState<Record<string, boolean>>({});
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
@@ -319,9 +320,38 @@ export default function AdminEventsPage() {
                   </div>
                 </div>
 
-                <p className="text-xs text-slate-600 line-clamp-2 my-3 bg-slate-50 p-3 rounded-xl leading-relaxed">
-                  {event.description}
-                </p>
+                <div className="my-3 rounded-xl bg-slate-50 p-3">
+                  <p
+                    id={`event-description-${event.id}`}
+                    className={`text-xs text-slate-600 leading-relaxed whitespace-pre-wrap break-words ${
+                      expandedEventDescriptions[event.id] ? '' : 'line-clamp-3'
+                    }`}
+                  >
+                    {event.description || 'No description provided.'}
+                  </p>
+                  {(event.description || '').length > 180 && (
+                    <button
+                      type="button"
+                      aria-expanded={Boolean(expandedEventDescriptions[event.id])}
+                      aria-controls={`event-description-${event.id}`}
+                      onClick={() => setExpandedEventDescriptions((current) => ({
+                        ...current,
+                        [event.id]: !current[event.id],
+                      }))}
+                      className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-blue-600 transition hover:text-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 rounded"
+                    >
+                      {expandedEventDescriptions[event.id] ? (
+                        <>
+                          Show less <ChevronUp className="h-3.5 w-3.5" />
+                        </>
+                      ) : (
+                        <>
+                          Read full description <ChevronDown className="h-3.5 w-3.5" />
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
 
                 <div className="flex items-center justify-between text-[11px] text-slate-400">
                   <span>
