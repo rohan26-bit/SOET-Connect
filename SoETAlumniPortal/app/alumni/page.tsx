@@ -15,11 +15,13 @@ import {
 import LoadingState from '@/components/LoadingState';
 import PostedAt from '@/components/PostedAt';
 import JobDetailsModal from '@/components/JobDetailsModal';
+import AnnouncementDetailsModal from '@/components/AnnouncementDetailsModal';
 
 export default function AlumniDashboard() {
   const { user } = useAuth();
   const [myJobs, setMyJobs] = useState<JobItem[]>([]);
   const [viewingJob, setViewingJob] = useState<JobItem | null>(null);
+  const [viewingAnnouncement, setViewingAnnouncement] = useState<AnnouncementItem | null>(null);
   const [myEvents, setMyEvents] = useState<EventItem[]>([]);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [aciData, setAciData] = useState<AlumniAciResponse | null>(null);
@@ -369,8 +371,17 @@ export default function AlumniDashboard() {
               {announcements.slice(0, 3).map((a) => (
                 <div key={a.id} className="p-4 bg-[#FBFAF8] rounded-2xl border border-[#DDD7D2]/80">
                   <h3 className="text-xs font-bold text-[#4A3832]">{a.title}</h3>
-                  <p className="text-xs text-[#6B6B6B] mt-1 leading-relaxed">{a.content}</p>
-                  <PostedAt date={a.created_at} className="text-[10px] text-[#888888] mt-2 block font-medium" />
+                  <p className="text-xs text-[#6B6B6B] mt-1 leading-relaxed line-clamp-3 whitespace-pre-wrap">{a.content}</p>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <PostedAt date={a.created_at} className="text-[10px] text-[#888888] font-medium" />
+                    <button
+                      type="button"
+                      onClick={() => setViewingAnnouncement(a)}
+                      className="shrink-0 text-[11px] font-bold text-[#A75A24] hover:underline"
+                    >
+                      View Full Notice
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -379,6 +390,7 @@ export default function AlumniDashboard() {
 
       </div>
       <JobDetailsModal job={viewingJob} onClose={() => setViewingJob(null)} />
+      <AnnouncementDetailsModal announcement={viewingAnnouncement} onClose={() => setViewingAnnouncement(null)} />
     </DashboardLayout>
   );
 }
