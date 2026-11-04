@@ -217,6 +217,13 @@ def get_approved_gallery_photos(
             query = query.eq("batch_year", batch_year)
         res = query.execute()
         photos = res.data or []
+        # Placement celebration images share the secure image-storage pipeline,
+        # but are a separate content type and must never appear in the alumni memory gallery.
+        photos = [
+            p for p in photos
+            if (p.get("category") or "").strip().lower() != "placement"
+            and not (p.get("title") or "").strip().lower().startswith("placement celebration")
+        ]
         if search:
             s = search.lower().strip()
             photos = [
