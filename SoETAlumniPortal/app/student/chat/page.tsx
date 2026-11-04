@@ -9,6 +9,7 @@ import {
   chatService,
   ConversationItem,
   ChatMessage,
+  ChatAttachment,
   ParticipantInfo,
 } from '@/lib/services/chatService';
 import { alumniService, AlumniDirectoryItem } from '@/lib/services/alumniService';
@@ -21,7 +22,117 @@ import {
   X,
   AlertCircle,
   User,
+  Paperclip,
+  FileText,
+  FileImage,
+  Download,
+  Loader2,
 } from 'lucide-react';
+
+
+const MAX_CHAT_FILES = 5;
+const MAX_CHAT_FILE_SIZE = 10 * 1024 * 1024;
+const CHAT_FILE_ACCEPT = ".pdf,.docx,.xlsx,.pptx,.jpg,.jpeg,.png,.webp,.txt,.csv";
+
+function formatAttachmentSize(size: number): string {
+  if (size < 1024) return size + ' B';
+  if (size < 1024 * 1024) return (size / 1024).toFixed(1) + ' KB';
+  return (size / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function ChatAttachmentCard({ messageId, attachment }: { messageId: string; attachment: ChatAttachment }) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const isImage = attachment.mime_type.startsWith('image/');
+
+  useEffect(() => {
+    if (!isImage || !cardRef.current) return;
+
+    let active = true;
+    let objectUrl: string | null = null;
+    let requested = false;
+
+    const loadPreview = async () => {
+      if (requested) return;
+      requested = true;
+      try {
+        const blob = await chatService.downloadAttachment(messageId, attachment.id);
+        objectUrl = URL.createObjectURL(blob);
+        if (active) setPreviewUrl(objectUrl);
+      } catch {
+        // The attachment card remains downloadable even when a preview cannot be generated.
+      }
+    };
+
+    const element = cardRef.current;
+    if ('IntersectionObserver' in window) {
+      const observer = new IntersectionObserver((entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          void loadPreview();
+          observer.disconnect();
+        }
+      }, { rootMargin: '160px' });
+      observer.observe(element);
+      return () => {
+        active = false;
+        observer.disconnect();
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+      };
+    }
+
+    void loadPreview();
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [isImage, messageId, attachment.id]);
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const blob = await chatService.downloadAttachment(messageId, attachment.id);
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = attachment.file_name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not download this attachment.');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <div ref={cardRef} className="w-full max-w-sm overflow-hidden rounded-xl border border-gray-200 bg-white text-gray-800 shadow-sm">
+      {isImage && previewUrl && (
+        <img src={previewUrl} alt={attachment.file_name} loading="lazy" className="max-h-56 w-full bg-gray-50 object-contain" />
+      )}
+      <div className="flex min-w-0 items-center gap-3 p-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+          {isImage ? <FileImage className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-semibold" title={attachment.file_name}>{attachment.file_name}</p>
+          <p className="mt-0.5 text-[10px] text-gray-500">{formatAttachmentSize(attachment.size_bytes)}</p>
+        </div>
+        <button
+          type="button"
+          onClick={handleDownload}
+          disabled={downloading}
+          title="Download attachment"
+          className="rounded-lg p-2 text-blue-600 transition hover:bg-blue-50 disabled:opacity-50"
+        >
+          {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function ChatContent() {
   const { user } = useAuth();
@@ -35,7 +146,9 @@ function ChatContent() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [inputMessage, setInputMessage] = useState('');
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
 
   // New Chat Modal state
@@ -147,16 +260,51 @@ function ChatContent() {
   // SEND MESSAGE
   // ============================================================
 
+  const handleFilesSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(event.target.files || []);
+    event.target.value = '';
+    if (!selected.length) return;
+
+    if (pendingFiles.length + selected.length > MAX_CHAT_FILES) {
+      alert('Share up to 5 files in one message.');
+      return;
+    }
+
+    const allowedExtensions = CHAT_FILE_ACCEPT.split(',');
+    const accepted: File[] = [];
+    for (const file of selected) {
+      const extension = '.' + (file.name.split('.').pop() || '').toLowerCase();
+      if (!allowedExtensions.includes(extension)) {
+        alert(file.name + ': unsupported file type.');
+        continue;
+      }
+      if (file.size > MAX_CHAT_FILE_SIZE) {
+        alert(file.name + ': each file must be 10 MB or smaller.');
+        continue;
+      }
+      if (file.size === 0) {
+        alert(file.name + ': empty files cannot be shared.');
+        continue;
+      }
+      accepted.push(file);
+    }
+
+    setPendingFiles((current) => [...current, ...accepted].slice(0, MAX_CHAT_FILES));
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     const content = inputMessage.trim();
-    if (!content || !selectedConversationId || sending) return;
+    if ((!content && pendingFiles.length === 0) || !selectedConversationId || sending) return;
 
     setSending(true);
     try {
-      const newMsg = await chatService.sendMessage(selectedConversationId, content);
+      const newMsg = pendingFiles.length > 0
+        ? await chatService.sendAttachments(selectedConversationId, content, pendingFiles)
+        : await chatService.sendMessage(selectedConversationId, content);
       setMessages((prev) => [...prev, newMsg]);
       setInputMessage('');
+      setPendingFiles([]);
 
       // Update conversation list preview
       setConversations((prev) =>
@@ -386,15 +534,24 @@ function ChatContent() {
                         key={msg.id}
                         className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}
                       >
-                        <div
-                          className={`p-3 max-w-sm shadow-sm text-sm break-words ${
-                            isMine
-                              ? 'bg-blue-600 text-white rounded-xl rounded-tr-none'
-                              : 'bg-white border border-gray-200 text-gray-800 rounded-xl rounded-tl-none'
-                          }`}
-                        >
-                          {msg.content}
-                        </div>
+                        {msg.content && (
+                          <div
+                            className={`p-3 max-w-sm shadow-sm text-sm break-words ${
+                              isMine
+                                ? 'bg-blue-600 text-white rounded-xl rounded-tr-none'
+                                : 'bg-white border border-gray-200 text-gray-800 rounded-xl rounded-tl-none'
+                            }`}
+                          >
+                            {msg.content}
+                          </div>
+                        )}
+                        {msg.attachments?.length > 0 && (
+                          <div className="mt-2 flex w-full max-w-sm flex-col gap-2">
+                            {msg.attachments.map((attachment) => (
+                              <ChatAttachmentCard key={attachment.id} messageId={msg.id} attachment={attachment} />
+                            ))}
+                          </div>
+                        )}
                         <span className="text-[10px] text-gray-400 mt-1 px-1">
                           {new Date(msg.created_at).toLocaleTimeString([], {
                             hour: '2-digit',
@@ -409,22 +566,66 @@ function ChatContent() {
               </div>
 
               {/* Input Area */}
-              <form onSubmit={handleSendMessage} className="p-4 bg-white border-t border-gray-100 flex gap-4">
-                <input
-                  type="text"
-                  placeholder="Type a message..."
-                  value={inputMessage}
-                  disabled={sending}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  className="flex-1 border border-gray-200 rounded-full px-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                />
-                <button
-                  type="submit"
-                  disabled={sending || !inputMessage.trim()}
-                  className="bg-blue-600 text-white p-3 rounded-full hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  <Send className="w-5 h-5" />
-                </button>
+              <form onSubmit={handleSendMessage} className="border-t border-gray-100 bg-white p-3 sm:p-4">
+                {pendingFiles.length > 0 && (
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {pendingFiles.map((file, index) => (
+                      <div key={file.name + file.lastModified + index} className="flex max-w-full items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-xs text-blue-800">
+                        <FileText className="h-3.5 w-3.5 shrink-0" />
+                        <span className="max-w-[180px] truncate" title={file.name}>{file.name}</span>
+                        <span className="shrink-0 text-[10px] text-blue-600">{formatAttachmentSize(file.size)}</span>
+                        <button
+                          type="button"
+                          disabled={sending}
+                          onClick={() => setPendingFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))}
+                          title="Remove file"
+                          className="rounded p-0.5 hover:bg-blue-100 disabled:opacity-50"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept={CHAT_FILE_ACCEPT}
+                    onChange={handleFilesSelected}
+                    className="hidden"
+                    aria-label="Choose chat attachments"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={sending || pendingFiles.length >= MAX_CHAT_FILES}
+                    title="Attach files (up to 5, 10 MB each)"
+                    className="shrink-0 rounded-full p-3 text-gray-500 transition hover:bg-gray-100 hover:text-blue-600 disabled:opacity-40"
+                  >
+                    <Paperclip className="h-5 w-5" />
+                  </button>
+                  <input
+                    type="text"
+                    placeholder="Type a message..."
+                    value={inputMessage}
+                    disabled={sending}
+                    onChange={(e) => setInputMessage(e.target.value)}
+                    className="min-w-0 flex-1 rounded-full border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="submit"
+                    disabled={sending || (!inputMessage.trim() && pendingFiles.length === 0)}
+                    className="shrink-0 rounded-full bg-blue-600 p-3 text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    title="Send message"
+                  >
+                    {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                  </button>
+                </div>
+                <p className="mt-2 pl-1 text-[10px] text-gray-400">
+                  PDF, Office documents, images, TXT and CSV · Up to 5 files · 10 MB each
+                </p>
               </form>
             </>
           ) : (
