@@ -1,14 +1,42 @@
 /**
- * Achievements & Recognition Service Contract
+ * Achievements & Recognition service.
  *
- * Defines the TypeScript data model and service contract for alumni
- * achievements, awards, credentials, and honors.
- *
- * NOTE: FastAPI backend endpoints for achievements have not yet been
- * provisioned in the current system. This service cleanly defines the
- * contract and explicitly signals API unavailability without attempting
- * fake HTTP requests or inventing unsanctioned backend endpoints.
+ * All persistence is routed through the authenticated FastAPI API; the browser
+ * never talks to the Supabase achievements table directly.
  */
+
+const API_URL = '/api';
+
+function getAuthHeaders(): Record<string, string> {
+  const token = typeof window !== 'undefined'
+    ? localStorage.getItem('soet_access_token')
+    : null;
+
+  if (!token) {
+    throw new Error('Please sign in again to manage achievements.');
+  }
+
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  };
+}
+
+async function parseResponse<T>(response: Response): Promise<T> {
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const detail =
+      typeof data.detail === 'string'
+        ? data.detail
+        : Array.isArray(data.detail)
+          ? data.detail.map((item: { msg?: string }) => item.msg || 'Invalid request').join('; ')
+          : JSON.stringify(data.detail || 'Request failed.');
+    throw new Error(detail);
+  }
+
+  return data as T;
+}
 
 export type AchievementCategory =
   | 'award'
@@ -40,7 +68,7 @@ export interface Achievement {
   credential_name?: string | null;
   credential_url?: string | null;
   image_url?: string | null;
-  visibility?: 'public' | 'private' | 'alumni_only';
+  visibility: 'public' | 'private' | 'alumni_only';
   created_at?: string;
   updated_at?: string;
 }
@@ -51,9 +79,9 @@ export interface CreateAchievementInput {
   category: AchievementCategory;
   achievement_date: string;
   issuing_organization: string;
-  credential_name?: string;
-  credential_url?: string;
-  image_url?: string;
+  credential_name?: string | null;
+  credential_url?: string | null;
+  image_url?: string | null;
   visibility?: 'public' | 'private' | 'alumni_only';
 }
 
@@ -63,71 +91,63 @@ export interface UpdateAchievementInput {
   category?: AchievementCategory;
   achievement_date?: string;
   issuing_organization?: string;
-  credential_name?: string;
-  credential_url?: string;
-  image_url?: string;
+  credential_name?: string | null;
+  credential_url?: string | null;
+  image_url?: string | null;
   visibility?: 'public' | 'private' | 'alumni_only';
 }
 
-export class AchievementApiUnavailableError extends Error {
-  readonly isBackendUnavailable: boolean = true;
-
-  constructor(
-    message = 'Achievement API is currently unavailable because the backend achievement endpoints have not been implemented yet.'
-  ) {
-    super(message);
-    this.name = 'AchievementApiUnavailableError';
-  }
-}
-
 export const achievementService = {
-  /**
-   * Retrieves achievements for the authenticated alumni user.
-   *
-   * Rejects with AchievementApiUnavailableError because the backend
-   * achievement endpoints have not been implemented.
-   */
-  async getMyAchievements(_userId?: string): Promise<Achievement[]> {
-    // Real FastAPI endpoints for achievements have not been provisioned.
-    // Explicitly reject with an unavailable state rather than faking data.
-    throw new AchievementApiUnavailableError(
-      'Achievement retrieval is currently unavailable because the backend achievement API has not been implemented yet.'
-    );
+  async getMyAchievements(): Promise<Achievement[]> {
+    const response = await fetch(`${API_URL}/alumni/me/achievements`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+    });
+    return parseResponse<Achievement[]>(response);
   },
 
-  /**
-   * Submits a new achievement record.
-   *
-   * Explicitly signals backend unavailability.
-   */
-  async createAchievement(_input: CreateAchievementInput): Promise<Achievement> {
-    throw new AchievementApiUnavailableError(
-      'Achievement saving is currently unavailable because the backend achievement API has not been implemented yet.'
+  async getVisibleAchievements(alumniId: string): Promise<Achievement[]> {
+    const response = await fetch(
+      `${API_URL}/alumni/directory/${encodeURIComponent(alumniId)}/achievements`,
+      {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        cache: 'no-store',
+      }
     );
+    return parseResponse<Achievement[]>(response);
   },
 
-  /**
-   * Updates an existing achievement record.
-   *
-   * Explicitly signals backend unavailability.
-   */
-  async updateAchievement(
-    _id: string,
-    _input: UpdateAchievementInput
-  ): Promise<Achievement> {
-    throw new AchievementApiUnavailableError(
-      'Achievement updating is currently unavailable because the backend achievement API has not been implemented yet.'
-    );
+  async createAchievement(input: CreateAchievementInput): Promise<Achievement> {
+    const response = await fetch(`${API_URL}/alumni/me/achievements`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(input),
+    });
+    return parseResponse<Achievement>(response);
   },
 
-  /**
-   * Deletes an achievement record.
-   *
-   * Explicitly signals backend unavailability.
-   */
-  async deleteAchievement(_id: string): Promise<void> {
-    throw new AchievementApiUnavailableError(
-      'Achievement deletion is currently unavailable because the backend achievement API has not been implemented yet.'
+  async updateAchievement(id: string, input: UpdateAchievementInput): Promise<Achievement> {
+    const response = await fetch(
+      `${API_URL}/alumni/me/achievements/${encodeURIComponent(id)}`,
+      {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(input),
+      }
     );
+    return parseResponse<Achievement>(response);
+  },
+
+  async deleteAchievement(id: string): Promise<void> {
+    const response = await fetch(
+      `${API_URL}/alumni/me/achievements/${encodeURIComponent(id)}`,
+      {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      }
+    );
+    await parseResponse<unknown>(response);
   },
 };

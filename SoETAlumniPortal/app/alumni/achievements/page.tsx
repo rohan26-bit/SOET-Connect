@@ -6,7 +6,6 @@ import {
   Achievement,
   AchievementCategory,
   achievementService,
-  AchievementApiUnavailableError,
   ACHIEVEMENT_CATEGORY_LABELS,
   CreateAchievementInput,
 } from '@/lib/services/achievementService';
@@ -18,7 +17,6 @@ import {
   Award,
   Plus,
   RefreshCw,
-  Info,
   AlertCircle,
   Filter,
   Search,
@@ -37,7 +35,6 @@ const CATEGORY_TABS: Array<{ id: string; label: string }> = [
 export default function AlumniAchievementsPage() {
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [loading, setLoading] = useState(true);
-  const [apiUnavailable, setApiUnavailable] = useState(false);
   const [unexpectedError, setUnexpectedError] = useState<string | null>(null);
 
   // Filter & Search State
@@ -54,23 +51,16 @@ export default function AlumniAchievementsPage() {
   const loadAchievements = useCallback(async () => {
     setLoading(true);
     setUnexpectedError(null);
-    setApiUnavailable(false);
 
     try {
       const data = await achievementService.getMyAchievements();
       setAchievements(data);
     } catch (err: unknown) {
-      if (err instanceof AchievementApiUnavailableError) {
-        // Backend API is not implemented yet; mark as unavailable cleanly
-        setApiUnavailable(true);
-        setAchievements([]);
-      } else {
-        const message =
-          err instanceof Error
-            ? err.message
-            : 'An unexpected error occurred while loading achievements.';
-        setUnexpectedError(message);
-      }
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'An unexpected error occurred while loading achievements.';
+      setUnexpectedError(message);
     } finally {
       setLoading(false);
     }
@@ -110,27 +100,18 @@ export default function AlumniAchievementsPage() {
     setSelectedAchievement(null);
   };
 
-  // Submit attempts (handles backend unavailability honestly)
-  const handleSubmitAttempt = async (_input: CreateAchievementInput) => {
-    try {
-      if (modalMode === 'edit' && selectedAchievement) {
-        await achievementService.updateAchievement(selectedAchievement.id, _input);
-      } else {
-        await achievementService.createAchievement(_input);
-      }
-    } catch (err: unknown) {
-      // The modal's internal notice displays the honest unavailability message.
-      // We log cleanly here without pretending the record was persisted.
-      console.warn('Achievement persistence attempt intercepted:', err);
+  const handleSubmitAttempt = async (input: CreateAchievementInput) => {
+    if (modalMode === 'edit' && selectedAchievement) {
+      await achievementService.updateAchievement(selectedAchievement.id, input);
+    } else {
+      await achievementService.createAchievement(input);
     }
+    await loadAchievements();
   };
 
-  const handleDeleteAttempt = async (_id: string) => {
-    try {
-      await achievementService.deleteAchievement(_id);
-    } catch (err: unknown) {
-      console.warn('Achievement deletion attempt intercepted:', err);
-    }
+  const handleDeleteAttempt = async (id: string) => {
+    await achievementService.deleteAchievement(id);
+    await loadAchievements();
   };
 
   // Filtered achievements (ready for future real records)
@@ -199,30 +180,7 @@ export default function AlumniAchievementsPage() {
         </div>
       </div>
 
-      {/* SECTION 3: BACKEND AVAILABILITY NOTICE */}
-      {apiUnavailable && (
-        <div className="mb-8 p-6 bg-blue-50/70 border border-blue-200 rounded-3xl text-xs text-blue-900 flex items-start gap-4 shadow-sm">
-          <div className="w-9 h-9 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 mt-0.5">
-            <Info className="w-5 h-5" />
-          </div>
-          <div className="flex-1">
-            <h3 className="font-bold text-sm text-blue-950 mb-1">
-              Backend Integration Notice
-            </h3>
-            <p className="text-blue-800 leading-relaxed mb-2">
-              Achievement management is ready in the frontend, but persistence is currently
-              unavailable because the backend achievement API has not yet been implemented.
-            </p>
-            <p className="text-[11px] text-blue-600 leading-relaxed">
-              You can explore the interface and test the input validation in the modal above.
-              Records will automatically persist once the corresponding FastAPI endpoints are
-              connected.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* SECTION 4: UNEXPECTED ERROR BANNER */}
+      {/* SECTION 3: API ERROR BANNER */}
       {unexpectedError && (
         <div className="mb-8 p-6 bg-red-50 border border-red-200 rounded-3xl text-xs text-red-900 flex items-start gap-4">
           <AlertCircle className="w-6 h-6 text-red-600 shrink-0 mt-0.5" />

@@ -163,6 +163,18 @@ export default function AchievementCard({
         )}
       </div>
 
+      {/* Visibility and supporting media */}
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400">
+        <span className="rounded-full bg-slate-50 px-2.5 py-1 font-semibold text-slate-600">
+          {achievement.visibility === 'private' ? 'Private' : achievement.visibility === 'alumni_only' ? 'Alumni only' : 'Public'}
+        </span>
+        {achievement.image_url && (
+          <a href={achievement.image_url} target="_blank" rel="noreferrer" className="font-bold text-blue-600 hover:underline">
+            Supporting document
+          </a>
+        )}
+      </div>
+
       {/* Footer / Links */}
       <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
         {achievement.credential_url ? (
