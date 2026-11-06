@@ -4,8 +4,9 @@ import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
 import { adminService, UserManagementItem } from '@/lib/services/adminService';
-import { GraduationCap, Search, Ban, CheckCircle2, UserCheck, Clock, XCircle, AlertCircle, Download, Eye } from 'lucide-react';
+import { GraduationCap, Search, Ban, CheckCircle2, UserCheck, Clock, XCircle, AlertCircle, Download, Eye, Trash2 } from 'lucide-react';
 import UserDetailsModal from '@/components/admin/UserDetailsModal';
+import DeleteUserConfirmationModal from '@/components/admin/DeleteUserConfirmationModal';
 
 export default function AdminStudentsPage() {
   const [students, setStudents] = useState<UserManagementItem[]>([]);
@@ -16,6 +17,9 @@ export default function AdminStudentsPage() {
   const [exporting, setExporting] = useState<boolean>(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<UserManagementItem | null>(null);
+  const [userToDelete, setUserToDelete] = useState<UserManagementItem | null>(null);
+  const [deletingUser, setDeletingUser] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const loadStudents = async () => {
     setLoading(true);
@@ -56,6 +60,25 @@ export default function AdminStudentsPage() {
       alert(err.message || 'Action failed');
     } finally {
       setProcessingId(null);
+    }
+  };
+
+  const handleDeleteStudent = async () => {
+    if (!userToDelete || deletingUser) return;
+
+    const target = userToDelete;
+    setDeletingUser(true);
+    setDeleteError(null);
+
+    try {
+      await adminService.deleteUserAccount(target.id);
+      setStudents((current) => current.filter((item) => item.id !== target.id));
+      setSelectedStudent((current) => current?.id === target.id ? null : current);
+      setUserToDelete(null);
+    } catch (err: any) {
+      setDeleteError(err?.message || 'Failed to delete this account.');
+    } finally {
+      setDeletingUser(false);
     }
   };
 
@@ -328,6 +351,20 @@ export default function AdminStudentsPage() {
                                 : 'Reactivate'}
                             </button>
                           )}
+                          <button
+                            type="button"
+                            disabled={deletingUser || isBusy}
+                            onClick={() => {
+                              setDeleteError(null);
+                              setUserToDelete(s);
+                            }}
+                            title={`Delete ${s.full_name} account permanently`}
+                            aria-label={`Delete ${s.full_name} account permanently`}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Delete
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -342,6 +379,18 @@ export default function AdminStudentsPage() {
       <UserDetailsModal
         user={selectedStudent}
         onClose={() => setSelectedStudent(null)}
+      />
+      <DeleteUserConfirmationModal
+        user={userToDelete}
+        isDeleting={deletingUser}
+        error={deleteError}
+        onClose={() => {
+          if (!deletingUser) {
+            setUserToDelete(null);
+            setDeleteError(null);
+          }
+        }}
+        onConfirm={handleDeleteStudent}
       />
     </DashboardLayout>
   );
