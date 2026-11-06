@@ -62,6 +62,63 @@ def get_active_chat_user(
     }
 
 
+def _is_user_online(last_seen_at, now: datetime | None = None) -> bool:
+    """Treat a user as online only when their last authenticated heartbeat is recent."""
+    if not last_seen_at:
+        return False
+
+    try:
+        seen = last_seen_at
+        if isinstance(seen, str):
+            normalized = seen.replace("Z", "+00:00")
+            seen = datetime.fromisoformat(normalized)
+        if not isinstance(seen, datetime):
+            return False
+        if seen.tzinfo is None:
+            seen = seen.replace(tzinfo=timezone.utc)
+        current = now or datetime.now(timezone.utc)
+        return (current - seen).total_seconds() <= 90
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
+def ensure_conversation_recipient_available(conversation_id: str, sender_id: str) -> None:
+    """Prevent sending new content into a conversation whose other account was removed or disabled."""
+    conv_id = parse_object_id(conversation_id, "Conversation not found.")
+    conv = conversations_collection.find_one({"_id": conv_id})
+    if not conv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
+
+    participant_ids = [str(uid) for uid in conv.get("participant_ids", [])]
+    if sender_id not in participant_ids:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this conversation.")
+
+    recipient_ids = [uid for uid in participant_ids if uid != str(sender_id)]
+    recipient = get_user_by_id(recipient_ids[0]) if recipient_ids else None
+    if not recipient or not recipient.get("is_active", True):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This account is no longer available. You can still view the conversation history and shared files.",
+        )
+
+
+def record_chat_presence(current_user_id: str) -> dict:
+    """Record a server timestamp for a currently authenticated, active user."""
+    now = datetime.now(timezone.utc)
+    result = users_collection.update_one(
+        {"_id": str(current_user_id)},
+        {"$set": {"last_seen_at": now.isoformat()}},
+    )
+    if result.modified_count == 0:
+        # Some adapters report zero when the update is unchanged; re-check existence.
+        if not get_user_by_id(current_user_id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User account not found.",
+            )
+    return {"message": "Presence updated.", "status": "success", "last_seen_at": now.isoformat()}
+
+
 def parse_object_id(id_val: str, error_detail: str = "Resource not found.") -> str:
     """Safely validate and return ID string."""
     if not id_val or not str(id_val).strip():
@@ -98,19 +155,41 @@ def serialize_conversation(
     participants = []
     for pid in participant_ids:
         u = get_user_by_id(pid)
-        if u:
-            participants.append({
-                "id": str(u["_id"]),
-                "name": u.get("name", "User"),
-                "email": u.get("email", ""),
-                "role": u.get("role", "user"),
-            })
-        else:
+        if u and u.get("is_active", True):
+            last_seen_at = u.get("last_seen_at")
             participants.append({
                 "id": pid,
-                "name": "User",
+                "name": u.get("name") or "SOET Connect user",
+                "email": u.get("email", ""),
+                "role": u.get("role", "user"),
+                "is_online": _is_user_online(last_seen_at),
+                "last_seen_at": last_seen_at,
+                "is_deleted": False,
+                "is_available": True,
+            })
+        elif u:
+            participants.append({
+                "id": pid,
+                "name": "Inactive account",
                 "email": "",
-                "role": "user",
+                "role": "former member",
+                "is_online": False,
+                "last_seen_at": u.get("last_seen_at"),
+                "is_deleted": False,
+                "is_available": False,
+            })
+        else:
+            # Keep the participant ID so historic messages still resolve correctly,
+            # but never represent a missing account as a live/online user.
+            participants.append({
+                "id": pid,
+                "name": "Deleted account",
+                "email": "",
+                "role": "former member",
+                "is_online": False,
+                "last_seen_at": None,
+                "is_deleted": True,
+                "is_available": False,
             })
 
     conv_id_str = str(conv_doc["_id"])
@@ -331,6 +410,8 @@ def send_conversation_message(conversation_id: str, sender_id: str, content: str
             detail="Conversation not found."
         )
 
+    ensure_conversation_recipient_available(conv_id, sender_id)
+
     participant_ids = [str(uid) for uid in conv.get("participant_ids", [])]
     if sender_id not in participant_ids:
         raise HTTPException(
@@ -388,6 +469,7 @@ def ensure_conversation_participant(conversation_id: str, current_user_id: str) 
     participant_ids = [str(uid) for uid in conv.get("participant_ids", [])]
     if current_user_id not in participant_ids:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this conversation.")
+    ensure_conversation_recipient_available(conv_id, current_user_id)
     if current_user_id in [str(uid) for uid in conv.get("deleted_for", [])]:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
 
@@ -403,6 +485,8 @@ def send_conversation_attachments(
     conv = conversations_collection.find_one({"_id": conv_id})
     if not conv:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
+
+    ensure_conversation_recipient_available(conv_id, sender_id)
 
     participant_ids = [str(uid) for uid in conv.get("participant_ids", [])]
     if sender_id not in participant_ids:

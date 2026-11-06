@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
+import { chatService } from '@/lib/services/chatService';
 import LoadingState from '@/components/LoadingState';
 import { 
   Home, Users, Briefcase, Calendar, 
@@ -124,6 +125,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { user, logout, loading } = useAuth();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [expandedAdminGroups, setExpandedAdminGroups] = useState<string[]>([]);
+
+  // Maintain authenticated presence across the whole portal, not only while chat is open.
+  // A user is treated as online while a visible portal tab has sent a heartbeat within 90 seconds.
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let disposed = false;
+    const heartbeat = () => {
+      if (disposed || document.visibilityState !== 'visible') return;
+      chatService.sendPresenceHeartbeat().catch((error) => {
+        // Presence is best-effort and must never interrupt ordinary portal navigation.
+        console.warn('Unable to update chat presence:', error);
+      });
+    };
+
+    heartbeat();
+    const intervalId = window.setInterval(heartbeat, 30_000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') heartbeat();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [user?.id]);
 
   // Close mobile navigation on route changes
   useEffect(() => {

@@ -210,6 +210,33 @@ function ChatContent() {
     initChat();
   }, [user, targetUserId]);
 
+  // Refresh presence and deleted-account state while the chat screen is open.
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let active = true;
+    const refreshConversations = async () => {
+      try {
+        const data = await chatService.getConversations();
+        if (active) setConversations(data);
+      } catch (err) {
+        console.warn('Unable to refresh chat presence:', err);
+      }
+    };
+
+    const intervalId = window.setInterval(refreshConversations, 30_000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void refreshConversations();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [user?.id]);
+
   // ============================================================
   // LOAD MESSAGES FOR SELECTED CONVERSATION
   // ============================================================
@@ -385,9 +412,13 @@ function ChatContent() {
     return (
       other || {
         id: '',
-        name: 'Chat User',
+        name: 'Deleted account',
         email: '',
-        role: 'user',
+        role: 'former member',
+        is_online: false,
+        last_seen_at: null,
+        is_deleted: true,
+        is_available: false,
       }
     );
   };
@@ -501,8 +532,23 @@ function ChatContent() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-green-500 font-medium flex items-center">
-                    <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>Online
+                  <span className={`text-xs font-medium flex items-center ${
+                    activePartner.is_available && activePartner.is_online
+                      ? 'text-green-600'
+                      : 'text-gray-400'
+                  }`}>
+                    <span className={`w-2 h-2 rounded-full mr-2 ${
+                      activePartner.is_available && activePartner.is_online
+                        ? 'bg-green-500'
+                        : 'bg-gray-400'
+                    }`}></span>
+                    {activePartner.is_deleted
+                      ? 'Account deleted'
+                      : !activePartner.is_available
+                        ? 'Unavailable'
+                        : activePartner.is_online
+                          ? 'Online'
+                          : 'Offline'}
                   </span>
                   <button
                     onClick={(e) => handleArchiveConversation(e, selectedConversationId)}
@@ -516,6 +562,13 @@ function ChatContent() {
 
               {/* Messages Container */}
               <div className="flex-1 p-6 overflow-y-auto space-y-4 bg-gray-50">
+                {!activePartner.is_available && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+                    {activePartner.is_deleted
+                      ? 'This account has been deleted. You can still view the existing conversation and download previously shared attachments.'
+                      : 'This account is currently unavailable. You can still view the existing conversation and download previously shared attachments.'}
+                  </div>
+                )}
                 {error && (
                   <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0" />
@@ -605,7 +658,7 @@ function ChatContent() {
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    disabled={sending || pendingFiles.length >= MAX_CHAT_FILES}
+                    disabled={sending || !activePartner.is_available || pendingFiles.length >= MAX_CHAT_FILES}
                     title="Attach files (up to 5, 10 MB each)"
                     className="shrink-0 rounded-full p-3 text-gray-500 transition hover:bg-gray-100 hover:text-blue-600 disabled:opacity-40"
                   >
@@ -613,15 +666,15 @@ function ChatContent() {
                   </button>
                   <input
                     type="text"
-                    placeholder="Type a message..."
+                    placeholder={activePartner.is_available ? 'Type a message...' : 'Account unavailable'}
                     value={inputMessage}
-                    disabled={sending}
+                    disabled={sending || !activePartner.is_available}
                     onChange={(e) => setInputMessage(e.target.value)}
                     className="min-w-0 flex-1 rounded-full border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <button
                     type="submit"
-                    disabled={sending || (!inputMessage.trim() && pendingFiles.length === 0)}
+                    disabled={sending || !activePartner.is_available || (!inputMessage.trim() && pendingFiles.length === 0)}
                     className="shrink-0 rounded-full bg-blue-600 p-3 text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                     title="Send message"
                   >

@@ -28,6 +28,10 @@ export interface ParticipantInfo {
   name: string;
   email: string;
   role: string;
+  is_online: boolean;
+  last_seen_at?: string | null;
+  is_deleted: boolean;
+  is_available: boolean;
 }
 
 export interface ChatAttachment {
@@ -64,6 +68,22 @@ export interface ConversationDetail extends ConversationItem {
 }
 
 export const chatService = {
+  // ============================================================
+  // HEARTBEAT: REPORT AUTHENTICATED USER PRESENCE
+  // ============================================================
+
+  async sendPresenceHeartbeat(): Promise<void> {
+    const response = await fetch(`${API_URL}/chat/presence`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store',
+    });
+    await parseResponse(response);
+  },
+
   // ============================================================
   // LIST CONVERSATIONS
   // ============================================================
