@@ -42,6 +42,26 @@ def _require_admin(current_user: dict):
         )
 
 
+
+
+def _created_at_sort_key(value: Any) -> float:
+    """Return a sortable timestamp; missing/invalid dates sort last."""
+    if not value:
+        return 0.0
+    if isinstance(value, datetime):
+        try:
+            return value.timestamp()
+        except (OverflowError, OSError, ValueError):
+            return 0.0
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.timestamp()
+    except (TypeError, ValueError, OverflowError, OSError):
+        return 0.0
+
+
 def _sanitize_csv_cell(value: Any) -> str:
     """
     Sanitize a cell value for CSV export:
@@ -364,10 +384,8 @@ def get_all_alumni(
         "role": "alumni",
     })
 
-    return [
-        _sanitize_user(alumni)
-        for alumni in alumni_users
-    ]
+    users = [_sanitize_user(alumni) for alumni in alumni_users]
+    return sorted(users, key=lambda user: _created_at_sort_key(user.get("created_at")), reverse=True)
 
 
 @router.get("/students")
@@ -380,10 +398,8 @@ def get_all_students(
         "role": "student",
     })
 
-    return [
-        _sanitize_user(student)
-        for student in student_users
-    ]
+    users = [_sanitize_user(student) for student in student_users]
+    return sorted(users, key=lambda user: _created_at_sort_key(user.get("created_at")), reverse=True)
 
 
 @router.get("/students/pending")
@@ -396,11 +412,12 @@ def get_pending_students(
         "role": "student",
     })
 
-    return [
+    pending_users = [
         _sanitize_user(student)
         for student in student_users
         if not student.get("is_verified", False) and student.get("verification_status", "pending") == "pending"
     ]
+    return sorted(pending_users, key=lambda user: _created_at_sort_key(user.get("created_at")), reverse=True)
 
 
 @router.get("/students/export")
