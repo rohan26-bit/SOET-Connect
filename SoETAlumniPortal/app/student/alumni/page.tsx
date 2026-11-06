@@ -4,8 +4,8 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
-import { alumniService, AlumniDirectoryItem, AciClassLeaderboardItem } from '@/lib/services/alumniService';
-import { Search, MapPin, Building, GraduationCap, Globe, ExternalLink, X, MessageSquare, Trophy, Crown } from 'lucide-react';
+import { alumniService, AlumniDirectoryItem, AciClassLeaderboardItem, AciIndividualLeaderboardItem } from '@/lib/services/alumniService';
+import { Search, MapPin, Building, GraduationCap, Globe, ExternalLink, X, MessageSquare, Trophy, Crown, Medal } from 'lucide-react';
 
 const DEPARTMENTS = [
   'All Departments',
@@ -35,6 +35,9 @@ export default function AlumniDirectoryPage() {
   const [classLeaderboard, setClassLeaderboard] = useState<AciClassLeaderboardItem[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(true);
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
+  const [individualLeaderboard, setIndividualLeaderboard] = useState<AciIndividualLeaderboardItem[]>([]);
+  const [individualLeaderboardLoading, setIndividualLeaderboardLoading] = useState(true);
+  const [individualLeaderboardError, setIndividualLeaderboardError] = useState<string | null>(null);
 
   const fetchAlumni = async () => {
     setLoading(true);
@@ -67,6 +70,21 @@ export default function AlumniDirectoryPage() {
       })
       .finally(() => {
         if (active) setLeaderboardLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    alumniService.getIndividualLeaderboard(10)
+      .then((data) => {
+        if (active) setIndividualLeaderboard(data.leaderboard || []);
+      })
+      .catch((err) => {
+        if (active) setIndividualLeaderboardError(err instanceof Error ? err.message : 'Unable to load individual contributors.');
+      })
+      .finally(() => {
+        if (active) setIndividualLeaderboardLoading(false);
       });
     return () => { active = false; };
   }, []);
@@ -200,6 +218,124 @@ export default function AlumniDirectoryPage() {
         </div>
         <p className="mt-1 text-[9px] text-slate-400">
           Class rankings use combined ACI scores. Individual tier badges are recalculated directly from each alumnus’s current score.
+        </p>
+      </section>
+
+      {/* Individual Alumni Hall of Fame */}
+      <section className="mb-8 overflow-hidden rounded-3xl border border-blue-200/70 bg-gradient-to-br from-[#F4F7FF] via-white to-[#EEF3FF] p-5 shadow-sm sm:p-6">
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="mb-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-blue-700">
+              <Medal className="h-4 w-4" /> Outstanding alumni
+            </p>
+            <h2 className="text-xl font-black text-[#263B68] sm:text-2xl">Individual Alumni Hall of Fame</h2>
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-600">
+              Top 10 verified alumni across every graduation batch, ranked by their earned contribution points.
+            </p>
+          </div>
+          <div className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white/85 px-3 py-2 text-xs font-bold text-blue-800">
+            <Trophy className="h-4 w-4" />
+            {individualLeaderboard.length} featured contributors
+          </div>
+        </div>
+
+        {individualLeaderboardLoading ? (
+          <div className="rounded-2xl border border-blue-100 bg-white/85 p-6 text-center text-xs font-medium text-slate-500">
+            Ranking individual contributions…
+          </div>
+        ) : individualLeaderboardError ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-700">
+            {individualLeaderboardError}
+          </div>
+        ) : individualLeaderboard.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-blue-200 bg-white/75 p-6 text-center text-xs text-slate-500">
+            The Individual Hall of Fame will appear when verified alumni earn contribution points through approved activities.
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              {individualLeaderboard.slice(0, 3).map((person) => (
+                <article
+                  key={person.id}
+                  className={`rounded-2xl border p-4 shadow-sm ${person.rank === 1 ? 'border-blue-300 bg-white' : 'border-slate-200 bg-white/90'}`}
+                >
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-blue-800">
+                      {person.rank === 1 ? '🏆' : person.rank === 2 ? '🥈' : '🥉'} Rank #{person.rank}
+                    </span>
+                    <span className="text-xl">{getAciRecognition(person.aci_score).badge}</span>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    {person.avatar_url ? (
+                      <img
+                        src={person.avatar_url}
+                        alt={person.full_name}
+                        className="h-12 w-12 rounded-2xl border border-slate-100 object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-sm font-black text-white">
+                        {person.full_name.substring(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <h3 className="truncate text-sm font-black text-[#263B68]">{person.full_name}</h3>
+                      <p className="truncate text-[10px] font-semibold text-blue-700">{person.designation || 'SOET Alumnus'}</p>
+                      {person.company && <p className="truncate text-[10px] text-slate-500">{person.company}</p>}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 space-y-1 border-t border-slate-100 pt-3 text-[10px] text-slate-500">
+                    <p>{person.graduation_year === 'Unspecified' ? 'Batch not provided' : `Class of ${person.graduation_year}`} · {person.department}</p>
+                    <div className="flex items-end justify-between gap-2 pt-1">
+                      <div>
+                        <p className="font-bold uppercase tracking-wider text-slate-400">Earned activity points</p>
+                        <p className="text-2xl font-black tabular-nums text-blue-700">{person.activity_points.toLocaleString()}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold uppercase tracking-wider text-slate-400">Total ACI</p>
+                        <p className="text-base font-extrabold tabular-nums text-[#4A3832]">{person.aci_score} pts</p>
+                      </div>
+                    </div>
+                    <p className="pt-1 font-bold text-slate-600">{person.aci_tier}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            {individualLeaderboard.length > 3 && (
+              <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white/90">
+                {individualLeaderboard.slice(3).map((person) => (
+                  <div key={person.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 last:border-0">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="w-7 shrink-0 text-center text-xs font-black text-slate-400">#{person.rank}</span>
+                      {person.avatar_url ? (
+                        <img src={person.avatar_url} alt="" className="h-8 w-8 rounded-xl object-cover" />
+                      ) : (
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-[10px] font-black text-blue-700">
+                          {person.full_name.substring(0, 2).toUpperCase()}
+                        </span>
+                      )}
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-bold text-[#263B68]">{person.full_name}</p>
+                        <p className="truncate text-[10px] text-slate-400">
+                          {person.graduation_year === 'Unspecified' ? 'Batch not provided' : `Class of ${person.graduation_year}`} · {person.aci_tier}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-black tabular-nums text-blue-700">{person.activity_points.toLocaleString()} activity pts</p>
+                      <p className="text-[10px] text-slate-400">{person.aci_score} total ACI</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        <p className="mt-4 border-t border-blue-100 pt-3 text-[10px] leading-relaxed text-slate-500">
+          Only active, administrator-approved alumni with points from approved jobs, approved events, or valid external event registrations are ranked. Verification-only points do not qualify for this leaderboard.
         </p>
       </section>
 

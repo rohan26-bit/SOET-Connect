@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from database import users_collection, supabase
 from security.dependencies import get_current_user
-from services.aci import calculate_alumni_aci
+from services.aci import calculate_alumni_aci, get_tier_and_badge
 from services.notifications import NOTIFICATION_TYPES, create_notification_once
 
 
@@ -205,6 +205,98 @@ def get_aci_class_leaderboard(
         "leaderboard": leaderboard,
         "total_classes": len(leaderboard),
         "total_alumni": sum(row["alumni_count"] for row in leaderboard),
+    }
+
+
+# ============================================================
+# INDIVIDUAL ALUMNI HALL OF FAME
+# ============================================================
+
+@router.get("/aci/individual-leaderboard")
+def get_aci_individual_leaderboard(
+    limit: int = 10,
+    current_user: dict = Depends(get_current_user),
+):
+    """Return the top verified alumni ranked by ACI earned through actual activity."""
+    limit = max(1, min(int(limit), 50))
+    alumni_users = users_collection.find({
+        "role": "alumni",
+        "is_active": True,
+        "is_verified": True,
+    })
+
+    jobs, events, registrations = _load_aci_source_data()
+    ranked_alumni: list[dict] = []
+
+    for alumni in alumni_users:
+        if not alumni.get("is_active", True):
+            continue
+        if not alumni.get("is_verified", False):
+            continue
+        if str(alumni.get("verification_status") or "").lower() != "approved":
+            continue
+
+        user_id = str(alumni.get("_id") or alumni.get("id") or "")
+        if not user_id:
+            continue
+
+        aci_data = calculate_alumni_aci(
+            user_id=user_id,
+            user_doc=alumni,
+            jobs=jobs,
+            events=events,
+            registrations=registrations,
+        )
+        score = int(aci_data.get("score") or 0)
+        breakdown = aci_data.get("breakdown") or {}
+        activity_points = max(
+            0,
+            score - int(breakdown.get("verification") or 0),
+        )
+
+        # Do not rank profiles whose only points come from account verification.
+        if activity_points <= 0:
+            continue
+
+        profile = alumni.get("alumni_profile", {}) or {}
+        tier, badge = get_tier_and_badge(score)
+        ranked_alumni.append({
+            "id": user_id,
+            "full_name": alumni.get("name") or "SOET Alumnus",
+            "avatar_url": alumni.get("avatar_url"),
+            "graduation_year": str(profile.get("graduation_year") or "").strip() or "Unspecified",
+            "department": profile.get("department") or "Department not provided",
+            "company": profile.get("company") or "",
+            "designation": profile.get("designation") or "",
+            "aci_score": score,
+            "activity_points": activity_points,
+            "aci_tier": tier,
+            "aci_badge": badge,
+            "breakdown": {
+                "verification": int(breakdown.get("verification") or 0),
+                "jobs": int(breakdown.get("jobs") or 0),
+                "events": int(breakdown.get("events") or 0),
+                "registrations": int(breakdown.get("registrations") or 0),
+            },
+            "activity_counts": aci_data.get("activity_counts") or {},
+        })
+
+    ranked_alumni.sort(
+        key=lambda item: (
+            -item["aci_score"],
+            -item["activity_points"],
+            item["full_name"].casefold(),
+        )
+    )
+    total_contributors = len(ranked_alumni)
+    ranked_alumni = ranked_alumni[:limit]
+    for index, alumni in enumerate(ranked_alumni, start=1):
+        alumni["rank"] = index
+
+    return {
+        "leaderboard": ranked_alumni,
+        "total_contributors": total_contributors,
+        "limit": limit,
     }
 
 
