@@ -49,3 +49,62 @@ def test_supabase_query_builder_supports_range_and_or_filters():
 
     query.or_("alumni_name.ilike.%Rohan%,company_name.ilike.%Rohan%")
     assert query.params["or"] == "(alumni_name.ilike.%Rohan%,company_name.ilike.%Rohan%)"
+
+
+def test_chat_storage_bucket_initializer_handles_supabase_no_such_bucket_400(monkeypatch):
+    """Supabase Storage returns 400/NoSuchBucket for a missing bucket on this project."""
+    from database_supabase import CHAT_ATTACHMENT_BUCKET, SupabaseStorageBucket
+
+    class FakeResponse:
+        def __init__(self, status_code, payload):
+            self.status_code = status_code
+            self._payload = payload
+            self.text = __import__("json").dumps(payload)
+            self.is_success = 200 <= status_code < 300
+
+        def json(self):
+            return self._payload
+
+    class FakeClient:
+        def __init__(self):
+            self.get_calls = []
+            self.post_calls = []
+
+        def get(self, url, headers=None):
+            self.get_calls.append((url, headers))
+            if len(self.get_calls) == 1:
+                return FakeResponse(
+                    400,
+                    {
+                        "statusCode": "404",
+                        "error": "Bucket not found",
+                        "message": "Bucket not found",
+                        "code": "NoSuchBucket",
+                    },
+                )
+            return FakeResponse(200, {"id": CHAT_ATTACHMENT_BUCKET})
+
+        def post(self, url, headers=None, json=None):
+            self.post_calls.append((url, headers, json))
+            return FakeResponse(200, {"name": CHAT_ATTACHMENT_BUCKET})
+
+    fake_client = FakeClient()
+    monkeypatch.setattr(
+        "database_supabase.get_http_client",
+        lambda timeout=10.0: fake_client,
+    )
+    SupabaseStorageBucket._ensured_storage_buckets.discard(CHAT_ATTACHMENT_BUCKET)
+
+    try:
+        bucket = SupabaseStorageBucket(CHAT_ATTACHMENT_BUCKET)
+        bucket._ensure_chat_bucket()
+
+        assert len(fake_client.get_calls) == 1
+        assert len(fake_client.post_calls) == 1
+        created_bucket = fake_client.post_calls[0][2]
+        assert created_bucket["id"] == CHAT_ATTACHMENT_BUCKET
+        assert created_bucket["public"] is False
+        assert created_bucket["file_size_limit"] == 10 * 1024 * 1024
+        assert CHAT_ATTACHMENT_BUCKET in SupabaseStorageBucket._ensured_storage_buckets
+    finally:
+        SupabaseStorageBucket._ensured_storage_buckets.discard(CHAT_ATTACHMENT_BUCKET)

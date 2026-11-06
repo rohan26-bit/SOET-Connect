@@ -656,3 +656,44 @@ def test_chat_attachment_limits_and_authorization(client, student_user, verified
     )
     assert unauthenticated.status_code == 401
 
+
+
+def test_chat_attachment_storage_failure_returns_clear_retryable_error(
+    client,
+    student_user,
+    verified_alumni_user,
+    monkeypatch,
+):
+    """A storage outage must not become an opaque ASGI 500 response."""
+    import services.chat as chat_service
+
+    conversation = client.post(
+        "/chat/conversations",
+        headers=student_user["headers"],
+        json={"participant_id": verified_alumni_user["id"]},
+    )
+    assert conversation.status_code == 201
+    conversation_id = conversation.json()["id"]
+
+    class BrokenBucket:
+        def upload(self, path, file_bytes, content_type):
+            raise RuntimeError("storage service unavailable")
+
+        def delete(self, paths):
+            return []
+
+    monkeypatch.setattr(
+        chat_service.supabase.storage,
+        "from_",
+        lambda bucket_name: BrokenBucket(),
+    )
+
+    response = client.post(
+        f"/chat/conversations/{conversation_id}/attachments",
+        headers=student_user["headers"],
+        files=[("files", ("test.pdf", b"%PDF-1.7\\ntest\\n", "application/pdf"))],
+    )
+
+    assert response.status_code == 503
+    assert "storage is temporarily unavailable" in response.json()["detail"].lower()
+    assert "message was not sent" in response.json()["detail"].lower()
