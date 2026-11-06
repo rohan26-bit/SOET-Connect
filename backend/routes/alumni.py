@@ -21,6 +21,27 @@ EVENTS_FILE = None
 REGISTRATIONS_FILE = None
 
 
+
+
+def _created_at_sort_key(value) -> float:
+    """Return a sortable timestamp; missing/invalid dates sort last."""
+    if not value:
+        return 0.0
+    from datetime import datetime, timezone
+    if isinstance(value, datetime):
+        try:
+            return value.timestamp()
+        except (OverflowError, OSError, ValueError):
+            return 0.0
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.timestamp()
+    except (TypeError, ValueError, OverflowError, OSError):
+        return 0.0
+
+
 def get_user_from_token(current_user: dict):
     user_id = current_user.get("user_id")
     role = current_user.get("role")
@@ -229,6 +250,7 @@ def get_pending_alumni(
             "updated_at": alumni.get("updated_at")
         })
 
+    results.sort(key=lambda item: _created_at_sort_key(item.get("created_at")), reverse=True)
     return results
 
 
