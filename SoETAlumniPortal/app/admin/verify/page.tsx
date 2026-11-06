@@ -8,7 +8,6 @@ import {
   ShieldCheck,
   CheckCircle2,
   XCircle,
-  Ban,
   Building,
   GraduationCap,
   Clock,
@@ -47,7 +46,7 @@ export default function AdminVerifyPage() {
 
   const handleAction = async (
     userId: string,
-    status: 'approved' | 'rejected' | 'suspended'
+    status: 'approved' | 'rejected'
   ) => {
     setActionLoading(userId);
 
@@ -79,7 +78,7 @@ export default function AdminVerifyPage() {
           </h1>
 
           <p className="text-xs text-[#6B6B6B] mt-1">
-            Review submitted graduate credentials and authorize portal access.
+            Review only pending alumni registration requests. Approved and rejected accounts move to Alumni Management.
           </p>
         </div>
       </div>
@@ -202,14 +201,6 @@ export default function AdminVerifyPage() {
                     Reject
                   </button>
 
-                  <button
-                    disabled={actionLoading === alum.id}
-                    onClick={() => handleAction(alum.id, 'suspended')}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition disabled:opacity-50"
-                  >
-                    <Ban className="w-3.5 h-3.5" />
-                    Suspend
-                  </button>
                 </div>
               </div>
             ))}
