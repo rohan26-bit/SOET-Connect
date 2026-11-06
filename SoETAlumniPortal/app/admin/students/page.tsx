@@ -76,39 +76,12 @@ export default function AdminStudentsPage() {
     );
   });
 
-  const getVerificationBadge = (s: UserManagementItem) => {
-    const status = (s.verification_status || (s.is_verified ? 'approved' : 'pending')).toUpperCase();
-    if (status === 'APPROVED') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-200">
-          <CheckCircle2 className="w-3 h-3" />
-          APPROVED
-        </span>
-      );
-    }
-    if (status === 'REJECTED') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-rose-100 text-rose-800 border border-rose-200">
-          <XCircle className="w-3 h-3" />
-          REJECTED
-        </span>
-      );
-    }
-    if (status === 'SUSPENDED') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-purple-100 text-purple-800 border border-purple-200">
-          <Ban className="w-3 h-3" />
-          SUSPENDED
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-100 text-amber-800 border border-amber-200">
-        <Clock className="w-3 h-3" />
-        PENDING
-      </span>
-    );
-  };
+  const getVerificationBadge = () => (
+    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-100 text-amber-800 border border-amber-200">
+      <Clock className="w-3 h-3" />
+      PENDING
+    </span>
+  );
 
 
   return (
@@ -119,17 +92,6 @@ export default function AdminStudentsPage() {
         <span className="mx-2 text-[#DDD7D2]">/</span>
         <span className="text-[#F28C38]">Student Verification</span>
       </div>
-
-      {/* Export error alert */}
-      {exportError && (
-        <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-2xl flex items-center justify-between gap-3 text-rose-800 text-xs font-medium">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-            <span>{exportError}</span>
-          </div>
-          <button onClick={() => setExportError(null)} className="text-rose-600 hover:text-rose-800 p-1 rounded-lg hover:bg-rose-100 transition">✕</button>
-        </div>
-      )}
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
