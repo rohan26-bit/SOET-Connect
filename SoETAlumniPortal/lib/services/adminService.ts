@@ -303,7 +303,7 @@ export const adminService = {
       is_active: s.is_active ?? true,
       created_at: s.created_at,
       updated_at: s.updated_at,
-    )}));
+    })));
   },
 
   async getPendingStudents(): Promise<UserManagementItem[]> {
@@ -336,7 +336,7 @@ export const adminService = {
       is_active: s.is_active ?? true,
       created_at: s.created_at,
       updated_at: s.updated_at,
-    )}));
+    })));
   },
 
   async updateStudentVerification(
@@ -394,7 +394,7 @@ export const adminService = {
       is_active: a.is_active ?? true,
       created_at: a.created_at,
       updated_at: a.updated_at,
-    )}));
+    })));
   },
 
   async toggleUserActive(
