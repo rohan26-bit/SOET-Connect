@@ -57,6 +57,29 @@ export interface AciClassLeaderboardResponse {
   total_alumni: number;
 }
 
+export interface AciIndividualLeaderboardItem {
+  rank: number;
+  id: string;
+  full_name: string;
+  avatar_url?: string;
+  graduation_year: string;
+  department: string;
+  company: string;
+  designation: string;
+  aci_score: number;
+  activity_points: number;
+  aci_tier: string;
+  aci_badge: string;
+  breakdown: AlumniAciBreakdown;
+  activity_counts: AlumniAciActivityCounts;
+}
+
+export interface AciIndividualLeaderboardResponse {
+  leaderboard: AciIndividualLeaderboardItem[];
+  total_contributors: number;
+  limit: number;
+}
+
 export interface AlumniAciResponse {
   score: number;
   tier: string;
@@ -117,6 +140,19 @@ export const alumniService = {
     });
 
     return parseResponse<AciClassLeaderboardResponse>(response);
+  },
+
+  // ============================================================
+  // GET INDIVIDUAL ALUMNI HALL OF FAME
+  // ============================================================
+  async getIndividualLeaderboard(limit = 10): Promise<AciIndividualLeaderboardResponse> {
+    const response = await fetch(`${API_URL}/alumni/aci/individual-leaderboard?limit=${limit}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+    });
+
+    return parseResponse<AciIndividualLeaderboardResponse>(response);
   },
 
   // ============================================================
