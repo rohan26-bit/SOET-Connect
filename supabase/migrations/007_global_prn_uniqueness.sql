@@ -1,43 +1,12 @@
 -- =============================================================================
 -- SOET CONNECT — GLOBAL PRN UNIQUENESS
 -- Migration: 007_global_prn_uniqueness.sql
--- Description: A PRN can belong to exactly one student or alumni account.
---              Pending, rejected, and inactive accounts keep their PRN claim.
+-- Description: Reserve every existing student/alumni PRN and reject all new
+--              claims. Legacy duplicates are preserved until verified manually.
 -- =============================================================================
 
--- Hold off concurrent student/alumni profile writes while we inspect and
--- backfill the existing identifiers and install the registry triggers.
+-- Prevent profile writes while the registry is backfilled and triggers install.
 LOCK TABLE public.student_profiles, public.alumni_profiles IN SHARE ROW EXCLUSIVE MODE;
-
--- Fail with an actionable message rather than silently choosing a duplicate
--- identity if legacy profile data already contains reused PRNs.
-DO $$
-DECLARE
-    duplicate_prn TEXT;
-BEGIN
-    SELECT normalized_prn
-      INTO duplicate_prn
-      FROM (
-          SELECT UPPER(BTRIM(student_id)) AS normalized_prn
-            FROM public.student_profiles
-           WHERE NULLIF(BTRIM(student_id), '') IS NOT NULL
-          UNION ALL
-          SELECT UPPER(BTRIM(alumni_id)) AS normalized_prn
-            FROM public.alumni_profiles
-           WHERE NULLIF(BTRIM(alumni_id), '') IS NOT NULL
-      ) AS identifiers
-     GROUP BY normalized_prn
-    HAVING COUNT(*) > 1
-     ORDER BY COUNT(*) DESC, normalized_prn
-     LIMIT 1;
-
-    IF duplicate_prn IS NOT NULL THEN
-        RAISE EXCEPTION
-          'Migration 007 cannot enforce PRN uniqueness yet. Resolve the existing duplicate PRN: %',
-          duplicate_prn;
-    END IF;
-END;
-$$;
 
 CREATE TABLE IF NOT EXISTS public.prn_registry (
     normalized_prn TEXT PRIMARY KEY CHECK (normalized_prn <> ''),
@@ -58,39 +27,103 @@ CREATE POLICY service_role_all_prn_registry
 
 GRANT ALL ON TABLE public.prn_registry TO service_role;
 
--- Backfill all current students and alumni into the shared identity registry.
+-- A registry row is a reservation for a PRN, not a declaration that its
+-- user_id is the rightful owner when legacy data already contains duplicates.
+-- Keep one stable reservation row per normalized PRN and preserve every
+-- historical profile row unchanged.
 INSERT INTO public.prn_registry (normalized_prn, user_id, role)
-SELECT UPPER(BTRIM(student_id)), user_id, 'student'
-  FROM public.student_profiles
- WHERE NULLIF(BTRIM(student_id), '') IS NOT NULL
-UNION ALL
-SELECT UPPER(BTRIM(alumni_id)), user_id, 'alumni'
-  FROM public.alumni_profiles
- WHERE NULLIF(BTRIM(alumni_id), '') IS NOT NULL;
+SELECT DISTINCT ON (normalized_prn)
+       normalized_prn, user_id, role
+FROM (
+    SELECT UPPER(BTRIM(student_id)) AS normalized_prn,
+           user_id, 'student'::VARCHAR(20) AS role, created_at
+      FROM public.student_profiles
+     WHERE NULLIF(BTRIM(student_id), '') IS NOT NULL
+    UNION ALL
+    SELECT UPPER(BTRIM(alumni_id)) AS normalized_prn,
+           user_id, 'alumni'::VARCHAR(20) AS role, created_at
+      FROM public.alumni_profiles
+     WHERE NULLIF(BTRIM(alumni_id), '') IS NOT NULL
+) AS claims
+ORDER BY normalized_prn, created_at NULLS LAST, role, user_id
+ON CONFLICT DO NOTHING;
 
--- Maintain the registry for new registrations and PRN edits.
+-- Re-create a reservation from any remaining historical profile if the row
+-- currently holding it is deleted or changes its PRN. This prevents an old
+-- duplicate profile from accidentally freeing a PRN for a new registration.
+CREATE OR REPLACE FUNCTION public.ensure_prn_registry_reservation(p_normalized_prn TEXT)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+    IF p_normalized_prn IS NULL OR p_normalized_prn = '' THEN
+        RETURN;
+    END IF;
+
+    INSERT INTO public.prn_registry (normalized_prn, user_id, role)
+    SELECT normalized_prn, user_id, role
+    FROM (
+        SELECT UPPER(BTRIM(student_id)) AS normalized_prn,
+               user_id, 'student'::VARCHAR(20) AS role, created_at
+          FROM public.student_profiles
+         WHERE NULLIF(BTRIM(student_id), '') IS NOT NULL
+        UNION ALL
+        SELECT UPPER(BTRIM(alumni_id)) AS normalized_prn,
+               user_id, 'alumni'::VARCHAR(20) AS role, created_at
+          FROM public.alumni_profiles
+         WHERE NULLIF(BTRIM(alumni_id), '') IS NOT NULL
+    ) AS claims
+    WHERE normalized_prn = p_normalized_prn
+    ORDER BY created_at NULLS LAST, role, user_id
+    LIMIT 1
+    ON CONFLICT DO NOTHING;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.ensure_prn_registry_reservation(TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.ensure_prn_registry_reservation(TEXT) FROM anon, authenticated;
+
+-- A profile's ordinary field edits must not try to re-claim its PRN. Registry
+-- writes happen only when the normalized PRN actually changes or a row is
+-- inserted/deleted. The unique index serializes concurrent new claims.
 CREATE OR REPLACE FUNCTION public.sync_student_prn_registry()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
-    normalized_value TEXT;
+    old_normalized TEXT;
+    new_normalized TEXT;
 BEGIN
+    IF TG_OP IN ('UPDATE', 'DELETE') THEN
+        old_normalized := NULLIF(UPPER(BTRIM(OLD.student_id)), '');
+    END IF;
+
     IF TG_OP = 'DELETE' THEN
-        DELETE FROM public.prn_registry WHERE user_id = OLD.user_id;
+        DELETE FROM public.prn_registry
+         WHERE normalized_prn = old_normalized
+           AND user_id = OLD.user_id;
+        PERFORM public.ensure_prn_registry_reservation(old_normalized);
         RETURN OLD;
     END IF;
 
-    IF TG_OP = 'UPDATE' THEN
-        DELETE FROM public.prn_registry WHERE user_id = OLD.user_id;
-    END IF;
+    new_normalized := NULLIF(UPPER(BTRIM(NEW.student_id)), '');
 
-    normalized_value := NULLIF(UPPER(BTRIM(NEW.student_id)), '');
-    DELETE FROM public.prn_registry WHERE user_id = NEW.user_id;
+    IF TG_OP = 'INSERT' OR old_normalized IS DISTINCT FROM new_normalized THEN
+        IF old_normalized IS NOT NULL THEN
+            DELETE FROM public.prn_registry
+             WHERE normalized_prn = old_normalized
+               AND user_id = OLD.user_id;
+            PERFORM public.ensure_prn_registry_reservation(old_normalized);
+        END IF;
 
-    IF normalized_value IS NOT NULL THEN
-        INSERT INTO public.prn_registry (normalized_prn, user_id, role)
-        VALUES (normalized_value, NEW.user_id, 'student');
+        IF new_normalized IS NOT NULL THEN
+            INSERT INTO public.prn_registry (normalized_prn, user_id, role)
+            VALUES (new_normalized, NEW.user_id, 'student');
+        END IF;
     END IF;
 
     RETURN NEW;
@@ -100,25 +133,39 @@ $$;
 CREATE OR REPLACE FUNCTION public.sync_alumni_prn_registry()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
-    normalized_value TEXT;
+    old_normalized TEXT;
+    new_normalized TEXT;
 BEGIN
+    IF TG_OP IN ('UPDATE', 'DELETE') THEN
+        old_normalized := NULLIF(UPPER(BTRIM(OLD.alumni_id)), '');
+    END IF;
+
     IF TG_OP = 'DELETE' THEN
-        DELETE FROM public.prn_registry WHERE user_id = OLD.user_id;
+        DELETE FROM public.prn_registry
+         WHERE normalized_prn = old_normalized
+           AND user_id = OLD.user_id;
+        PERFORM public.ensure_prn_registry_reservation(old_normalized);
         RETURN OLD;
     END IF;
 
-    IF TG_OP = 'UPDATE' THEN
-        DELETE FROM public.prn_registry WHERE user_id = OLD.user_id;
-    END IF;
+    new_normalized := NULLIF(UPPER(BTRIM(NEW.alumni_id)), '');
 
-    normalized_value := NULLIF(UPPER(BTRIM(NEW.alumni_id)), '');
-    DELETE FROM public.prn_registry WHERE user_id = NEW.user_id;
+    IF TG_OP = 'INSERT' OR old_normalized IS DISTINCT FROM new_normalized THEN
+        IF old_normalized IS NOT NULL THEN
+            DELETE FROM public.prn_registry
+             WHERE normalized_prn = old_normalized
+               AND user_id = OLD.user_id;
+            PERFORM public.ensure_prn_registry_reservation(old_normalized);
+        END IF;
 
-    IF normalized_value IS NOT NULL THEN
-        INSERT INTO public.prn_registry (normalized_prn, user_id, role)
-        VALUES (normalized_value, NEW.user_id, 'alumni');
+        IF new_normalized IS NOT NULL THEN
+            INSERT INTO public.prn_registry (normalized_prn, user_id, role)
+            VALUES (new_normalized, NEW.user_id, 'alumni');
+        END IF;
     END IF;
 
     RETURN NEW;
@@ -134,3 +181,30 @@ DROP TRIGGER IF EXISTS alumni_prn_registry_sync ON public.alumni_profiles;
 CREATE TRIGGER alumni_prn_registry_sync
 AFTER INSERT OR UPDATE OR DELETE ON public.alumni_profiles
 FOR EACH ROW EXECUTE FUNCTION public.sync_alumni_prn_registry();
+
+-- Report legacy conflicts without rejecting the migration. They remain
+-- reserved and are not exposed to new registrations; manual reconciliation
+-- can happen later without risking existing user records.
+DO $$
+DECLARE
+    duplicate_values BIGINT;
+BEGIN
+    SELECT COUNT(*) INTO duplicate_values
+    FROM (
+        SELECT normalized_prn
+        FROM (
+            SELECT UPPER(BTRIM(student_id)) AS normalized_prn
+              FROM public.student_profiles
+             WHERE NULLIF(BTRIM(student_id), '') IS NOT NULL
+            UNION ALL
+            SELECT UPPER(BTRIM(alumni_id)) AS normalized_prn
+              FROM public.alumni_profiles
+             WHERE NULLIF(BTRIM(alumni_id), '') IS NOT NULL
+        ) AS identifiers
+        GROUP BY normalized_prn
+        HAVING COUNT(*) > 1
+    ) AS duplicate_ids;
+
+    RAISE NOTICE 'PRN registry created. Existing duplicate PRN values retained and reserved: %', duplicate_values;
+END;
+$$;
