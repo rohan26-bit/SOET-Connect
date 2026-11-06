@@ -283,11 +283,10 @@ def get_aci_individual_leaderboard(
 
     ranked_alumni.sort(
         key=lambda item: (
-            item["aci_score"],
-            item["activity_points"],
+            -item["aci_score"],
+            -item["activity_points"],
             item["full_name"].casefold(),
-        ),
-        reverse=True,
+        )
     )
     total_contributors = len(ranked_alumni)
     ranked_alumni = ranked_alumni[:limit]
