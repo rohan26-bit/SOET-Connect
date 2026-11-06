@@ -311,7 +311,11 @@ def get_visible_alumni_achievements(
 
     if actor_id == target_id or actor.get("role") == "admin":
         visibility_filter = None
-    elif actor.get("role") == "alumni":
+    elif (
+        actor.get("role") == "alumni"
+        and actor.get("is_verified") is True
+        and str(actor.get("verification_status") or "").lower() == "approved"
+    ):
         visibility_filter = ["public", "alumni_only"]
     else:
         visibility_filter = ["public"]
