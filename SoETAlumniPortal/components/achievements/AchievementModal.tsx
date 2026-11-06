@@ -16,8 +16,6 @@ import {
   AlertCircle,
   FileCheck2,
   Trash2,
-  Info,
-  ShieldAlert,
 } from 'lucide-react';
 
 export type AchievementModalMode = 'add' | 'edit' | 'view' | 'delete';
@@ -27,8 +25,8 @@ interface AchievementModalProps {
   mode: AchievementModalMode;
   achievement?: Achievement | null;
   onClose: () => void;
-  onSubmitAttempt?: (data: CreateAchievementInput) => void;
-  onDeleteAttempt?: (id: string) => void;
+  onSubmitAttempt?: (data: CreateAchievementInput) => Promise<void> | void;
+  onDeleteAttempt?: (id: string) => Promise<void> | void;
 }
 
 interface FormErrors {
@@ -77,10 +75,10 @@ export default function AchievementModal({
   const [credentialUrl, setCredentialUrl] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [description, setDescription] = useState('');
+  const [visibility, setVisibility] = useState<'public' | 'private' | 'alumni_only'>('public');
   const [errors, setErrors] = useState<FormErrors>({});
-
-  // Feedback banner state for honest API unavailability notice
-  const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Populate form on mode / achievement change
   useEffect(() => {
@@ -93,6 +91,7 @@ export default function AchievementModal({
       setCredentialUrl(achievement.credential_url || '');
       setImageUrl(achievement.image_url || '');
       setDescription(achievement.description || '');
+      setVisibility(achievement.visibility || 'public');
     } else {
       setTitle('');
       setCategory('award');
@@ -102,9 +101,11 @@ export default function AchievementModal({
       setCredentialUrl('');
       setImageUrl('');
       setDescription('');
+      setVisibility('public');
     }
     setErrors({});
-    setNoticeMessage(null);
+    setActionError(null);
+    setIsSubmitting(false);
   }, [achievement, mode, isOpen]);
 
   // Keyboard accessibility: Escape key listener
@@ -165,43 +166,46 @@ export default function AchievementModal({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm() || isSubmitting) return;
 
     const payload: CreateAchievementInput = {
       title: title.trim(),
       category,
       achievement_date: achievementDate.trim(),
       issuing_organization: issuingOrg.trim(),
-      credential_name: credentialName.trim() || undefined,
-      credential_url: credentialUrl.trim() || undefined,
-      image_url: imageUrl.trim() || undefined,
+      credential_name: credentialName.trim() || null,
+      credential_url: credentialUrl.trim() || null,
+      image_url: imageUrl.trim() || null,
       description: description.trim(),
+      visibility,
     };
 
-    if (onSubmitAttempt) {
-      onSubmitAttempt(payload);
+    setIsSubmitting(true);
+    setActionError(null);
+    try {
+      await onSubmitAttempt?.(payload);
+      onClose();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to save this achievement. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    // Explicitly communicate that persistence is unavailable
-    setNoticeMessage(
-      'Achievement saving is currently unavailable because the backend achievement API has not been implemented yet.'
-    );
   };
 
-  const handleDeleteConfirm = () => {
-    if (achievement && onDeleteAttempt) {
-      onDeleteAttempt(achievement.id);
+  const handleDeleteConfirm = async () => {
+    if (!achievement || !onDeleteAttempt || isSubmitting) return;
+    setIsSubmitting(true);
+    setActionError(null);
+    try {
+      await onDeleteAttempt(achievement.id);
+      onClose();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to delete this achievement. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    // Explicitly communicate that deletion is unavailable
-    setNoticeMessage(
-      'Achievement deletion is currently unavailable because the backend achievement API has not been implemented yet.'
-    );
   };
 
   return (
@@ -253,14 +257,10 @@ export default function AchievementModal({
           </div>
         </div>
 
-        {/* Honest API Availability Alert */}
-        {noticeMessage && (
-          <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl mb-6 text-xs flex items-start gap-3">
-            <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-bold text-amber-950 mb-0.5">Backend Persistence Notice</p>
-              <p className="text-amber-800 leading-relaxed">{noticeMessage}</p>
-            </div>
+        {actionError && (
+          <div role="alert" className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-800">
+            <p className="font-bold text-rose-900">Action could not be completed</p>
+            <p className="mt-1 leading-relaxed">{actionError}</p>
           </div>
         )}
 
