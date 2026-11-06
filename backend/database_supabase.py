@@ -544,6 +544,22 @@ class SupabaseQueryBuilder:
         self.params["limit"] = str(count)
         return self
 
+    def range(self, start: int, end: int):
+        """Apply an inclusive PostgREST row range using offset and limit query parameters."""
+        start = max(0, int(start))
+        end = max(start, int(end))
+        self.params["offset"] = str(start)
+        self.params["limit"] = str(end - start + 1)
+        return self
+
+    def or_(self, filters: str):
+        """Apply a PostgREST OR filter expression, e.g. column.ilike.%term%,other.eq.value."""
+        expression = str(filters or "").strip()
+        if expression.startswith("(") and expression.endswith(")"):
+            expression = expression[1:-1]
+        self.params["or"] = f"({expression})"
+        return self
+
     def count(self) -> int:
         """Execute count-only query and return matching row count."""
         res = self.select("id", count="exact").limit(0).execute()
