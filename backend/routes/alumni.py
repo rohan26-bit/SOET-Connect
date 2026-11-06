@@ -289,13 +289,14 @@ def get_aci_individual_leaderboard(
         ),
         reverse=True,
     )
+    total_contributors = len(ranked_alumni)
     ranked_alumni = ranked_alumni[:limit]
     for index, alumni in enumerate(ranked_alumni, start=1):
         alumni["rank"] = index
 
     return {
         "leaderboard": ranked_alumni,
-        "total_contributors": len(ranked_alumni),
+        "total_contributors": total_contributors,
         "limit": limit,
     }
 
