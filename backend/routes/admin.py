@@ -349,7 +349,7 @@ def _sanitize_user(user: dict) -> dict:
         "website": alumni_profile.get("website") if role == "alumni" else None,
         "bio": alumni_profile.get("bio") if role == "alumni" else None,
         "is_verified": user.get("is_verified", False),
-        "verification_status": user.get("verification_status", "pending"),
+        "verification_status": str(user.get("verification_status") or ("approved" if user.get("is_verified", False) else "pending")).lower(),
         "is_active": user.get("is_active", True),
         "created_at": user.get("created_at"),
         "updated_at": user.get("updated_at"),
@@ -415,7 +415,9 @@ def get_pending_students(
     pending_users = [
         _sanitize_user(student)
         for student in student_users
-        if not student.get("is_verified", False) and student.get("verification_status", "pending") == "pending"
+        if student.get("is_active", True)
+        and not student.get("is_verified", False)
+        and str(student.get("verification_status") or "pending").lower() == "pending"
     ]
     return sorted(pending_users, key=lambda user: _created_at_sort_key(user.get("created_at")), reverse=True)
 
@@ -449,7 +451,9 @@ def export_admin_students(
         grad_year = prof.get("graduation_year") or s.get("graduation_year") or ""
 
         is_ver = s.get("is_verified", False)
-        v_status = s.get("verification_status") or ("approved" if is_ver else "pending")
+        v_status = str(s.get("verification_status") or ("approved" if is_ver else "pending")).lower()
+        if v_status == "pending" and status_filter != "pending":
+            continue
         is_act = s.get("is_active", True)
         reg_date = s.get("created_at") or ""
 
@@ -525,7 +529,9 @@ def export_admin_alumni(
         location = prof.get("location") or a.get("location") or ""
 
         is_ver = a.get("is_verified", False)
-        v_status = a.get("verification_status") or ("approved" if is_ver else "pending")
+        v_status = str(a.get("verification_status") or ("approved" if is_ver else "pending")).lower()
+        if v_status == "pending" and status_filter != "pending":
+            continue
         is_act = a.get("is_active", True)
         reg_date = a.get("created_at") or ""
 

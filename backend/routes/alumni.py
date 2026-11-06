@@ -215,7 +215,9 @@ def get_pending_alumni(
     results = []
 
     for alumni in alumni_users:
-        if alumni.get("verification_status", "pending") != "pending":
+        if alumni.get("is_verified", False):
+            continue
+        if str(alumni.get("verification_status") or "pending").lower() != "pending":
             continue
 
         profile = alumni.get("alumni_profile", {}) or {}

@@ -23,7 +23,9 @@ export default function AdminAlumniPage() {
     setLoading(true);
     try {
       const data = await adminService.getAllAlumni();
-      setAlumni(data);
+      setAlumni(data.filter((alum) =>
+        (alum.verification_status || (alum.is_verified ? 'approved' : 'pending')).toLowerCase() !== 'pending'
+      ));
     } catch (err) {
       console.error(err);
     } finally {
@@ -108,7 +110,7 @@ export default function AdminAlumniPage() {
         <div>
           <h1 className="text-2xl font-black text-[#4A3832] tracking-tight">Registered Alumni Directory</h1>
           <p className="text-xs text-[#6B6B6B] mt-1">
-            Browse graduate profiles, corporate affiliations, and verification statuses.
+            Browse reviewed graduate profiles, corporate affiliations, and final verification outcomes.
           </p>
         </div>
 

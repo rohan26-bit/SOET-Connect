@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
 import { adminService, UserManagementItem } from '@/lib/services/adminService';
@@ -9,7 +8,7 @@ import UserDetailsModal from '@/components/admin/UserDetailsModal';
 import DeleteUserConfirmationModal from '@/components/admin/DeleteUserConfirmationModal';
 import { 
   GraduationCap, Search, Ban, CheckCircle2, 
-  Clock, XCircle, AlertCircle, ArrowRight, RefreshCw, Download, Eye, Trash2
+  Clock, XCircle, AlertCircle, RefreshCw, Download, Eye, Trash2
 } from 'lucide-react';
 
 export default function AdminStudentManagementPage() {
@@ -17,7 +16,7 @@ export default function AdminStudentManagementPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'approved' | 'pending' | 'rejected' | 'suspended'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'approved' | 'rejected' | 'suspended'>('all');
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [exporting, setExporting] = useState<boolean>(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -47,7 +46,9 @@ export default function AdminStudentManagementPage() {
     setError(null);
     try {
       const data = await adminService.getAllStudents();
-      setStudents(data);
+      setStudents(data.filter((student) =>
+        (student.verification_status || (student.is_verified ? 'approved' : 'pending')).toLowerCase() !== 'pending'
+      ));
     } catch (err: any) {
       console.error('Failed to load students:', err);
       setError(err.message || 'Failed to load students list.');
@@ -124,10 +125,6 @@ export default function AdminStudentManagementPage() {
   };
 
   // Counts for filter tabs
-  const pendingCount = students.filter(
-    (s) => (s.verification_status || 'pending').toLowerCase() === 'pending'
-  ).length;
-
   const approvedCount = students.filter(
     (s) => (s.verification_status || '').toLowerCase() === 'approved'
   ).length;
@@ -175,7 +172,7 @@ export default function AdminStudentManagementPage() {
         <div>
           <h1 className="text-2xl font-black text-[#4A3832] tracking-tight">Student Management</h1>
           <p className="text-xs text-[#6B6B6B] mt-1">
-            Manage registered students, review account status, and control portal access.
+            Manage reviewed student accounts, view verification outcomes, and control portal access.
           </p>
         </div>
 
@@ -200,16 +197,6 @@ export default function AdminStudentManagementPage() {
             }`}
           >
             Approved ({approvedCount})
-          </button>
-          <button
-            onClick={() => setStatusFilter('pending')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-              statusFilter === 'pending'
-                ? 'bg-amber-500 text-white shadow-sm'
-                : 'text-[#6B6B6B] hover:text-[#4A3832]'
-            }`}
-          >
-            Pending ({pendingCount})
           </button>
           <button
             onClick={() => setStatusFilter('rejected')}
@@ -282,7 +269,7 @@ export default function AdminStudentManagementPage() {
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs font-semibold text-[#6B6B6B]">
-              Showing: {filtered.length} Students
+              Showing: {filtered.length} reviewed students
             </span>
             <button
               type="button"
@@ -308,7 +295,7 @@ export default function AdminStudentManagementPage() {
         ) : filtered.length === 0 ? (
           <div className="p-16 text-center text-xs text-[#6B6B6B]">
             <GraduationCap className="w-8 h-8 text-[#DDD7D2] mx-auto mb-2" />
-            No students found matching your criteria.
+            No reviewed student accounts found matching your criteria.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -325,8 +312,6 @@ export default function AdminStudentManagementPage() {
               </thead>
               <tbody className="divide-y divide-[#DDD7D2]/40 text-[#4A3832]">
                 {filtered.map((s) => {
-                  const isPending =
-                    (s.verification_status || 'pending').toLowerCase() === 'pending';
                   const isBusy = processingId === s.id;
                   const studentId = s.student_id;
 
@@ -374,14 +359,6 @@ export default function AdminStudentManagementPage() {
                             <Eye className="h-3.5 w-3.5" />
                             View Details
                           </button>
-                          {isPending && (
-                            <Link
-                              href="/admin/students"
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-600 text-white transition shadow-sm"
-                            >
-                              Review Verification <ArrowRight className="w-3.5 h-3.5" />
-                            </Link>
-                          )}
                           <button
                             disabled={isBusy}
                             onClick={() => handleToggleActive(s)}
