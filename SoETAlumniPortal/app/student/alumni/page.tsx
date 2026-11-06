@@ -5,7 +5,7 @@ import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
 import { alumniService, AlumniDirectoryItem, AciClassLeaderboardItem } from '@/lib/services/alumniService';
-import { Search, MapPin, Building, GraduationCap, Globe, ExternalLink, X, MessageSquare, Trophy, Crown, Medal } from 'lucide-react';
+import { Search, MapPin, Building, GraduationCap, Globe, ExternalLink, X, MessageSquare, Trophy, Crown } from 'lucide-react';
 
 const DEPARTMENTS = [
   'All Departments',
@@ -139,7 +139,7 @@ export default function AlumniDirectoryPage() {
                       </span>
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Rank #{cohort.rank}</p>
-                        <h3 className="text-base font-black text-[#4A3832]">Class of {cohort.graduation_year}</h3>
+                        <h3 className="text-base font-black text-[#4A3832]">{cohort.graduation_year === 'Unspecified' ? 'Batch not provided' : `Class of ${cohort.graduation_year}`}</h3>
                       </div>
                     </div>
                     {cohort.rank === 1 && (
@@ -180,7 +180,7 @@ export default function AlumniDirectoryPage() {
                   <div key={cohort.graduation_year} className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 last:border-0">
                     <div className="flex items-center gap-3">
                       <span className="w-8 text-center text-xs font-black text-slate-400">#{cohort.rank}</span>
-                      <span className="text-xs font-bold text-[#4A3832]">Class of {cohort.graduation_year}</span>
+                      <span className="text-xs font-bold text-[#4A3832]">{cohort.graduation_year === 'Unspecified' ? 'Batch not provided' : `Class of ${cohort.graduation_year}`}</span>
                       <span className="text-[10px] text-slate-400">{cohort.alumni_count} alumni</span>
                     </div>
                     <span className="text-xs font-black tabular-nums text-[#A75A24]">{cohort.total_aci_points.toLocaleString()} pts</span>
