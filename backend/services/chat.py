@@ -469,6 +469,7 @@ def ensure_conversation_participant(conversation_id: str, current_user_id: str) 
     participant_ids = [str(uid) for uid in conv.get("participant_ids", [])]
     if current_user_id not in participant_ids:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this conversation.")
+    ensure_conversation_recipient_available(conv_id, current_user_id)
     if current_user_id in [str(uid) for uid in conv.get("deleted_for", [])]:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
 
