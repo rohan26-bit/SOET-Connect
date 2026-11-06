@@ -587,3 +587,156 @@ def test_class_hall_of_fame_ranks_batches_by_total_aci(monkeypatch):
         "name": "Top Contributor 2022",
         "aci_score": 205,
     }
+
+
+# ------------------------------------------------------------
+# 22. Individual Hall of Fame ranks active verified contributors
+# ------------------------------------------------------------
+def test_individual_hall_of_fame_ranks_activity_and_excludes_non_contributors(monkeypatch):
+    """Rank alumni across all batches and exclude verification-only/pending accounts."""
+    users = [
+        {
+            "_id": "individual-top",
+            "name": "Alex Top",
+            "role": "alumni",
+            "is_active": True,
+            "is_verified": True,
+            "verification_status": "approved",
+            "avatar_url": "https://example.invalid/top.png",
+            "alumni_profile": {
+                "graduation_year": "2022",
+                "department": "Computer Engineering",
+                "company": "Tech Corp",
+                "designation": "Engineer",
+            },
+        },
+        {
+            "_id": "individual-second",
+            "name": "Blair Second",
+            "role": "alumni",
+            "is_active": True,
+            "is_verified": True,
+            "verification_status": "approved",
+            "alumni_profile": {
+                "graduation_year": "2024",
+                "department": "Information Technology",
+            },
+        },
+        {
+            "_id": "individual-third",
+            "name": "Casey Third",
+            "role": "alumni",
+            "is_active": True,
+            "is_verified": True,
+            "verification_status": "approved",
+            "alumni_profile": {"graduation_year": "2023"},
+        },
+        {
+            "_id": "individual-verification-only",
+            "name": "Verification Only",
+            "role": "alumni",
+            "is_active": True,
+            "is_verified": True,
+            "verification_status": "approved",
+            "alumni_profile": {"graduation_year": "2022"},
+        },
+        {
+            "_id": "individual-pending",
+            "name": "Pending Applicant",
+            "role": "alumni",
+            "is_active": True,
+            "is_verified": False,
+            "verification_status": "pending",
+            "alumni_profile": {"graduation_year": "2021"},
+        },
+        {
+            "_id": "individual-inactive",
+            "name": "Inactive Alum",
+            "role": "alumni",
+            "is_active": False,
+            "is_verified": True,
+            "verification_status": "approved",
+            "alumni_profile": {"graduation_year": "2020"},
+        },
+        {
+            "_id": "individual-rejected",
+            "name": "Rejected Alum",
+            "role": "alumni",
+            "is_active": True,
+            "is_verified": False,
+            "verification_status": "rejected",
+            "alumni_profile": {"graduation_year": "2019"},
+        },
+    ]
+    scores = {
+        "individual-top": 205,
+        "individual-second": 125,
+        "individual-third": 65,
+        "individual-verification-only": 25,
+        "individual-pending": 300,
+        "individual-inactive": 250,
+        "individual-rejected": 180,
+    }
+
+    _get_or_create_user(
+        "individual-hof-requester",
+        "Directory Student",
+        "individual-hof-requester@test.com",
+        "student",
+    )
+    token = create_access_token("individual-hof-requester", "student")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    monkeypatch.setattr(
+        alumni_routes.users_collection,
+        "find",
+        lambda query=None, **kwargs: users,
+    )
+    monkeypatch.setattr(alumni_routes, "_load_aci_source_data", lambda: ([], [], []))
+    monkeypatch.setattr(
+        alumni_routes,
+        "calculate_alumni_aci",
+        lambda user_id, **kwargs: {
+            "score": scores[user_id],
+            "breakdown": {
+                "verification": 25,
+                "jobs": max(0, scores[user_id] - 25),
+                "events": 0,
+                "registrations": 0,
+            },
+            "activity_counts": {
+                "approved_jobs": 1,
+                "approved_events": 0,
+                "valid_registrations": 0,
+            },
+        },
+    )
+
+    response = client.get(
+        "/alumni/aci/individual-leaderboard?limit=2",
+        headers=headers,
+    )
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["total_contributors"] == 3
+    assert payload["limit"] == 2
+    assert [item["id"] for item in payload["leaderboard"]] == [
+        "individual-top",
+        "individual-second",
+    ]
+    assert [item["rank"] for item in payload["leaderboard"]] == [1, 2]
+
+    first = payload["leaderboard"][0]
+    assert first["aci_score"] == 205
+    assert first["activity_points"] == 180
+    assert first["aci_tier"] == "Gold Contributor"
+    assert first["aci_badge"] == "🥇"
+    assert first["graduation_year"] == "2022"
+    assert first["department"] == "Computer Engineering"
+    assert first["breakdown"]["jobs"] == 180
+
+    # A profile with only the verification baseline is not an individual contributor.
+    assert "individual-verification-only" not in {
+        item["id"] for item in payload["leaderboard"]
+    }
