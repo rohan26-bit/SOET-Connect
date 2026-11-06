@@ -42,6 +42,31 @@ def _created_at_sort_key(value) -> float:
         return 0.0
 
 
+def _load_aci_source_data() -> tuple[list[dict], list[dict], list[dict]]:
+    """Load shared ACI inputs once so directory and leaderboard scores stay consistent."""
+    def _load(table_name: str, file_path: str | None, columns: str) -> list[dict]:
+        if file_path and Path(file_path).exists():
+            try:
+                raw = Path(file_path).read_text(encoding="utf-8").strip()
+                if raw and raw != "[]":
+                    data = json.loads(raw)
+                    if isinstance(data, list):
+                        return data
+            except Exception:
+                pass
+        try:
+            return supabase.table(table_name).select(columns).execute().data or []
+        except Exception as exc:
+            print(f"Unable to load {table_name} for ACI: {exc}")
+            return []
+
+    return (
+        _load("jobs", JOBS_FILE, "id,posted_by,status"),
+        _load("events", EVENTS_FILE, "id,created_by,status"),
+        _load("event_registrations", REGISTRATIONS_FILE, "id,event_id,user_id"),
+    )
+
+
 def get_user_from_token(current_user: dict):
     user_id = current_user.get("user_id")
     role = current_user.get("role")
@@ -90,6 +115,97 @@ def get_my_aci(
         )
 
     return calculate_alumni_aci(str(user["_id"]), user_doc=user)
+
+
+# ============================================================
+# CLASS HALL OF FAME
+# ============================================================
+
+@router.get("/aci/leaderboard")
+def get_aci_class_leaderboard(
+    current_user: dict = Depends(get_current_user),
+):
+    """Rank alumni graduation classes by the combined ACI earned by their verified members."""
+    alumni_users = users_collection.find({
+        "role": "alumni",
+        "is_active": True,
+        "is_verified": True,
+    })
+
+    jobs, events, registrations = _load_aci_source_data()
+    classes: dict[str, dict] = {}
+
+    for alumni in alumni_users:
+        if not alumni.get("is_active", True):
+            continue
+        if not alumni.get("is_verified", False):
+            continue
+        if str(alumni.get("verification_status") or "").lower() != "approved":
+            continue
+
+        profile = alumni.get("alumni_profile", {}) or {}
+        batch_year = str(profile.get("graduation_year") or "").strip() or "Unspecified"
+        user_id = str(alumni.get("_id") or alumni.get("id") or "")
+        if not user_id:
+            continue
+
+        aci_data = calculate_alumni_aci(
+            user_id=user_id,
+            user_doc=alumni,
+            jobs=jobs,
+            events=events,
+            registrations=registrations,
+        )
+        score = int(aci_data.get("score") or 0)
+        contribution_points = max(
+            0,
+            score - int((aci_data.get("breakdown") or {}).get("verification") or 0),
+        )
+
+        row = classes.setdefault(batch_year, {
+            "graduation_year": batch_year,
+            "alumni_count": 0,
+            "total_aci_points": 0,
+            "total_activity_points": 0,
+            "contributing_alumni_count": 0,
+            "top_contributor": None,
+        })
+        row["alumni_count"] += 1
+        row["total_aci_points"] += score
+        row["total_activity_points"] += contribution_points
+        if contribution_points > 0:
+            row["contributing_alumni_count"] += 1
+
+        top = row["top_contributor"]
+        if top is None or score > top["aci_score"]:
+            row["top_contributor"] = {
+                "name": alumni.get("name") or "SOET Alumnus",
+                "aci_score": score,
+            }
+
+    leaderboard = list(classes.values())
+    for row in leaderboard:
+        row["average_aci_points"] = round(
+            row["total_aci_points"] / row["alumni_count"], 1
+        ) if row["alumni_count"] else 0
+
+    leaderboard.sort(
+        key=lambda row: (
+            row["total_aci_points"],
+            row["total_activity_points"],
+            row["contributing_alumni_count"],
+            row["graduation_year"],
+        ),
+        reverse=True,
+    )
+    for index, row in enumerate(leaderboard, start=1):
+        row["rank"] = index
+
+    return {
+        "leaderboard": leaderboard,
+        "total_classes": len(leaderboard),
+        "total_alumni": sum(row["alumni_count"] for row in leaderboard),
+    }
 
 
 # ============================================================

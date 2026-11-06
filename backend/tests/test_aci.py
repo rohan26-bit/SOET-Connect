@@ -485,3 +485,105 @@ def test_20_directory_sort_by_aci():
     assert high_idx < low_idx
     assert sorted_items[high_idx]["aci_score"] == 125
     assert sorted_items[low_idx]["aci_score"] == 25
+
+
+# ------------------------------------------------------------
+# 21. Class Hall of Fame ranks graduation cohorts by combined ACI
+# ------------------------------------------------------------
+def test_class_hall_of_fame_ranks_batches_by_total_aci(monkeypatch):
+    """Verified alumni scores are aggregated by graduation year and ranked descending."""
+    users = [
+        {
+            "_id": "hof-2022-a",
+            "name": "Top Contributor 2022",
+            "role": "alumni",
+            "is_active": True,
+            "is_verified": True,
+            "verification_status": "approved",
+            "alumni_profile": {"graduation_year": "2022"},
+        },
+        {
+            "_id": "hof-2022-b",
+            "name": "Second Contributor 2022",
+            "role": "alumni",
+            "is_active": True,
+            "is_verified": True,
+            "verification_status": "approved",
+            "alumni_profile": {"graduation_year": "2022"},
+        },
+        {
+            "_id": "hof-2023-a",
+            "name": "Contributor 2023",
+            "role": "alumni",
+            "is_active": True,
+            "is_verified": True,
+            "verification_status": "approved",
+            "alumni_profile": {"graduation_year": "2023"},
+        },
+        {
+            "_id": "hof-unknown",
+            "name": "Contributor Without Batch",
+            "role": "alumni",
+            "is_active": True,
+            "is_verified": True,
+            "verification_status": "approved",
+            "alumni_profile": {},
+        },
+        {
+            "_id": "hof-pending",
+            "name": "Pending Alumni",
+            "role": "alumni",
+            "is_active": True,
+            "is_verified": False,
+            "verification_status": "pending",
+            "alumni_profile": {"graduation_year": "2021"},
+        },
+    ]
+    scores = {
+        "hof-2022-a": 205,
+        "hof-2022-b": 65,
+        "hof-2023-a": 75,
+        "hof-unknown": 25,
+    }
+
+    _get_or_create_user("hof-requester", "Directory Student", "hof-requester@test.com", "student")
+    token = create_access_token("hof-requester", "student")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    monkeypatch.setattr(
+        alumni_routes.users_collection,
+        "find",
+        lambda query=None, **kwargs: users,
+    )
+    monkeypatch.setattr(alumni_routes, "_load_aci_source_data", lambda: ([], [], []))
+    monkeypatch.setattr(
+        alumni_routes,
+        "calculate_alumni_aci",
+        lambda user_id, **kwargs: {
+            "score": scores[user_id],
+            "breakdown": {"verification": 25},
+        },
+    )
+
+    response = client.get("/alumni/aci/leaderboard", headers=headers)
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["total_classes"] == 3
+    assert payload["total_alumni"] == 4
+    assert [row["graduation_year"] for row in payload["leaderboard"]] == [
+        "2022",
+        "2023",
+        "Unspecified",
+    ]
+
+    leading_class = payload["leaderboard"][0]
+    assert leading_class["rank"] == 1
+    assert leading_class["total_aci_points"] == 270
+    assert leading_class["average_aci_points"] == 135
+    assert leading_class["alumni_count"] == 2
+    assert leading_class["contributing_alumni_count"] == 2
+    assert leading_class["top_contributor"] == {
+        "name": "Top Contributor 2022",
+        "aci_score": 205,
+    }

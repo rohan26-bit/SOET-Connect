@@ -4,8 +4,8 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
-import { alumniService, AlumniDirectoryItem } from '@/lib/services/alumniService';
-import { Search, MapPin, Building, GraduationCap, Globe, ExternalLink, Filter, Mail, X, MessageSquare } from 'lucide-react';
+import { alumniService, AlumniDirectoryItem, AciClassLeaderboardItem } from '@/lib/services/alumniService';
+import { Search, MapPin, Building, GraduationCap, Globe, ExternalLink, X, MessageSquare, Trophy, Crown } from 'lucide-react';
 
 const DEPARTMENTS = [
   'All Departments',
@@ -18,6 +18,13 @@ const DEPARTMENTS = [
   'Electrical Engineering'
 ];
 
+function getAciRecognition(score: number) {
+  if (score >= 300) return { tier: 'Platinum Contributor', badge: '💎', range: '300+ pts' };
+  if (score >= 150) return { tier: 'Gold Contributor', badge: '🥇', range: '150–299 pts' };
+  if (score >= 50) return { tier: 'Silver Contributor', badge: '🥈', range: '50–149 pts' };
+  return { tier: 'Bronze Contributor', badge: '🥉', range: '0–49 pts' };
+}
+
 export default function AlumniDirectoryPage() {
   const [alumni, setAlumni] = useState<AlumniDirectoryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,6 +32,9 @@ export default function AlumniDirectoryPage() {
   const [department, setDepartment] = useState('All Departments');
   const [sortBy, setSortBy] = useState('');
   const [selectedAlumni, setSelectedAlumni] = useState<AlumniDirectoryItem | null>(null);
+  const [classLeaderboard, setClassLeaderboard] = useState<AciClassLeaderboardItem[]>([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(true);
+  const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
 
   const fetchAlumni = async () => {
     setLoading(true);
@@ -45,6 +55,21 @@ export default function AlumniDirectoryPage() {
   useEffect(() => {
     fetchAlumni();
   }, [department, sortBy]);
+
+  useEffect(() => {
+    let active = true;
+    alumniService.getClassLeaderboard()
+      .then((data) => {
+        if (active) setClassLeaderboard(data.leaderboard || []);
+      })
+      .catch((err) => {
+        if (active) setLeaderboardError(err instanceof Error ? err.message : 'Unable to load the Hall of Fame.');
+      })
+      .finally(() => {
+        if (active) setLeaderboardLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,6 +93,115 @@ export default function AlumniDirectoryPage() {
           </p>
         </div>
       </div>
+
+      {/* Class Hall of Fame */}
+      <section className="mb-8 overflow-hidden rounded-3xl border border-amber-200/70 bg-gradient-to-br from-[#FFF9F0] via-white to-[#FFF3E4] p-5 shadow-sm sm:p-6">
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="mb-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-amber-700">
+              <Crown className="h-4 w-4" /> SOET legacy
+            </p>
+            <h2 className="text-xl font-black text-[#4A3832] sm:text-2xl">Class Hall of Fame</h2>
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-600">
+              Graduation classes ranked by the combined ACI points earned by their verified alumni.
+            </p>
+          </div>
+          <div className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-white/80 px-3 py-2 text-xs font-bold text-amber-800">
+            <Trophy className="h-4 w-4" />
+            {classLeaderboard.length} {classLeaderboard.length === 1 ? 'class ranked' : 'classes ranked'}
+          </div>
+        </div>
+
+        {leaderboardLoading ? (
+          <div className="rounded-2xl border border-amber-100 bg-white/80 p-6 text-center text-xs font-medium text-slate-500">
+            Calculating class contributions…
+          </div>
+        ) : leaderboardError ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-700">
+            {leaderboardError}
+          </div>
+        ) : classLeaderboard.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-amber-200 bg-white/70 p-6 text-center text-xs text-slate-500">
+            The Hall of Fame will appear once verified alumni have joined the directory.
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              {classLeaderboard.slice(0, 3).map((cohort) => (
+                <article
+                  key={cohort.graduation_year}
+                  className={`rounded-2xl border p-4 shadow-sm ${cohort.rank === 1 ? 'border-amber-300 bg-white' : 'border-slate-200 bg-white/85'}`}
+                >
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-xl">
+                        {cohort.rank === 1 ? '🏆' : cohort.rank === 2 ? '🥈' : '🥉'}
+                      </span>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Rank #{cohort.rank}</p>
+                        <h3 className="text-base font-black text-[#4A3832]">{cohort.graduation_year === 'Unspecified' ? 'Batch not provided' : `Class of ${cohort.graduation_year}`}</h3>
+                      </div>
+                    </div>
+                    {cohort.rank === 1 && (
+                      <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-amber-800">
+                        Leading class
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-end justify-between border-b border-slate-100 pb-3">
+                    <div>
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Total ACI points</p>
+                      <p className="text-3xl font-black tabular-nums text-[#A75A24]">{cohort.total_aci_points.toLocaleString()}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Average / alumnus</p>
+                      <p className="text-lg font-extrabold tabular-nums text-slate-700">{cohort.average_aci_points}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between gap-2 text-[10px] text-slate-600">
+                    <span>{cohort.alumni_count} verified {cohort.alumni_count === 1 ? 'alumnus' : 'alumni'}</span>
+                    <span className="font-bold text-emerald-700">{cohort.contributing_alumni_count} active contributors</span>
+                  </div>
+                  {cohort.top_contributor && (
+                    <p className="mt-2 truncate text-[10px] text-slate-500">
+                      Top contributor: <strong className="text-slate-700">{cohort.top_contributor.name}</strong>
+                      <span className="font-bold text-blue-700"> · {cohort.top_contributor.aci_score} pts</span>
+                    </p>
+                  )}
+                </article>
+              ))}
+            </div>
+
+            {classLeaderboard.length > 3 && (
+              <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white/85">
+                {classLeaderboard.slice(3).map((cohort) => (
+                  <div key={cohort.graduation_year} className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 last:border-0">
+                    <div className="flex items-center gap-3">
+                      <span className="w-8 text-center text-xs font-black text-slate-400">#{cohort.rank}</span>
+                      <span className="text-xs font-bold text-[#4A3832]">{cohort.graduation_year === 'Unspecified' ? 'Batch not provided' : `Class of ${cohort.graduation_year}`}</span>
+                      <span className="text-[10px] text-slate-400">{cohort.alumni_count} alumni</span>
+                    </div>
+                    <span className="text-xs font-black tabular-nums text-[#A75A24]">{cohort.total_aci_points.toLocaleString()} pts</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-amber-100 pt-3 text-[10px] text-slate-500">
+          <span className="font-bold uppercase tracking-wider text-slate-400">Individual ACI tiers:</span>
+          <span>🥉 Bronze 0–49</span>
+          <span>🥈 Silver 50–149</span>
+          <span>🥇 Gold 150–299</span>
+          <span>💎 Platinum 300+</span>
+        </div>
+        <p className="mt-1 text-[9px] text-slate-400">
+          Class rankings use combined ACI scores. Individual tier badges are recalculated directly from each alumnus’s current score.
+        </p>
+      </section>
 
       {/* Search & Filters */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm mb-8">
@@ -185,8 +319,8 @@ export default function AlumniDirectoryPage() {
                 {alum.aci_score !== undefined && (
                   <div className="mt-3.5 py-2 px-3 bg-slate-50/90 rounded-xl border border-slate-100 flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-base select-none">{alum.aci_badge || '🥉'}</span>
-                      <span className="text-xs font-bold text-slate-800">{alum.aci_tier || 'Bronze Contributor'}</span>
+                      <span className="text-base select-none">{getAciRecognition(alum.aci_score || 0).badge}</span>
+                      <span className="text-xs font-bold text-slate-800">{getAciRecognition(alum.aci_score || 0).tier}</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ACI:</span>
@@ -267,9 +401,9 @@ export default function AlumniDirectoryPage() {
             {selectedAlumni.aci_score !== undefined && (
               <div className="mb-4 p-3.5 bg-gradient-to-r from-blue-50 to-indigo-50/70 border border-blue-100 rounded-2xl flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <span className="text-2xl select-none">{selectedAlumni.aci_badge || '🥉'}</span>
+                  <span className="text-2xl select-none">{getAciRecognition(selectedAlumni.aci_score || 0).badge}</span>
                   <div>
-                    <h4 className="text-xs font-bold text-slate-900">{selectedAlumni.aci_tier || 'Bronze Contributor'}</h4>
+                    <h4 className="text-xs font-bold text-slate-900">{getAciRecognition(selectedAlumni.aci_score || 0).tier}</h4>
                     <p className="text-[11px] text-slate-500">Alumni Contribution Index</p>
                   </div>
                 </div>
