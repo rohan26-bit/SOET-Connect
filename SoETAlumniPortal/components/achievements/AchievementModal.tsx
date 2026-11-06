@@ -350,6 +350,18 @@ export default function AchievementModal({
               </p>
             </div>
 
+            {/* Supporting image / document */}
+            {achievement?.image_url && (
+              <a
+                href={achievement.image_url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:underline"
+              >
+                Open supporting image / document <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
+
             {/* Credential Name / URL */}
             {(achievement?.credential_name || achievement?.credential_url) && (
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
@@ -559,6 +571,30 @@ export default function AchievementModal({
                 <p className="text-red-600 text-[11px] mt-1 flex items-center gap-1">
                   <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                   {errors.credential_url}
+                </p>
+              )}
+            </div>
+
+            {/* Supporting document / image URL (Optional) */}
+            <div>
+              <label
+                htmlFor="ach-image-url"
+                className="block font-bold text-slate-700 mb-1"
+              >
+                Supporting Image / Document URL <span className="text-slate-400 font-normal">(Optional)</span>
+              </label>
+              <input
+                id="ach-image-url"
+                type="url"
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                placeholder="https://example.com/achievement-proof.jpg"
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {errors.image_url && (
+                <p className="text-red-600 text-[11px] mt-1 flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  {errors.image_url}
                 </p>
               )}
             </div>
