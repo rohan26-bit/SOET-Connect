@@ -168,6 +168,18 @@ export interface JobApplicantsResponse {
   applicants: JobApplicantDetail[];
 }
 
+
+
+function sortNewestFirst<T extends { created_at?: string }>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const aTime = a.created_at ? Date.parse(a.created_at) : Number.NaN;
+    const bTime = b.created_at ? Date.parse(b.created_at) : Number.NaN;
+    const safeA = Number.isFinite(aTime) ? aTime : Number.NEGATIVE_INFINITY;
+    const safeB = Number.isFinite(bTime) ? bTime : Number.NEGATIVE_INFINITY;
+    return safeB - safeA;
+  });
+}
+
 function getToken(): string {
   const token = localStorage.getItem('soet_access_token');
 
@@ -211,7 +223,8 @@ export const adminService = {
       }
     );
 
-    return parseResponse(response);
+    const data = await parseResponse(response);
+    return sortNewestFirst(data || []);
   },
 
   // ============================================================
@@ -269,7 +282,7 @@ export const adminService = {
     });
 
     const data = await parseResponse(response);
-    return (data || []).map((s: any) => ({
+    return sortNewestFirst((data || []).map((s: any) => ({
       id: s.id,
       full_name: s.full_name || s.name || '',
       email: s.email || '',
@@ -290,7 +303,7 @@ export const adminService = {
       is_active: s.is_active ?? true,
       created_at: s.created_at,
       updated_at: s.updated_at,
-    }));
+    )}));
   },
 
   async getPendingStudents(): Promise<UserManagementItem[]> {
@@ -303,7 +316,7 @@ export const adminService = {
     });
 
     const data = await parseResponse(response);
-    return (data || []).map((s: any) => ({
+    return sortNewestFirst((data || []).map((s: any) => ({
       id: s.id,
       full_name: s.full_name || s.name || '',
       email: s.email || '',
@@ -323,7 +336,7 @@ export const adminService = {
       is_active: s.is_active ?? true,
       created_at: s.created_at,
       updated_at: s.updated_at,
-    }));
+    )}));
   },
 
   async updateStudentVerification(
@@ -354,7 +367,7 @@ export const adminService = {
     });
 
     const data = await parseResponse(response);
-    return (data || []).map((a: any) => ({
+    return sortNewestFirst((data || []).map((a: any) => ({
       id: a.id,
       full_name: a.full_name || a.name || '',
       email: a.email || '',
@@ -381,7 +394,7 @@ export const adminService = {
       is_active: a.is_active ?? true,
       created_at: a.created_at,
       updated_at: a.updated_at,
-    }));
+    )}));
   },
 
   async toggleUserActive(
