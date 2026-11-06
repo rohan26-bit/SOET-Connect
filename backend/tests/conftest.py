@@ -108,7 +108,8 @@ def _create_mock_user(
     }
     if role == "student":
         doc["student_profile"] = extra_profile or {
-            "student_id": "STU001",
+            # Fixtures represent separate test identities; their PRNs must be unique too.
+            "student_id": f"STU-{user_id[:8].upper()}",
             "department": "Computer Science",
             "course": "B.Tech",
             "academic_year": "3rd",
@@ -117,7 +118,7 @@ def _create_mock_user(
         }
     elif role == "alumni":
         doc["alumni_profile"] = extra_profile or {
-            "alumni_id": "ALU001",
+            "alumni_id": f"ALU-{user_id[:8].upper()}",
             "department": "Computer Science",
             "degree": "B.Tech",
             "graduation_year": "2022",
