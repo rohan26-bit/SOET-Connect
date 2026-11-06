@@ -82,6 +82,26 @@ def _is_user_online(last_seen_at, now: datetime | None = None) -> bool:
         return False
 
 
+def ensure_conversation_recipient_available(conversation_id: str, sender_id: str) -> None:
+    """Prevent sending new content into a conversation whose other account was removed or disabled."""
+    conv_id = parse_object_id(conversation_id, "Conversation not found.")
+    conv = conversations_collection.find_one({"_id": conv_id})
+    if not conv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
+
+    participant_ids = [str(uid) for uid in conv.get("participant_ids", [])]
+    if sender_id not in participant_ids:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this conversation.")
+
+    recipient_ids = [uid for uid in participant_ids if uid != str(sender_id)]
+    recipient = get_user_by_id(recipient_ids[0]) if recipient_ids else None
+    if not recipient or not recipient.get("is_active", True):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This account is no longer available. You can still view the conversation history and shared files.",
+        )
+
+
 def record_chat_presence(current_user_id: str) -> dict:
     """Record a server timestamp for a currently authenticated, active user."""
     now = datetime.now(timezone.utc)
@@ -96,7 +116,7 @@ def record_chat_presence(current_user_id: str) -> dict:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User account not found.",
             )
-    return {"status": "success", "last_seen_at": now.isoformat()}
+    return {"message": "Presence updated.", "status": "success", "last_seen_at": now.isoformat()}
 
 
 def parse_object_id(id_val: str, error_detail: str = "Resource not found.") -> str:
@@ -390,6 +410,8 @@ def send_conversation_message(conversation_id: str, sender_id: str, content: str
             detail="Conversation not found."
         )
 
+    ensure_conversation_recipient_available(conv_id, sender_id)
+
     participant_ids = [str(uid) for uid in conv.get("participant_ids", [])]
     if sender_id not in participant_ids:
         raise HTTPException(
@@ -462,6 +484,8 @@ def send_conversation_attachments(
     conv = conversations_collection.find_one({"_id": conv_id})
     if not conv:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
+
+    ensure_conversation_recipient_available(conv_id, sender_id)
 
     participant_ids = [str(uid) for uid in conv.get("participant_ids", [])]
     if sender_id not in participant_ids:
