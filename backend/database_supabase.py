@@ -642,6 +642,23 @@ class SupabaseStorageBucket:
             "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
         }
 
+    @staticmethod
+    def _is_missing_bucket_response(response) -> bool:
+        """Supabase Storage may report a missing bucket as HTTP 400, not only 404."""
+        if response.status_code == 404:
+            return True
+
+        try:
+            payload = response.json()
+        except Exception:
+            payload = {}
+
+        code = str(payload.get("code") or "").lower()
+        message = str(payload.get("message") or payload.get("error") or response.text or "").lower()
+        return code in {"nosuchbucket", "bucketnotfound"} or (
+            response.status_code == 400 and "bucket not found" in message
+        )
+
     def _ensure_chat_bucket(self) -> None:
         """Create the private chat bucket on first use; existing buckets are left unchanged."""
         if self.bucket != CHAT_ATTACHMENT_BUCKET or self.bucket in self._ensured_storage_buckets:
@@ -650,7 +667,7 @@ class SupabaseStorageBucket:
         client = get_http_client(self.timeout)
         bucket_url = f"{self.storage_url}/bucket/{self.bucket}"
         check = client.get(bucket_url, headers=self.headers)
-        if check.status_code == 404:
+        if self._is_missing_bucket_response(check):
             create = client.post(
                 f"{self.storage_url}/bucket",
                 headers={**self.headers, "Content-Type": "application/json"},
@@ -672,8 +689,18 @@ class SupabaseStorageBucket:
                     ],
                 },
             )
-            if not create.is_success and create.status_code != 409:
-                raise RuntimeError(f"Could not initialize private chat storage ({create.status_code}): {create.text}")
+            if create.status_code == 409:
+                # Another warm serverless instance may have created the bucket concurrently.
+                verify = client.get(bucket_url, headers=self.headers)
+                if not verify.is_success:
+                    raise RuntimeError(
+                        f"Chat storage bucket creation raced but verification failed "
+                        f"({verify.status_code}): {verify.text}"
+                    )
+            elif not create.is_success:
+                raise RuntimeError(
+                    f"Could not initialize private chat storage ({create.status_code}): {create.text}"
+                )
         elif not check.is_success:
             raise RuntimeError(f"Could not verify private chat storage ({check.status_code}): {check.text}")
 
