@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import PostedAt from '@/components/PostedAt';
@@ -14,6 +14,7 @@ const PAGE_SIZE = 12;
 export default function PlacementCelebrationsPage() {
   const { user } = useAuth();
   const [placements, setPlacements] = useState<PlacementCelebration[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -27,11 +28,14 @@ export default function PlacementCelebrationsPage() {
       setLoading(true);
       setError(null);
       try {
-        const items = await placementService.getPublished(100);
+        const result = await placementService.getPublishedPage({
+          limit: PAGE_SIZE,
+          offset: (page - 1) * PAGE_SIZE,
+          search,
+        });
         if (active) {
-          setPlacements(items.sort((a, b) => (
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          )));
+          setPlacements(result.placements);
+          setTotalCount(result.total);
         }
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : 'Unable to load placement celebrations.');
@@ -42,29 +46,12 @@ export default function PlacementCelebrationsPage() {
 
     loadPlacements();
     return () => { active = false; };
-  }, []);
+  }, [page, search]);
 
-  const filteredPlacements = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return placements;
-    return placements.filter((item) => [
-      item.alumni_name,
-      item.company_name,
-      item.designation,
-      item.department,
-      item.batch_year,
-      item.message,
-    ].some((value) => value?.toLowerCase().includes(term)));
-  }, [placements, search]);
-
-  const pageCount = Math.max(1, Math.ceil(filteredPlacements.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
-  const visiblePlacements = filteredPlacements.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE
-  );
-  const firstVisible = filteredPlacements.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
-  const lastVisible = Math.min(currentPage * PAGE_SIZE, filteredPlacements.length);
+  const firstVisible = totalCount === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const lastVisible = Math.min(currentPage * PAGE_SIZE, totalCount);
 
   return (
     <DashboardLayout>
@@ -107,7 +94,7 @@ export default function PlacementCelebrationsPage() {
           </div>
           {!loading && !error && (
             <p className="text-xs font-semibold text-[#83766D]">
-              {filteredPlacements.length} {filteredPlacements.length === 1 ? 'celebration' : 'celebrations'}
+              {totalCount} {totalCount === 1 ? 'celebration' : 'celebrations'}
             </p>
           )}
         </div>
@@ -137,7 +124,7 @@ export default function PlacementCelebrationsPage() {
               </div>
             ))}
           </div>
-        ) : !error && visiblePlacements.length === 0 ? (
+        ) : !error && placements.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-[#D9C9BB] bg-white px-6 py-16 text-center">
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#FBF1E8] text-[#C56A25]">
               <Award className="h-7 w-7" />
@@ -154,7 +141,7 @@ export default function PlacementCelebrationsPage() {
         ) : !error && (
           <>
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {visiblePlacements.map((placement) => (
+              {placements.map((placement) => (
                 <article
                   key={placement.id}
                   className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[#E7DED6] bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
@@ -208,7 +195,7 @@ export default function PlacementCelebrationsPage() {
               <div className="flex flex-col items-center justify-between gap-3 rounded-2xl border border-[#E7DED6] bg-white px-4 py-3 sm:flex-row">
                 <p className="text-xs text-[#83766D]">
                   Showing <span className="font-bold text-[#4A3832]">{firstVisible}–{lastVisible}</span> of{' '}
-                  <span className="font-bold text-[#4A3832]">{filteredPlacements.length}</span> celebrations
+                  <span className="font-bold text-[#4A3832]">{totalCount}</span> celebrations
                 </p>
                 <div className="flex items-center gap-2">
                   <button
