@@ -827,7 +827,7 @@ class SupabaseUsersCollection:
             "is_phone_verified": user_row.get("is_phone_verified", False),
             "is_active": user_row.get("is_active", True),
             "is_verified": user_row.get("is_verified", False),
-            "verification_status": user_row.get("verification_status", "pending"),
+            "verification_status": str(user_row.get("verification_status") or ("approved" if user_row.get("is_verified", False) else "pending")).lower(),
             "created_at": user_row.get("created_at"),
             "updated_at": user_row.get("updated_at"),
         }
