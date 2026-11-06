@@ -878,6 +878,7 @@ class SupabaseUsersCollection:
             ),
             "created_at": user_row.get("created_at"),
             "updated_at": user_row.get("updated_at"),
+            "last_seen_at": user_row.get("last_seen_at"),
         }
 
         role = user_row.get("role")
@@ -1174,7 +1175,7 @@ class SupabaseUsersCollection:
 
         # Base user fields
         base_updates = {}
-        for k in ["name", "email", "password_hash", "avatar_url", "is_active", "is_verified", "verification_status", "phone", "is_phone_verified"]:
+        for k in ["name", "email", "password_hash", "avatar_url", "is_active", "is_verified", "verification_status", "phone", "is_phone_verified", "last_seen_at"]:
             if k in set_fields:
                 base_updates[k] = set_fields[k]
 
