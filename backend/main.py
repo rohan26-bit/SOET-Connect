@@ -7,6 +7,7 @@ from database import test_database_connection
 from routes.auth import router as auth_router
 from routes.profile import router as profile_router
 from routes.alumni import router as alumni_router
+from routes.achievements import router as achievements_router
 from routes.jobs import router as jobs_router
 from routes.applications import router as applications_router
 from routes.events import router as events_router
@@ -55,6 +56,7 @@ api_router = APIRouter(prefix="/api")
 api_router.include_router(auth_router)
 api_router.include_router(profile_router)
 api_router.include_router(alumni_router)
+api_router.include_router(achievements_router)
 api_router.include_router(jobs_router)
 api_router.include_router(applications_router)
 api_router.include_router(events_router)
@@ -69,6 +71,7 @@ app.include_router(api_router)
 app.include_router(auth_router)
 app.include_router(profile_router)
 app.include_router(alumni_router)
+app.include_router(achievements_router)
 app.include_router(jobs_router)
 app.include_router(applications_router)
 app.include_router(events_router)
