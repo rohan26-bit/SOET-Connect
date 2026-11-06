@@ -1,13 +1,8 @@
 /**
- * Achievements & Recognition Service Contract
+ * Achievements & Recognition service.
  *
- * Defines the TypeScript data model and service contract for alumni
- * achievements, awards, credentials, and honors.
- *
- * NOTE: FastAPI backend endpoints for achievements have not yet been
- * provisioned in the current system. This service cleanly defines the
- * contract and explicitly signals API unavailability without attempting
- * fake HTTP requests or inventing unsanctioned backend endpoints.
+ * All persistence is routed through the authenticated FastAPI API; the browser
+ * never talks to the Supabase achievements table directly.
  */
 
 export type AchievementCategory =
