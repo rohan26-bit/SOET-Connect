@@ -179,19 +179,6 @@ export const alumniService = {
   },
 
   // ============================================================
-  // GET INDIVIDUAL ALUMNI HALL OF FAME
-  // ============================================================
-  async getIndividualLeaderboard(limit = 10): Promise<AciIndividualLeaderboardResponse> {
-    const response = await fetch(`${API_URL}/alumni/aci/individual-leaderboard?limit=${limit}`, {
-      method: 'GET',
-      headers: getAuthHeaders(),
-      cache: 'no-store',
-    });
-
-    return parseResponse<AciIndividualLeaderboardResponse>(response);
-  },
-
-  // ============================================================
   // GET APPROVED ALUMNI DIRECTORY
   // ============================================================
   async getApprovedAlumni(filters?: {
