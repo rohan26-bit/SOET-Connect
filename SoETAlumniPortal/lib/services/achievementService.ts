@@ -5,6 +5,39 @@
  * never talks to the Supabase achievements table directly.
  */
 
+const API_URL = '/api';
+
+function getAuthHeaders(): Record<string, string> {
+  const token = typeof window !== 'undefined'
+    ? localStorage.getItem('soet_access_token')
+    : null;
+
+  if (!token) {
+    throw new Error('Please sign in again to manage achievements.');
+  }
+
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  };
+}
+
+async function parseResponse<T>(response: Response): Promise<T> {
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const detail =
+      typeof data.detail === 'string'
+        ? data.detail
+        : Array.isArray(data.detail)
+          ? data.detail.map((item: { msg?: string }) => item.msg || 'Invalid request').join('; ')
+          : JSON.stringify(data.detail || 'Request failed.');
+    throw new Error(detail);
+  }
+
+  return data as T;
+}
+
 export type AchievementCategory =
   | 'award'
   | 'certification'
