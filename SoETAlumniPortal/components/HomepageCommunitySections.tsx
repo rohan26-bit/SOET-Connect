@@ -17,7 +17,7 @@ export default function HomepageCommunitySections() {
   useEffect(() => {
     let active = true;
     Promise.all([
-      placementService.getPublished(100).catch(() => []),
+      placementService.getPublished(4).catch(() => []),
       fetch('/api/gallery?limit=6', { cache: 'no-store' })
         .then(async (response) => {
           if (!response.ok) return [];
@@ -44,8 +44,16 @@ export default function HomepageCommunitySections() {
             <h2 className="text-2xl sm:text-3xl font-black text-[#4A3832]">Placement Celebrations</h2>
             <p className="text-sm text-[#6B6B6B] mt-2">Celebrating SOET alumni as they take the next step in their careers.</p>
           </div>
-          <div className="inline-flex items-center gap-2 text-xs font-bold text-[#A75A24]">
-            <Sparkles className="w-4 h-4" /> Alumni achievements
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="inline-flex items-center gap-2 text-xs font-bold text-[#A75A24]">
+              <Sparkles className="w-4 h-4" /> Alumni achievements
+            </div>
+            <Link
+              href="/gallery/placements"
+              className="inline-flex items-center gap-2 text-sm font-bold text-[#A75A24] transition hover:text-[#7C3E16]"
+            >
+              Explore all celebrations <ArrowRight className="h-4 w-4" />
+            </Link>
           </div>
         </div>
 
