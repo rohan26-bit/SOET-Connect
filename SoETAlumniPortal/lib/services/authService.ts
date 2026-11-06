@@ -129,6 +129,22 @@ export const authService = {
   },
 
   // ============================================================
+  // PRN AVAILABILITY
+  // ============================================================
+
+  async checkPrnAvailability(prn: string): Promise<{ available: boolean; message: string }> {
+    const response = await fetch(
+      `${API_URL}/auth/check-prn?prn=${encodeURIComponent(prn.trim())}`,
+      { method: 'GET', cache: 'no-store' }
+    );
+    const result = await safeJsonParse(response);
+    if (!response.ok) {
+      throw new Error(result.detail || 'Unable to verify PRN availability.');
+    }
+    return result;
+  },
+
+  // ============================================================
   // REGISTER STUDENT
   // ============================================================
 
