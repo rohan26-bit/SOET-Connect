@@ -5,6 +5,10 @@
 --              Pending, rejected, and inactive accounts keep their PRN claim.
 -- =============================================================================
 
+-- Hold off concurrent student/alumni profile writes while we inspect and
+-- backfill the existing identifiers and install the registry triggers.
+LOCK TABLE public.student_profiles, public.alumni_profiles IN SHARE ROW EXCLUSIVE MODE;
+
 -- Fail with an actionable message rather than silently choosing a duplicate
 -- identity if legacy profile data already contains reused PRNs.
 DO $$
@@ -51,6 +55,8 @@ CREATE POLICY service_role_all_prn_registry
     TO service_role
     USING (true)
     WITH CHECK (true);
+
+GRANT ALL ON TABLE public.prn_registry TO service_role;
 
 -- Backfill all current students and alumni into the shared identity registry.
 INSERT INTO public.prn_registry (normalized_prn, user_id, role)
