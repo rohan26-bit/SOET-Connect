@@ -87,7 +87,8 @@ def test_prn_comparison_ignores_case_and_surrounding_whitespace(client):
     check = client.get("/auth/check-prn", params={"prn": " STU-PRN-XYZ "})
     assert check.status_code == 200
     assert check.json()["available"] is False
-    assert register_alumni(client, "normalized-alumni@example.com", "STU-PRN-XYZ").status_code == 409
+    duplicate = register_student(client, "normalized-duplicate@example.com", " STU-PRN-XYZ ")
+    assert duplicate.status_code == 409
 
 
 @pytest.mark.parametrize("role,prn", [("student", ""), ("alumni", "")])
