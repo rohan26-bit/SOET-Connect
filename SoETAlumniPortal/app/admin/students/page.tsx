@@ -154,7 +154,7 @@ export default function AdminStudentsPage() {
                       <td className="py-4 px-6">
                         {s.course_or_company || 'B.Tech'} ({s.graduation_year || '—'})
                       </td>
-                      <td className="py-4 px-6">{getVerificationBadge(s)}</td>
+                      <td className="py-4 px-6">{getVerificationBadge()}</td>
                       <td className="py-4 px-6">
                         <span
                           className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
