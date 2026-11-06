@@ -80,17 +80,8 @@ def register_user(user: RegisterRequest):
                 detail="Invalid admin registration secret."
             )
 
-    # PRN is the institution-wide identity: pending, rejected, and inactive
-    # accounts continue to reserve it; it cannot be reused across roles.
-    if user.role in {"student", "alumni"}:
-        requested_prn = user.student_id if user.role == "student" else user.alumni_id
-        if users_collection.prn_exists(requested_prn):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="This PRN is already associated with an existing SOET Connect account. Please sign in or contact the administrator if you believe this is an error."
-            )
-
-    # Check whether email already exists.
+    # Check whether email already exists first, preserving the specific response
+    # for repeat submissions using the same account email.
     existing_user = users_collection.find_one(
         {"email": user.email.lower().strip()}
     )
@@ -100,6 +91,16 @@ def register_user(user: RegisterRequest):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="An account with this email already exists."
         )
+
+    # PRN is the institution-wide identity: pending, rejected, and inactive
+    # accounts continue to reserve it; it cannot be reused across roles.
+    if user.role in {"student", "alumni"}:
+        requested_prn = user.student_id if user.role == "student" else user.alumni_id
+        if users_collection.prn_exists(requested_prn):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This PRN is already associated with an existing SOET Connect account. Please sign in or contact the administrator if you believe this is an error."
+            )
 
     # Hash password before storing it.
     hashed_password = password_hash.hash(user.password)
