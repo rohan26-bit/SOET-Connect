@@ -425,7 +425,18 @@ def send_conversation_attachments(
             attachment_id = str(uuid.uuid4())
             safe_name = str(item["file_name"])
             storage_path = f"{conv_id}/{upload_group}/{attachment_id}_{safe_name}"
-            bucket.upload(storage_path, item["content"], item["mime_type"])
+            try:
+                bucket.upload(storage_path, item["content"], item["mime_type"])
+            except Exception as upload_error:
+                print(
+                    "Chat attachment storage upload failed:",
+                    type(upload_error).__name__,
+                    str(upload_error),
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Chat file storage is temporarily unavailable. Your message was not sent; please retry.",
+                ) from upload_error
             uploaded_paths.append(storage_path)
             attachment_records.append({
                 "id": attachment_id,
