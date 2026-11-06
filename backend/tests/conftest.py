@@ -108,8 +108,7 @@ def _create_mock_user(
     }
     if role == "student":
         doc["student_profile"] = extra_profile or {
-            # Fixtures represent separate test identities; their PRNs must be unique too.
-            "student_id": f"STU-{user_id[:8].upper()}",
+            "student_id": "STU001",
             "department": "Computer Science",
             "course": "B.Tech",
             "academic_year": "3rd",
@@ -118,7 +117,7 @@ def _create_mock_user(
         }
     elif role == "alumni":
         doc["alumni_profile"] = extra_profile or {
-            "alumni_id": f"ALU-{user_id[:8].upper()}",
+            "alumni_id": "ALU001",
             "department": "Computer Science",
             "degree": "B.Tech",
             "graduation_year": "2022",
@@ -150,7 +149,19 @@ def student_user():
 
 @pytest.fixture
 def other_student_user():
-    return _create_mock_user("Student Two", "student2@example.com", "student")
+    return _create_mock_user(
+        "Student Two",
+        "student2@example.com",
+        "student",
+        extra_profile={
+            "student_id": "STU002",
+            "department": "Computer Science",
+            "course": "B.Tech",
+            "academic_year": "3rd",
+            "graduation_year": "2026",
+            "phone": "9876543211",
+        },
+    )
 
 
 @pytest.fixture
@@ -160,12 +171,48 @@ def verified_alumni_user():
 
 @pytest.fixture
 def unverified_alumni_user():
-    return _create_mock_user("Alumni Pending", "alumni_pending@example.com", "alumni", is_verified=False, verification_status="pending")
+    return _create_mock_user(
+        "Alumni Pending",
+        "alumni_pending@example.com",
+        "alumni",
+        is_verified=False,
+        verification_status="pending",
+        extra_profile={
+            "alumni_id": "ALU002",
+            "department": "Computer Science",
+            "degree": "B.Tech",
+            "graduation_year": "2022",
+            "company": "Tech Corp",
+            "designation": "Software Engineer",
+            "industry": "IT",
+            "location": "Pune",
+            "skills": ["Python", "FastAPI"],
+            "verification_status": "pending",
+        },
+    )
 
 
 @pytest.fixture
 def other_alumni_user():
-    return _create_mock_user("Other Alumni", "alumni_other@example.com", "alumni", is_verified=True, verification_status="approved")
+    return _create_mock_user(
+        "Other Alumni",
+        "alumni_other@example.com",
+        "alumni",
+        is_verified=True,
+        verification_status="approved",
+        extra_profile={
+            "alumni_id": "ALU003",
+            "department": "Computer Science",
+            "degree": "B.Tech",
+            "graduation_year": "2022",
+            "company": "Tech Corp",
+            "designation": "Software Engineer",
+            "industry": "IT",
+            "location": "Pune",
+            "skills": ["Python", "FastAPI"],
+            "verification_status": "approved",
+        },
+    )
 
 
 @pytest.fixture
