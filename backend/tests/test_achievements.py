@@ -41,7 +41,7 @@ def test_verified_alumni_can_create_and_retrieve_persistent_achievements(client,
     assert created["achievement_date"] == "Nov 2024"
     assert created["visibility"] == "public"
     assert created["credential_name"] == "NH-2024-01"
-    assert created["user_id"] if "user_id" in created else True
+    assert "user_id" not in created
 
     stored = _list_owned_achievements(verified_alumni_user["id"])
     assert len(stored) == 1
