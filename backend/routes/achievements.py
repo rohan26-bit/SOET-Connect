@@ -245,6 +245,10 @@ def update_my_achievement(
                 update_data[field_name] = _clean_optional_url(value, field_name.replace("_", " ").title())
             elif field_name == "credential_name":
                 update_data[field_name] = str(value).strip() or None if value is not None else None
+            elif field_name in {"category", "visibility"}:
+                if value is None:
+                    raise HTTPException(status_code=422, detail=f"{field_name.replace('_', ' ').title()} cannot be empty.")
+                update_data[field_name] = value
             else:
                 update_data[field_name] = value
 
