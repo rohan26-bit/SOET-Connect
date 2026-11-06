@@ -46,6 +46,10 @@ class ParticipantInfo(BaseModel):
     name: str
     email: str
     role: str
+    is_online: bool = False
+    last_seen_at: Optional[datetime] = None
+    is_deleted: bool = False
+    is_available: bool = True
 
 
 class ConversationResponse(BaseModel):
