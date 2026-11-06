@@ -1,4 +1,5 @@
 from bson import ObjectId
+from datetime import datetime, timedelta, timezone
 import pytest
 
 from database import database, users_collection
@@ -697,3 +698,104 @@ def test_chat_attachment_storage_failure_returns_clear_retryable_error(
     assert response.status_code == 503
     assert "storage is temporarily unavailable" in response.json()["detail"].lower()
     assert "message was not sent" in response.json()["detail"].lower()
+
+
+# ============================================================
+# CHAT PRESENCE AND DELETED PARTICIPANT TESTS
+# ============================================================
+
+def test_chat_presence_heartbeat_records_server_timestamp(client, student_user):
+    response = client.post("/chat/presence", headers=student_user["headers"])
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "Presence updated."
+
+    stored_user = users_collection.find_one({"_id": student_user["doc_id"]})
+    assert stored_user["last_seen_at"]
+    last_seen = datetime.fromisoformat(stored_user["last_seen_at"].replace("Z", "+00:00"))
+    assert abs((datetime.now(timezone.utc) - last_seen).total_seconds()) < 10
+
+
+def test_conversation_presence_is_based_on_recent_heartbeat(
+    client,
+    student_user,
+    verified_alumni_user,
+):
+    conversation = client.post(
+        "/chat/conversations",
+        headers=student_user["headers"],
+        json={"participant_id": verified_alumni_user["id"]},
+    )
+    assert conversation.status_code == 201
+
+    # No heartbeat means a newly encountered participant is offline by default.
+    initial = client.get("/chat/conversations", headers=student_user["headers"])
+    partner = next(p for p in initial.json()[0]["participants"] if p["id"] == verified_alumni_user["id"])
+    assert partner["is_online"] is False
+    assert partner["is_deleted"] is False
+    assert partner["is_available"] is True
+
+    users_collection.update_one(
+        {"_id": verified_alumni_user["doc_id"]},
+        {"$set": {"last_seen_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    online = client.get("/chat/conversations", headers=student_user["headers"])
+    partner = next(p for p in online.json()[0]["participants"] if p["id"] == verified_alumni_user["id"])
+    assert partner["is_online"] is True
+
+    users_collection.update_one(
+        {"_id": verified_alumni_user["doc_id"]},
+        {"$set": {"last_seen_at": (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()}},
+    )
+    offline = client.get("/chat/conversations", headers=student_user["headers"])
+    partner = next(p for p in offline.json()[0]["participants"] if p["id"] == verified_alumni_user["id"])
+    assert partner["is_online"] is False
+
+
+def test_deleted_chat_participant_is_not_shown_as_online_and_history_is_preserved(
+    client,
+    student_user,
+    verified_alumni_user,
+):
+    conversation = client.post(
+        "/chat/conversations",
+        headers=student_user["headers"],
+        json={"participant_id": verified_alumni_user["id"]},
+    )
+    conversation_id = conversation.json()["id"]
+
+    sent = client.post(
+        f"/chat/conversations/{conversation_id}/messages",
+        headers=student_user["headers"],
+        json={"content": "Existing message before account deletion"},
+    )
+    assert sent.status_code == 201
+
+    deleted = users_collection.delete_one({"_id": verified_alumni_user["doc_id"]})
+    assert deleted.modified_count == 1
+
+    listing = client.get("/chat/conversations", headers=student_user["headers"])
+    assert listing.status_code == 200
+    partner = next(p for p in listing.json()[0]["participants"] if p["id"] == verified_alumni_user["id"])
+    assert partner["name"] == "Deleted account"
+    assert partner["role"] == "former member"
+    assert partner["is_deleted"] is True
+    assert partner["is_available"] is False
+    assert partner["is_online"] is False
+    assert partner["last_seen_at"] is None
+
+    # Historical messages remain readable, but no new messages can be sent to a deleted account.
+    history = client.get(
+        f"/chat/conversations/{conversation_id}/messages",
+        headers=student_user["headers"],
+    )
+    assert history.status_code == 200
+    assert history.json()[0]["content"] == "Existing message before account deletion"
+
+    blocked_send = client.post(
+        f"/chat/conversations/{conversation_id}/messages",
+        headers=student_user["headers"],
+        json={"content": "This should not be delivered"},
+    )
+    assert blocked_send.status_code == 409
+    assert "no longer available" in blocked_send.json()["detail"].lower()
