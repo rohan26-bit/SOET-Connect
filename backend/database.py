@@ -17,6 +17,7 @@ DATABASE_BACKEND = "supabase"
 DATABASE_MODE = os.getenv("DATABASE_MODE", "supabase").lower()
 
 from database_supabase import (
+    DuplicatePrnError,
     supabase,
     supabase_users_collection,
     supabase_conversations_collection,

@@ -749,12 +749,57 @@ class UpdateResult:
         self.modified_count = modified_count
 
 
+class DuplicatePrnError(ValueError):
+    """Raised when a PRN is already assigned to an existing SOET Connect account."""
+
+
+def normalize_prn(value: Any) -> str:
+    """Normalize PRNs consistently without changing the value stored on the profile."""
+    return str(value or "").strip().upper()
+
+
 class SupabaseUsersCollection:
     """
     Drop-in compatibility adapter replicating PyMongo's users_collection interface
     backed directly by the Supabase PostgreSQL `users`, `student_profiles`,
     and `alumni_profiles` tables.
     """
+
+    def prn_exists(self, prn: str) -> bool:
+        """Return True if a PRN is already claimed by any student or alumni account."""
+        normalized = normalize_prn(prn)
+        if not normalized:
+            return False
+
+        if os.getenv("DATABASE_MODE", "").lower() == "mock":
+            for table_name, field_name in (
+                ("student_profiles", "student_id"),
+                ("alumni_profiles", "alumni_id"),
+            ):
+                for profile in _mock_store.get(table_name, []):
+                    if normalize_prn(profile.get(field_name)) == normalized:
+                        return True
+            return False
+
+        try:
+            result = (
+                supabase.table("prn_registry")
+                .select("normalized_prn")
+                .eq("normalized_prn", normalized)
+                .limit(1)
+                .execute()
+            )
+            return bool(result.data)
+        except Exception:
+            # Fallback during staged rollout before migration 007 is applied.
+            try:
+                student_rows = supabase.table("student_profiles").select("student_id").execute().data or []
+                alumni_rows = supabase.table("alumni_profiles").select("alumni_id").execute().data or []
+                return any(normalize_prn(row.get("student_id")) == normalized for row in student_rows) or any(
+                    normalize_prn(row.get("alumni_id")) == normalized for row in alumni_rows
+                )
+            except Exception as profile_error:
+                raise RuntimeError("Unable to verify PRN uniqueness. Please try again.") from profile_error
 
     def _format_user_output(
         self,
@@ -983,6 +1028,20 @@ class SupabaseUsersCollection:
         else:
             user_id = str(uuid.uuid4())
 
+        role_for_prn = doc.get("role")
+        profile_for_prn = (
+            doc.get("student_profile", {}) if role_for_prn == "student"
+            else doc.get("alumni_profile", {}) if role_for_prn == "alumni"
+            else {}
+        ) or {}
+        prn_for_user = (
+            profile_for_prn.get("student_id") if role_for_prn == "student"
+            else profile_for_prn.get("alumni_id") if role_for_prn == "alumni"
+            else None
+        )
+        if prn_for_user and self.prn_exists(prn_for_user):
+            raise DuplicatePrnError("This PRN is already associated with an existing SOET Connect account.")
+
         phone_val = doc.get("phone")
         if not phone_val and isinstance(doc.get("student_profile"), dict):
             phone_val = doc.get("student_profile", {}).get("phone")
@@ -1010,38 +1069,49 @@ class SupabaseUsersCollection:
         created_user = res.data[0]
         actual_id = str(created_user["id"])
 
-        # Insert linked profile
+        # Insert the linked profile. If the registry trigger detects a race,
+        # remove the parent row so no orphaned account is left behind.
         role = created_user.get("role")
-        if role == "student" and "student_profile" in doc:
-            sp = doc.get("student_profile", {}) or {}
-            supabase.table("student_profiles").insert({
-                "user_id": actual_id,
-                "student_id": sp.get("student_id"),
-                "department": sp.get("department"),
-                "course": sp.get("course"),
-                "academic_year": sp.get("academic_year"),
-                "graduation_year": sp.get("graduation_year"),
-                "phone": sp.get("phone") or phone_val,
-            }).execute()
+        try:
+            if role == "student" and "student_profile" in doc:
+                sp = doc.get("student_profile", {}) or {}
+                supabase.table("student_profiles").insert({
+                    "user_id": actual_id,
+                    "student_id": sp.get("student_id"),
+                    "department": sp.get("department"),
+                    "course": sp.get("course"),
+                    "academic_year": sp.get("academic_year"),
+                    "graduation_year": sp.get("graduation_year"),
+                    "phone": sp.get("phone") or phone_val,
+                }).execute()
 
-        elif role == "alumni" and "alumni_profile" in doc:
-            ap = doc.get("alumni_profile", {}) or {}
-            supabase.table("alumni_profiles").insert({
-                "user_id": actual_id,
-                "alumni_id": ap.get("alumni_id"),
-                "department": ap.get("department"),
-                "degree": ap.get("degree"),
-                "graduation_year": ap.get("graduation_year"),
-                "company": ap.get("company"),
-                "designation": ap.get("designation"),
-                "industry": ap.get("industry"),
-                "location": ap.get("location"),
-                "skills": ap.get("skills", []),
-                "linkedin": ap.get("linkedin"),
-                "github": ap.get("github"),
-                "website": ap.get("website"),
-                "bio": ap.get("bio"),
-            }).execute()
+            elif role == "alumni" and "alumni_profile" in doc:
+                ap = doc.get("alumni_profile", {}) or {}
+                supabase.table("alumni_profiles").insert({
+                    "user_id": actual_id,
+                    "alumni_id": ap.get("alumni_id"),
+                    "department": ap.get("department"),
+                    "degree": ap.get("degree"),
+                    "graduation_year": ap.get("graduation_year"),
+                    "company": ap.get("company"),
+                    "designation": ap.get("designation"),
+                    "industry": ap.get("industry"),
+                    "location": ap.get("location"),
+                    "skills": ap.get("skills", []),
+                    "linkedin": ap.get("linkedin"),
+                    "github": ap.get("github"),
+                    "website": ap.get("website"),
+                    "bio": ap.get("bio"),
+                }).execute()
+        except Exception as exc:
+            try:
+                supabase.table("users").delete().eq("id", actual_id).execute()
+            except Exception:
+                pass
+            error_text = str(exc).lower()
+            if "prn_registry" in error_text or ("duplicate key" in error_text and "prn" in error_text):
+                raise DuplicatePrnError("This PRN is already associated with an existing SOET Connect account.") from exc
+            raise
 
         return InsertResult(inserted_id=actual_id)
 

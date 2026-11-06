@@ -33,6 +33,30 @@ export default function StudentRegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [prnAvailability, setPrnAvailability] = useState<'idle' | 'checking' | 'available' | 'taken' | 'error'>('idle');
+
+  const checkPrnAvailability = async (rawPrn: string): Promise<boolean> => {
+    const prn = rawPrn.trim();
+    if (!prn) {
+      setPrnAvailability('idle');
+      return false;
+    }
+
+    setPrnAvailability('checking');
+    try {
+      const result = await authService.checkPrnAvailability(prn);
+      setPrnAvailability(result.available ? 'available' : 'taken');
+      if (!result.available) {
+        setError(result.message);
+        return false;
+      }
+      return true;
+    } catch (err: unknown) {
+      setPrnAvailability('error');
+      setError(err instanceof Error ? err.message : 'Unable to verify PRN availability. Please try again.');
+      return false;
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,6 +90,8 @@ export default function StudentRegisterPage() {
     setLoading(true);
 
     try {
+      const prnIsAvailable = await checkPrnAvailability(formData.studentId);
+      if (!prnIsAvailable) return;
       await authService.registerStudent({
         ...formData,
         fullName: trimmedName,
@@ -161,10 +187,19 @@ export default function StudentRegisterPage() {
                     type="text"
                     required
                     value={formData.studentId}
-                    onChange={(e) => setFormData({ ...formData, studentId: e.target.value })}
+                    onChange={(e) => {
+                      setFormData({ ...formData, studentId: e.target.value });
+                      setPrnAvailability('idle');
+                      if (error?.toLowerCase().includes('prn')) setError(null);
+                    }}
+                    onBlur={(e) => void checkPrnAvailability(e.target.value)}
                     placeholder="e.g. SOET2023001"
                     className="w-full px-3.5 py-2.5 bg-[#FBFAF8] border border-[#DDD7D2] rounded-xl text-[#222222] text-sm focus:ring-2 focus:ring-[#F28C38] focus:border-[#F28C38] focus:bg-white outline-none transition"
                   />
+                  {prnAvailability === 'checking' && <p className="mt-1.5 text-xs text-[#6B6B6B]">Checking PRN availability…</p>}
+                  {prnAvailability === 'available' && <p className="mt-1.5 text-xs text-green-700">PRN is available.</p>}
+                  {prnAvailability === 'taken' && <p className="mt-1.5 text-xs text-red-600">This PRN is already registered.</p>}
+                  {prnAvailability === 'error' && <p className="mt-1.5 text-xs text-red-600">Could not verify this PRN. Please try again.</p>}
                 </div>
               </div>
 

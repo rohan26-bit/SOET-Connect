@@ -4,9 +4,9 @@ import secrets
 from datetime import datetime, timezone
 from typing import Optional
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from database import users_collection
+from database import DuplicatePrnError, users_collection
 from models.user import create_user_document
 from schemas.auth import RegisterRequest, LoginRequest, ChangePasswordRequest
 from pwdlib import PasswordHash
@@ -25,6 +25,31 @@ router = APIRouter(
 )
 
 password_hash = PasswordHash.recommended()
+
+
+# =========================
+# PRN AVAILABILITY
+# =========================
+
+@router.get("/check-prn")
+def check_prn_availability(prn: str = Query(..., min_length=1, max_length=100)):
+    """Check whether a PRN is free across student and alumni accounts."""
+    normalized_prn = prn.strip()
+    if not normalized_prn:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="PRN is required."
+        )
+
+    available = not users_collection.prn_exists(normalized_prn)
+    return {
+        "available": available,
+        "message": (
+            "PRN is available."
+            if available
+            else "This PRN is already associated with an existing SOET Connect account."
+        ),
+    }
 
 
 # =========================
@@ -55,7 +80,8 @@ def register_user(user: RegisterRequest):
                 detail="Invalid admin registration secret."
             )
 
-    # Check whether email already exists.
+    # Check whether email already exists first, preserving the specific response
+    # for repeat submissions using the same account email.
     existing_user = users_collection.find_one(
         {"email": user.email.lower().strip()}
     )
@@ -65,6 +91,16 @@ def register_user(user: RegisterRequest):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="An account with this email already exists."
         )
+
+    # PRN is the institution-wide identity: pending, rejected, and inactive
+    # accounts continue to reserve it; it cannot be reused across roles.
+    if user.role in {"student", "alumni"}:
+        requested_prn = user.student_id if user.role == "student" else user.alumni_id
+        if users_collection.prn_exists(requested_prn):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This PRN is already associated with an existing SOET Connect account. Please sign in or contact the administrator if you believe this is an error."
+            )
 
     # Hash password before storing it.
     hashed_password = password_hash.hash(user.password)
@@ -96,8 +132,15 @@ def register_user(user: RegisterRequest):
         bio=user.bio
     )
 
-    # Save user in database.
-    result = users_collection.insert_one(user_document)
+    # Collection-level checks and the SQL registry trigger also protect
+    # direct API calls and simultaneous registrations.
+    try:
+        result = users_collection.insert_one(user_document)
+    except DuplicatePrnError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This PRN is already associated with an existing SOET Connect account. Please sign in or contact the administrator if you believe this is an error."
+        )
 
     return {
         "message": "Registration successful.",
