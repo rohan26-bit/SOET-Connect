@@ -50,6 +50,25 @@ export const placementService = {
     return Array.isArray(data) ? data : [];
   },
 
+  async getPublishedPage(params: {
+    limit: number;
+    offset: number;
+    search?: string;
+  }): Promise<{ placements: PlacementCelebration[]; total: number }> {
+    const query = new URLSearchParams({
+      limit: String(params.limit),
+      offset: String(params.offset),
+    });
+    if (params.search?.trim()) query.set('search', params.search.trim());
+
+    const response = await fetch(`${API_URL}/placements?${query.toString()}`, { cache: 'no-store' });
+    const data = await parseResponse(response);
+    return {
+      placements: Array.isArray(data) ? data : [],
+      total: Number(response.headers.get('X-Total-Count') || (Array.isArray(data) ? data.length : 0)),
+    };
+  },
+
   async getAdminRecords(): Promise<PlacementCelebration[]> {
     const response = await fetch(`${API_URL}/placements/admin`, {
       headers: { Authorization: `Bearer ${getToken()}` },
