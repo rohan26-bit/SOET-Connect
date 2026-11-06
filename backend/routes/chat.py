@@ -28,6 +28,7 @@ from services.chat import (
     send_conversation_attachments,
     get_message_attachment,
     ensure_conversation_participant,
+    record_chat_presence,
 )
 
 router = APIRouter(
@@ -123,6 +124,18 @@ async def _read_chat_upload(upload: UploadFile) -> dict:
         "mime_type": file_type["mime"],
         "content": data,
     }
+
+
+@router.post(
+    "/presence",
+    response_model=ActionResponse,
+    summary="Update the current user's presence heartbeat",
+    description="Records an authenticated activity timestamp for real-time online/offline indicators. The server derives the user identity from the access token.",
+)
+def update_presence(
+    current_user: dict = Depends(get_active_chat_user),
+):
+    return record_chat_presence(current_user["user_id"])
 
 
 @router.get(
