@@ -1007,3 +1007,110 @@ def test_delete_user_requires_admin_and_existing_target(client, student_user, ad
         headers=admin_user["headers"],
     )
     assert missing.status_code == 404
+
+
+# ============================================================
+# VERIFICATION QUEUES VS REVIEWED ACCOUNT MANAGEMENT
+# ============================================================
+
+def test_student_verification_queue_only_returns_active_pending_requests():
+    """Approved/rejected and inactive student accounts must not appear in verification."""
+    headers = setup_test_users()
+    pending_id = str(ObjectId())
+    inactive_pending_id = str(ObjectId())
+    rejected_id = str(ObjectId())
+    approved_id = str(ObjectId())
+
+    for user_id, email, active, verified, status in [
+        (pending_id, "pending.only@example.com", True, False, "pending"),
+        (inactive_pending_id, "inactive.pending@example.com", False, False, "pending"),
+        (rejected_id, "already.rejected@example.com", True, False, "rejected"),
+        (approved_id, "already.approved@example.com", True, True, "approved"),
+    ]:
+        users_collection.insert_one({
+            "_id": user_id,
+            "name": email.split("@")[0],
+            "email": email,
+            "role": "student",
+            "is_active": active,
+            "is_verified": verified,
+            "verification_status": status,
+            "student_profile": {"student_id": f"PRN-{user_id[:8]}"},
+        })
+
+    response = client.get("/admin/students/pending", headers=headers["admin"])
+    assert response.status_code == 200
+    returned_ids = {item["id"] for item in response.json()}
+    assert returned_ids == {pending_id}
+
+    # Once reviewed, the request must disappear from the verification queue.
+    reviewed = client.patch(
+        f"/admin/students/{pending_id}/verification?status=approved",
+        headers=headers["admin"],
+    )
+    assert reviewed.status_code == 200
+
+    refreshed = client.get("/admin/students/pending", headers=headers["admin"])
+    assert refreshed.status_code == 200
+    assert pending_id not in {item["id"] for item in refreshed.json()}
+
+
+def test_alumni_verification_queue_only_returns_active_unverified_pending_requests():
+    """Approved/rejected and inactive alumni accounts must not appear in verification."""
+    headers = setup_test_users()
+    pending_id = str(ObjectId())
+    inactive_pending_id = str(ObjectId())
+    rejected_id = str(ObjectId())
+    approved_id = str(ObjectId())
+
+    for user_id, email, active, verified, status in [
+        (pending_id, "pending.alumni@example.com", True, False, "pending"),
+        (inactive_pending_id, "inactive.pending.alumni@example.com", False, False, "pending"),
+        (rejected_id, "already.rejected.alumni@example.com", True, False, "rejected"),
+        (approved_id, "already.approved.alumni@example.com", True, True, "approved"),
+    ]:
+        users_collection.insert_one({
+            "_id": user_id,
+            "name": email.split("@")[0],
+            "email": email,
+            "role": "alumni",
+            "is_active": active,
+            "is_verified": verified,
+            "verification_status": status,
+            "alumni_profile": {"alumni_id": f"ALU-{user_id[:8]}"},
+        })
+
+    response = client.get("/alumni/pending", headers=headers["admin"])
+    assert response.status_code == 200
+    returned_ids = {item["id"] for item in response.json()}
+    assert returned_ids == {pending_id}
+
+    # Rejecting a pending request must remove it from the queue.
+    reviewed = client.patch(
+        f"/alumni/verify/{pending_id}?status=rejected",
+        headers=headers["admin"],
+    )
+    assert reviewed.status_code == 200
+
+    refreshed = client.get("/alumni/pending", headers=headers["admin"])
+    assert refreshed.status_code == 200
+    assert pending_id not in {item["id"] for item in refreshed.json()}
+
+
+def test_legacy_verified_accounts_default_to_approved_in_admin_management():
+    """Legacy verified users without an explicit status should show as approved."""
+    headers = setup_test_users()
+    student_id = str(ObjectId())
+    users_collection.insert_one({
+        "_id": student_id,
+        "name": "Legacy Verified Student",
+        "email": "legacy.verified@example.com",
+        "role": "student",
+        "is_active": True,
+        "is_verified": True,
+    })
+
+    response = client.get("/admin/students", headers=headers["admin"])
+    assert response.status_code == 200
+    student = next(item for item in response.json() if item["id"] == student_id)
+    assert student["verification_status"] == "approved"
