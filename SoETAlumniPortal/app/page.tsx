@@ -18,12 +18,6 @@ export default function LandingPage() {
           </div>
           <span className="truncate">SOET Connect - Alumni Portal</span>
         </div>
-        <Link
-          href="/gallery"
-          className="shrink-0 rounded-xl border border-[#DDD7D2] px-4 py-2 text-xs font-bold text-[#4A3832] transition hover:border-[#F28C38] hover:bg-[#FBFAF8] sm:text-sm"
-        >
-          Photo Gallery
-        </Link>
       </nav>
 
       {/* Hero Section - Full-Width Campus Photo with Layered Gradient Overlay */}

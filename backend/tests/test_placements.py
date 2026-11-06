@@ -56,18 +56,34 @@ def test_public_placement_feed_only_queries_published_rows(
     monkeypatch,
 ):
     """The public, unauthenticated homepage feed selects safe fields and filters to published rows."""
-    observed = {"table": None, "selected": None, "filters": []}
+    observed = {
+        "table": None,
+        "selected": None,
+        "count": None,
+        "filters": [],
+        "search_expression": None,
+        "range": None,
+    }
 
     class FakeQuery:
-        def select(self, columns):
+        def select(self, columns, count=None):
             observed["selected"] = columns
+            observed["count"] = count
             return self
 
         def eq(self, column, value):
             observed["filters"].append((column, value))
             return self
 
+        def or_(self, expression):
+            observed["search_expression"] = expression
+            return self
+
         def order(self, column, desc=False):
+            return self
+
+        def range(self, start, end):
+            observed["range"] = (start, end)
             return self
 
         def execute(self):
@@ -80,6 +96,7 @@ def test_public_placement_feed_only_queries_published_rows(
                     "photo_consent": True,
                     "is_published": True,
                 }]
+                count = 105
             return Result()
 
     def fake_table(table_name):
@@ -88,10 +105,14 @@ def test_public_placement_feed_only_queries_published_rows(
 
     monkeypatch.setattr("routes.placements.supabase.table", fake_table)
 
-    response = client.get("/api/placements?limit=6")
+    response = client.get("/api/placements?limit=6&offset=12&search=Yardi")
     assert response.status_code == 200
     assert response.json()[0]["alumni_name"] == "Public Alumni"
+    assert response.headers["X-Total-Count"] == "105"
     assert observed["table"] == "placement_celebrations"
+    assert observed["count"] == "exact"
+    assert observed["range"] == (12, 17)
+    assert "company_name.ilike.%Yardi%" in observed["search_expression"]
     assert ("is_published", True) in observed["filters"]
     assert "photo_consent" not in observed["selected"]
     assert "created_by" not in observed["selected"]

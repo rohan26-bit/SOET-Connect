@@ -36,3 +36,16 @@ def test_url_and_key_sanitization(monkeypatch):
     cfg = get_supabase_config()
     assert cfg["url"] == "https://test-project.supabase.co"
     assert cfg["service_role_key"] == "test-key"
+
+
+def test_supabase_query_builder_supports_range_and_or_filters():
+    """Verify pagination and combined search filters map to PostgREST query parameters."""
+    from database_supabase import SupabaseQueryBuilder
+
+    query = SupabaseQueryBuilder("placement_celebrations")
+    assert query.range(24, 35) is query
+    assert query.params["offset"] == "24"
+    assert query.params["limit"] == "12"
+
+    query.or_("alumni_name.ilike.%Rohan%,company_name.ilike.%Rohan%")
+    assert query.params["or"] == "(alumni_name.ilike.%Rohan%,company_name.ilike.%Rohan%)"

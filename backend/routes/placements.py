@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
 from database import supabase
@@ -62,15 +62,51 @@ def _load_placements(query):
 
 @router.get("")
 def get_published_placements(
+    response: Response,
     limit: int = Query(default=100, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    search: str | None = Query(default=None, max_length=100),
 ):
-    """Public feed used by the unauthenticated homepage. Only published records are returned."""
-    rows = _load_placements(
+    """Public published feed with count-aware pagination for homepage and gallery archive."""
+    query = (
         supabase.table("placement_celebrations")
-        .select("id,alumni_name,company_name,designation,department,batch_year,photo_url,message,created_at")
+        .select(
+            "id,alumni_name,company_name,designation,department,batch_year,photo_url,message,created_at",
+            count="exact",
+        )
         .eq("is_published", True)
     )
-    return rows[:limit]
+
+    # Keep the PostgREST OR expression safe and predictable.
+    search_term = "".join(
+        char for char in (search or "").strip()
+        if char.isalnum() or char.isspace() or char in "-_"
+    ).strip()
+    if search_term:
+        needle = f"%{search_term}%"
+        query = query.or_(
+            ",".join(
+                f"{column}.ilike.{needle}"
+                for column in (
+                    "alumni_name",
+                    "company_name",
+                    "designation",
+                    "department",
+                    "batch_year",
+                    "message",
+                )
+            )
+        )
+
+    try:
+        result = query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
+    except Exception as exc:
+        print("Error loading public placement celebrations:", exc)
+        raise HTTPException(status_code=503, detail="Placement celebrations are temporarily unavailable.")
+
+    response.headers["X-Total-Count"] = str(result.count or 0)
+    response.headers["Access-Control-Expose-Headers"] = "X-Total-Count"
+    return result.data or []
 
 
 @router.get("/admin")
