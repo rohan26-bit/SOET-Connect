@@ -151,3 +151,89 @@ def test_delete_job_ownership_and_admin(client, verified_alumni_user, other_alum
 
     res_del_admin = client.delete(f"/jobs/{job_id_2}", headers=admin_user["headers"])
     assert res_del_admin.status_code == 200
+
+
+def test_expired_jobs_are_hidden_from_student_and_alumni_but_retained_for_admin(
+    client,
+    verified_alumni_user,
+    student_user,
+    admin_user,
+):
+    from datetime import datetime, timedelta, timezone
+    import uuid
+    from database import supabase
+
+    deadline = (datetime.now(timezone.utc) - timedelta(days=35)).isoformat()
+    job_id = str(uuid.uuid4())
+    supabase.table("jobs").insert({
+        "id": job_id,
+        "posted_by": verified_alumni_user["id"],
+        "title": "Expired Backend Engineer",
+        "company": "Example Corp",
+        "location": "Remote",
+        "job_type": "full-time",
+        "experience_level": "Entry",
+        "salary_range": "",
+        "description": "An expired test posting.",
+        "requirements": "",
+        "skills": [],
+        "status": "approved",
+        "application_deadline": deadline,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }).execute()
+
+    student_feed = client.get("/jobs", headers=student_user["headers"])
+    alumni_feed = client.get("/jobs", headers=verified_alumni_user["headers"])
+    alumni_mine = client.get("/jobs/mine", headers=verified_alumni_user["headers"])
+    admin_feed = client.get("/jobs/admin", headers=admin_user["headers"])
+
+    assert student_feed.status_code == 200
+    assert alumni_feed.status_code == 200
+    assert alumni_mine.status_code == 200
+    assert all(job["id"] != job_id for job in student_feed.json())
+    assert all(job["id"] != job_id for job in alumni_feed.json())
+    assert all(job["id"] != job_id for job in alumni_mine.json())
+
+    retained = next(job for job in admin_feed.json() if job["id"] == job_id)
+    assert retained["is_expired"] is True
+    assert retained["expired_at"]
+    assert retained["auto_delete_at"]
+    assert retained["days_until_auto_delete"] == 0
+
+
+def test_expired_job_details_are_hidden_from_owner_but_visible_to_admin(
+    client,
+    verified_alumni_user,
+    admin_user,
+):
+    from datetime import datetime, timedelta, timezone
+    import uuid
+    from database import supabase
+
+    job_id = str(uuid.uuid4())
+    supabase.table("jobs").insert({
+        "id": job_id,
+        "posted_by": verified_alumni_user["id"],
+        "title": "Expired Design Engineer",
+        "company": "Example Corp",
+        "location": "Remote",
+        "job_type": "full-time",
+        "experience_level": "Entry",
+        "salary_range": "",
+        "description": "An expired test posting.",
+        "requirements": "",
+        "skills": [],
+        "status": "approved",
+        "application_deadline": (datetime.now(timezone.utc) - timedelta(days=2)).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }).execute()
+
+    owner_view = client.get(f"/jobs/{job_id}", headers=verified_alumni_user["headers"])
+    admin_view = client.get(f"/jobs/{job_id}", headers=admin_user["headers"])
+
+    assert owner_view.status_code == 404
+    assert admin_view.status_code == 200
+    assert admin_view.json()["is_expired"] is True
+    assert admin_view.json()["auto_delete_at"]
