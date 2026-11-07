@@ -252,14 +252,11 @@ export default function AdminJobsPage() {
         </div>
       )}
 
-      <div className="mb-6 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-950 shadow-sm">
-        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-        <div>
-          <p className="font-bold">Expired job retention policy</p>
-          <p className="mt-1 leading-relaxed">
-            Expired jobs are hidden from student and alumni dashboards. They remain visible here for 30 days after their application deadline, so you can review or delete them manually. Any job not manually deleted will be permanently removed automatically when its 30-day retention period ends.
-          </p>
-        </div>
+      <div className="mb-6 flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-950 shadow-sm">
+        <AlertCircle className="h-4 w-4 shrink-0 text-amber-700" />
+        <p className="leading-relaxed">
+          Expired jobs will be permanently removed after 30 days unless manually deleted.
+        </p>
       </div>
 
       {/* Filter Tabs */}
