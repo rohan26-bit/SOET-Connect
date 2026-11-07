@@ -385,3 +385,96 @@ def test_deleted_user_jwt_rejected_from_event_registration():
     res_delete_unauth = client.delete(f"/events/{event_id}", headers=headers["student"])
     assert res_delete_unauth.status_code == 403
 
+
+
+def test_past_events_are_hidden_from_students_and_alumni_but_retained_for_admin():
+    """Past events leave non-admin feeds immediately and remain in admin for 30 days."""
+    from datetime import date
+
+    headers = setup_test_users()
+    past_date = (date.today() - timedelta(days=35)).isoformat()
+    created = client.post(
+        "/events",
+        json={
+            "title": "Expired Campus Workshop",
+            "description": "Past event for retention test.",
+            "event_date": past_date,
+            "location": "Auditorium",
+        },
+        headers=headers["admin"],
+    )
+    assert created.status_code == 200
+    event_id = created.json()["event"]["id"]
+
+    student_feed = client.get("/events", headers=headers["student"])
+    alumni_feed = client.get("/events", headers=headers["alumni_ver"])
+    admin_feed = client.get("/events", headers=headers["admin"])
+
+    assert student_feed.status_code == 200
+    assert alumni_feed.status_code == 200
+    assert all(event["id"] != event_id for event in student_feed.json())
+    assert all(event["id"] != event_id for event in alumni_feed.json())
+
+    retained = next(event for event in admin_feed.json() if event["id"] == event_id)
+    assert retained["is_expired"] is True
+    assert retained["is_past"] is True
+    assert retained["expired_at"]
+    assert retained["auto_delete_at"]
+    assert retained["days_until_auto_delete"] == 0
+
+
+def test_expired_event_is_hidden_from_its_creator_but_past_event_remains_admin_visible():
+    from datetime import date
+
+    headers = setup_test_users()
+    past_date = (date.today() - timedelta(days=2)).isoformat()
+    created = client.post(
+        "/events",
+        json={
+            "title": "Creator's Past Event",
+            "description": "Past event owned by student.",
+            "event_date": past_date,
+            "location": "Seminar Hall",
+        },
+        headers=headers["student"],
+    )
+    assert created.status_code == 200
+    event_id = created.json()["event"]["id"]
+
+    creator_feed = client.get(
+        f"/events?created_by=demo-student-id",
+        headers=headers["student"],
+    )
+    admin_feed = client.get("/events", headers=headers["admin"])
+
+    assert creator_feed.status_code == 200
+    assert all(event["id"] != event_id for event in creator_feed.json())
+    assert any(event["id"] == event_id for event in admin_feed.json())
+
+
+def test_closed_registration_does_not_expire_future_event():
+    """An event with a past registration deadline remains in active feeds until its date passes."""
+    from datetime import date
+
+    headers = setup_test_users()
+    future_date = (date.today() + timedelta(days=5)).isoformat()
+    past_registration_deadline = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    created = client.post(
+        "/events",
+        json={
+            "title": "Upcoming Event with Closed Registration",
+            "description": "Registration is closed but event is upcoming.",
+            "event_date": future_date,
+            "registration_deadline": past_registration_deadline,
+            "location": "Auditorium",
+        },
+        headers=headers["admin"],
+    )
+    assert created.status_code == 200
+    event_id = created.json()["event"]["id"]
+
+    student_feed = client.get("/events", headers=headers["student"])
+    event = next(item for item in student_feed.json() if item["id"] == event_id)
+    assert event["is_expired"] is False
+    assert event["is_past"] is False
+    assert event["is_registration_closed"] is True
