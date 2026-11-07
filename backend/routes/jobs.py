@@ -70,15 +70,42 @@ def parse_iso_datetime(dt_str: str | None) -> datetime | None:
         return None
 
 
-def is_job_expired(job: dict) -> bool:
-    """Return True if the job's application deadline has passed in UTC."""
+def job_expiration_datetime(job: dict) -> datetime | None:
+    """Resolve the exact application deadline used to determine job expiry."""
     deadline_val = job.get("application_deadline") or job.get("deadline")
-    if not deadline_val:
-        return False
-    dt = parse_iso_datetime(deadline_val)
-    if dt is None:
-        return False
-    return datetime.now(timezone.utc) > dt
+    return parse_iso_datetime(deadline_val)
+
+
+def is_job_expired(job: dict) -> bool:
+    """Return True if the job's application deadline has passed."""
+    expiry = job_expiration_datetime(job)
+    return bool(expiry and datetime.now(timezone.utc) > expiry)
+
+
+def job_retention_metadata(job: dict, now: datetime | None = None) -> dict:
+    """Expose the 30-day administrator retention countdown for expired jobs."""
+    expiry = job_expiration_datetime(job)
+    if not expiry:
+        return {
+            "is_expired": False,
+            "expired_at": None,
+            "auto_delete_at": None,
+            "days_until_auto_delete": None,
+        }
+
+    current = now or datetime.now(timezone.utc)
+    auto_delete_at = expiry + timedelta(days=30)
+    expired = current > expiry
+    days_left = max(0, int((auto_delete_at - current).total_seconds() // 86400))
+    if auto_delete_at > current and (auto_delete_at - current).total_seconds() % 86400:
+        days_left += 1
+
+    return {
+        "is_expired": expired,
+        "expired_at": expiry.isoformat(),
+        "auto_delete_at": auto_delete_at.isoformat(),
+        "days_until_auto_delete": days_left if expired else None,
+    }
 
 
 def load_jobs(status: str | None = None, posted_by: str | None = None) -> list[dict]:
@@ -119,7 +146,7 @@ def load_jobs(status: str | None = None, posted_by: str | None = None) -> list[d
             deadline_val = row.get("application_deadline") or row.get("deadline")
             j["deadline"] = deadline_val
             j["application_deadline"] = deadline_val
-            j["is_expired"] = is_job_expired(j)
+            j.update(job_retention_metadata(j))
             if not j.get("poster_name") and j.get("posted_by"):
                 pid = str(j["posted_by"])
                 if pid in poster_names:
@@ -290,7 +317,11 @@ def get_my_jobs(
     current_user: dict = Depends(get_current_user)
 ):
     user_id = str(current_user.get("user_id"))
-    return load_jobs(posted_by=user_id)
+    jobs = load_jobs(posted_by=user_id)
+    if current_user.get("role") == "admin":
+        return jobs
+    # Expired postings stay in the admin console only during their retention window.
+    return [job for job in jobs if not job.get("is_expired")]
 
 
 # ============================================================
@@ -331,10 +362,10 @@ def get_job_details(
     is_owner = str(job.get("posted_by")) == user_id
     expired = is_job_expired(job)
 
-    # Expired, pending, rejected, and closed postings remain available to
-    # admins and their owner, but cannot be opened from a public user account.
-    if role != "admin" and not is_owner and (
-        job.get("status") != "approved" or expired
+    # Expired postings are removed from every student/alumni view, including
+    # the original poster's dashboard. Admins retain access during the 30-day window.
+    if role != "admin" and (
+        expired or (not is_owner and job.get("status") != "approved")
     ):
         raise HTTPException(
             status_code=404,
@@ -347,7 +378,7 @@ def get_job_details(
     deadline_val = job.get("application_deadline") or job.get("deadline")
     job["deadline"] = deadline_val
     job["application_deadline"] = deadline_val
-    job["is_expired"] = expired
+    job.update(job_retention_metadata(job))
     return job
 
 
@@ -396,7 +427,7 @@ def update_job_deadline(
     job["application_deadline"] = deadline_val
     job["deadline"] = deadline_val
     job["updated_at"] = now_iso
-    job["is_expired"] = is_job_expired(job)
+    job.update(job_retention_metadata(job))
     job["employment_type"] = job.get("job_type", "")
     job["experience"] = job.get("experience_level", "")
     job["salary"] = job.get("salary_range", "")
