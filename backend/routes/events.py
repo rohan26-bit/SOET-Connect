@@ -49,27 +49,56 @@ def parse_iso_datetime(dt_str: str | None) -> datetime | None:
         return None
 
 
-def is_event_past(event: dict) -> bool:
-    """An approved event remains visible through the event date itself.
-    Beginning the following day in Asia/Kolkata, it is excluded from active feeds."""
+def event_expiration_datetime(event: dict) -> datetime | None:
+    """An event expires at midnight IST after its scheduled event date."""
     date_str = str(event.get("date") or event.get("event_date") or event.get("start_date") or "").strip()
     if not date_str:
-        return False
+        return None
     try:
         clean_date = date_str.split("T")[0].split(" ")[0]
-        event_dt = datetime.strptime(clean_date, "%Y-%m-%d").date()
-        today_ist = datetime.now(KOLKATA_TZ).date()
-        return event_dt < today_ist
-    except Exception:
-        return False
+        event_date = datetime.strptime(clean_date, "%Y-%m-%d").date()
+        expiry_date = event_date + timedelta(days=1)
+        return datetime.combine(expiry_date, datetime.min.time(), tzinfo=KOLKATA_TZ).astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def is_event_past(event: dict) -> bool:
+    """An event remains current through its event date and expires the following day in IST."""
+    expiry = event_expiration_datetime(event)
+    return bool(expiry and datetime.now(timezone.utc) >= expiry)
 
 
 def is_event_expired(event: dict) -> bool:
-    """Return True when an event's explicit registration deadline or event date has passed."""
-    if is_event_past(event):
-        return True
-    deadline = parse_iso_datetime(event.get("registration_deadline"))
-    return bool(deadline and datetime.now(timezone.utc) > deadline)
+    """Registration closing does not expire the event; only the event date does."""
+    return is_event_past(event)
+
+
+def event_retention_metadata(event: dict, now: datetime | None = None) -> dict:
+    """Expose the 30-day administrator retention countdown for past events."""
+    expiry = event_expiration_datetime(event)
+    if not expiry:
+        return {
+            "is_expired": False,
+            "expired_at": None,
+            "auto_delete_at": None,
+            "days_until_auto_delete": None,
+        }
+
+    current = now or datetime.now(timezone.utc)
+    auto_delete_at = expiry + timedelta(days=30)
+    expired = current >= expiry
+    seconds_left = (auto_delete_at - current).total_seconds()
+    days_left = max(0, int(seconds_left // 86400))
+    if seconds_left > 0 and seconds_left % 86400:
+        days_left += 1
+
+    return {
+        "is_expired": expired,
+        "expired_at": expiry.isoformat(),
+        "auto_delete_at": auto_delete_at.isoformat(),
+        "days_until_auto_delete": days_left if expired else None,
+    }
 
 
 def is_event_registration_closed(event: dict) -> bool:
@@ -180,6 +209,7 @@ def load_events(status: str | None = None, created_by: str | None = None) -> lis
             e["registration_deadline"] = row.get("registration_deadline")
             e["is_past"] = is_event_past(e)
             e["is_registration_closed"] = is_event_registration_closed(e)
+            e.update(event_retention_metadata(e))
             if not e.get("creator_name") and e.get("created_by"):
                 cid = str(e["created_by"])
                 if cid in creator_names:
@@ -210,6 +240,7 @@ def _find_event(event_id: str) -> dict | None:
         e["registration_deadline"] = row.get("registration_deadline")
         e["is_past"] = is_event_past(e)
         e["is_registration_closed"] = is_event_registration_closed(e)
+        e.update(event_retention_metadata(e))
         if not e.get("creator_name") and e.get("created_by"):
             u = users_collection.find_one({"_id": str(e["created_by"])}, include_profiles=False)
             if u:
@@ -329,12 +360,14 @@ def get_events(
         status = event.get("status")
         creator_id = str(event.get("created_by"))
 
-        # Keep expired records available to admins and their creators, but remove
-        # them from every public active feed once the deadline/event date passes.
+        # Expired events stay visible only in the admin console during retention.
+        # Creators do not retain a second copy in the student/alumni dashboard.
         expired = is_event_expired(event)
-        if role == "admin" or creator_id == user_id or (status == "approved" and not expired):
+        if role == "admin" or (
+            not expired and (creator_id == user_id or status == "approved")
+        ):
             ev_copy = dict(event)
-            ev_copy["is_expired"] = expired
+            ev_copy.update(event_retention_metadata(event))
             if not ev_copy.get("event_date") and ev_copy.get("start_date"):
                 ev_copy["event_date"] = ev_copy["start_date"]
 
@@ -463,13 +496,12 @@ def get_event_details(
     role = current_user.get("role")
     user_id = str(current_user.get("user_id"))
 
-    if (
-        role != "admin"
-        and (
+    if role != "admin" and (
+        is_event_expired(event)
+        or (
             event.get("status") != "approved"
-            or is_event_expired(event)
+            and str(event.get("created_by")) != user_id
         )
-        and str(event.get("created_by")) != user_id
     ):
         raise HTTPException(
             status_code=404,
@@ -489,8 +521,9 @@ def get_event_details(
 
     ev_copy["registration_count"] = reg_count
     ev_copy["is_registered"] = is_reg
-    ev_copy["is_expired"] = is_event_expired(event)
+    ev_copy["is_past"] = is_event_past(event)
     ev_copy["is_registration_closed"] = is_event_registration_closed(event)
+    ev_copy.update(event_retention_metadata(event))
 
     return ev_copy
 
