@@ -9,7 +9,7 @@ import { eventService, EventItem } from '@/lib/services/eventService';
 import { useAuth } from '@/components/AuthProvider';
 import {
   Calendar, Plus, Trash2, MapPin, Clock, Users, X, Edit3,
-  CheckCircle2, XCircle, Eye, EyeOff, Search, Filter
+  CheckCircle2, XCircle, Eye, EyeOff, Search, Filter, AlertCircle
 } from 'lucide-react';
 import DocumentAttachment, {
   DocumentAttachmentData,
@@ -212,6 +212,16 @@ export default function AdminEventsPage() {
         </button>
       </div>
 
+      <div className="mb-6 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-950 shadow-sm">
+        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+        <div>
+          <p className="font-bold">Past event retention policy</p>
+          <p className="mt-1 leading-relaxed">
+            Past events are hidden from student and alumni dashboards once the event date has passed. They remain visible here for 30 days after the event ends, so you can review or delete them manually. Any event not manually deleted will be permanently removed automatically when its 30-day retention period ends. A closed registration period alone does not expire an upcoming event.
+          </p>
+        </div>
+      </div>
+
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
         {[
@@ -320,6 +330,20 @@ export default function AdminEventsPage() {
                     </span>
                   </div>
                 </div>
+
+                {event.is_expired && event.auto_delete_at && (
+                  <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                    <p className="font-bold">
+                      {event.days_until_auto_delete === 0
+                        ? 'Scheduled for automatic removal'
+                        : `Auto-removes in ${event.days_until_auto_delete} day${event.days_until_auto_delete === 1 ? '' : 's'}`}
+                    </p>
+                    <p className="mt-0.5">
+                      Unless deleted manually, this past event will be permanently removed on{' '}
+                      <strong>{new Date(event.auto_delete_at).toLocaleDateString('en-IN')}</strong>.
+                    </p>
+                  </div>
+                )}
 
                 <div className="my-3 rounded-xl bg-slate-50 p-3">
                   <p className="line-clamp-3 whitespace-pre-wrap break-words text-xs leading-relaxed text-slate-600">

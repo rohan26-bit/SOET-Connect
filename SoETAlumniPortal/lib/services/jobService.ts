@@ -19,6 +19,9 @@ export interface JobItem {
   deadline?: string;
   application_deadline?: string;
   is_expired?: boolean;
+  expired_at?: string | null;
+  auto_delete_at?: string | null;
+  days_until_auto_delete?: number | null;
   status: 'pending' | 'approved' | 'rejected' | 'closed';
   created_at: string;
   poster_name?: string;

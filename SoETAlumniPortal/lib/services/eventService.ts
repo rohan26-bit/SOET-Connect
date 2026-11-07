@@ -28,6 +28,9 @@ export interface EventItem {
   is_past?: boolean;
   is_registration_closed?: boolean;
   is_expired?: boolean;
+  expired_at?: string | null;
+  auto_delete_at?: string | null;
+  days_until_auto_delete?: number | null;
   attachment?: {
     name: string;
     type: string;
@@ -87,6 +90,9 @@ function normalizeEvent(e: any): EventItem {
     is_past: !!e.is_past,
     is_registration_closed: !!e.is_registration_closed,
     is_expired: !!e.is_expired,
+    expired_at: e.expired_at || null,
+    auto_delete_at: e.auto_delete_at || null,
+    days_until_auto_delete: e.days_until_auto_delete ?? null,
     attachment: e.attachment || parsed.attachment || null,
   };
 }

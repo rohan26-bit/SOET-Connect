@@ -252,6 +252,16 @@ export default function AdminJobsPage() {
         </div>
       )}
 
+      <div className="mb-6 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-950 shadow-sm">
+        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+        <div>
+          <p className="font-bold">Expired job retention policy</p>
+          <p className="mt-1 leading-relaxed">
+            Expired jobs are hidden from student and alumni dashboards. They remain visible here for 30 days after their application deadline, so you can review or delete them manually. Any job not manually deleted will be permanently removed automatically when its 30-day retention period ends.
+          </p>
+        </div>
+      </div>
+
       {/* Filter Tabs */}
       <div className="flex gap-2 mb-6 flex-wrap">
         {(['all', 'pending', 'approved', 'rejected', 'expired'] as const).map((tab) => (
@@ -342,6 +352,20 @@ export default function AdminJobsPage() {
                     Edit Deadline
                   </button>
                 </div>
+
+                {job.is_expired && job.auto_delete_at && (
+                  <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                    <p className="font-bold">
+                      {job.days_until_auto_delete === 0
+                        ? 'Scheduled for automatic removal'
+                        : `Auto-removes in ${job.days_until_auto_delete} day${job.days_until_auto_delete === 1 ? '' : 's'}`}
+                    </p>
+                    <p className="mt-0.5">
+                      Unless deleted manually, this expired job will be permanently removed on{' '}
+                      <strong>{new Date(job.auto_delete_at).toLocaleDateString('en-IN')}</strong>.
+                    </p>
+                  </div>
+                )}
 
                 <p className="text-xs text-slate-600 line-clamp-3 my-3 bg-slate-50 p-3 rounded-xl leading-relaxed">
                   {job.description}
