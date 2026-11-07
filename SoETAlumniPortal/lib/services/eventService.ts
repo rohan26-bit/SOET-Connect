@@ -90,6 +90,9 @@ function normalizeEvent(e: any): EventItem {
     is_past: !!e.is_past,
     is_registration_closed: !!e.is_registration_closed,
     is_expired: !!e.is_expired,
+    expired_at: e.expired_at || null,
+    auto_delete_at: e.auto_delete_at || null,
+    days_until_auto_delete: e.days_until_auto_delete ?? null,
     attachment: e.attachment || parsed.attachment || null,
   };
 }
