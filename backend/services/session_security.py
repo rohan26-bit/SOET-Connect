@@ -33,8 +33,23 @@ def update_password_and_revoke_sessions(user_id: str, password_hash: str) -> int
             "p_password_hash": password_hash,
         },
     ).execute()
-    rows = result.data or []
-    if not rows or rows[0] is None:
+    data = result.data
+    if data is None:
         raise RuntimeError("User account not found while updating password.")
 
-    return int(rows[0])
+    # PostgREST scalar-returning RPCs may decode as an integer, while table-returning
+    # RPCs decode as a list of row dictionaries.
+    if isinstance(data, list):
+        if not data:
+            raise RuntimeError("User account not found while updating password.")
+        value = data[0]
+        if isinstance(value, dict):
+            value = next(iter(value.values()), None)
+    elif isinstance(data, dict):
+        value = next(iter(data.values()), None)
+    else:
+        value = data
+
+    if value is None:
+        raise RuntimeError("User account not found while updating password.")
+    return int(value)
