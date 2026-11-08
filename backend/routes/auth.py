@@ -285,8 +285,9 @@ def change_password(
 
     # 6. Persist the new password and revoke every previously issued token.
     try:
+        database_user_id = str(existing_user.get("_db_id") or existing_user["_id"])
         new_session_version = update_password_and_revoke_sessions(
-            str(existing_user["_id"]),
+            database_user_id,
             new_hashed,
         )
     except Exception as exc:
