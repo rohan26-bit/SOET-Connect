@@ -123,7 +123,6 @@ def event_expiration_datetime(event: dict) -> datetime | None:
     if not date_str:
         return None
     try:
-        clean_date = date_str.split("T")[0].split(" ")[0]
         retention_date = str(event.get("end_date") or date_str).split("T")[0].split(" ")[0]
         event_date = datetime.strptime(retention_date, "%Y-%m-%d").date()
         expiry_date = event_date + timedelta(days=1)
@@ -439,6 +438,8 @@ def get_events(
     user_registered = set()
 
     for r in registrations:
+        if r.get("status", "registered") not in {"registered", "attended"}:
+            continue
         eid = str(r.get("event_id"))
         reg_counts[eid] = reg_counts.get(eid, 0) + 1
         if str(r.get("user_id")) == user_id:
@@ -456,7 +457,8 @@ def get_events(
         expired = is_event_expired(event)
         is_owner = creator_id == user_id
         is_published_for_user = status == "approved" and event_is_visible_to_role(event, role)
-        if role == "admin" or (not expired and (is_owner or is_published_for_user)):
+        can_manage_unapproved = is_owner and status != "approved"
+        if role == "admin" or (not expired and (can_manage_unapproved or is_published_for_user)):
             ev_copy = dict(event)
             ev_copy.update(event_retention_metadata(event))
             if not ev_copy.get("event_date") and ev_copy.get("start_date"):
@@ -602,12 +604,14 @@ def get_event_details(
     user_id = str(current_user.get("user_id"))
 
     is_owner = str(event.get("created_by")) == user_id
+    owner_can_view_unapproved = is_owner and event.get("status") != "approved"
+    published_event_is_visible = (
+        event.get("status") == "approved"
+        and event_is_visible_to_role(event, role)
+    )
     if role != "admin" and (
         is_event_expired(event)
-        or (not is_owner and (
-            event.get("status") != "approved"
-            or not event_is_visible_to_role(event, role)
-        ))
+        or not (owner_can_view_unapproved or published_event_is_visible)
     ):
         raise HTTPException(
             status_code=404,
@@ -615,11 +619,12 @@ def get_event_details(
         )
 
     registrations = load_registrations(hydrate_users=False, event_id=event_id)
-    reg_count = len(registrations)
-    is_reg = any(
-        str(r.get("user_id")) == user_id
-        for r in registrations
-    )
+    active_registrations = [
+        r for r in registrations
+        if r.get("status", "registered") in {"registered", "attended"}
+    ]
+    reg_count = len(active_registrations)
+    is_reg = any(str(r.get("user_id")) == user_id for r in active_registrations)
 
     ev_copy = dict(event)
     if not ev_copy.get("event_date") and ev_copy.get("start_date"):
