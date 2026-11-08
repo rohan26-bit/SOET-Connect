@@ -23,7 +23,7 @@ ALTER TABLE public.users
 ALTER TABLE public.phone_verification_codes
   ADD COLUMN IF NOT EXISTS phone_version INTEGER NOT NULL DEFAULT 0;
 
-DO $
+DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
@@ -45,7 +45,17 @@ BEGIN
       CHECK (phone_version >= 0);
   END IF;
 END;
-$;
+$$;
+
+-- Reissue ephemeral challenges so no pre-migration OTP/reset code bypasses new bindings.
+UPDATE public.phone_verification_codes
+   SET is_used = TRUE
+ WHERE is_used = FALSE;
+
+UPDATE public.password_reset_challenges
+   SET is_used = TRUE,
+       used_at = NOW()
+ WHERE is_used = FALSE;
 
 -- Track an account-wide token generation so password changes/reset revoke all old JWTs.
 ALTER TABLE public.users
