@@ -62,7 +62,7 @@ def find_user_by_contact(identifier: str) -> Optional[dict]:
     if user:
         return user
 
-    digits = re.sub(r"\\D", "", raw_identifier)
+    digits = re.sub(r"\D", "", raw_identifier)
     if not 7 <= len(digits) <= 15:
         return None
 
