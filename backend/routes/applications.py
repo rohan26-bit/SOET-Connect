@@ -92,7 +92,12 @@ def resolve_resume_url(resume_value: str | None) -> str:
         )
         if isinstance(signed, dict):
             signed = signed.get("signedURL") or signed.get("signedUrl") or ""
-        return str(signed or "")
+        signed_url = str(signed or "")
+        # The storage adapter may return a gallery fallback path when signing fails.
+        # Never expose that non-working fallback as if it were an application resume.
+        if signed_url.startswith("/api/gallery/"):
+            return ""
+        return signed_url
     except Exception as exc:
         print(f"Could not create a signed application-resume URL: {exc}")
         return ""
