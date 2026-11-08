@@ -1,7 +1,9 @@
 from datetime import datetime, timezone
+import io
 import uuid
+import zipfile
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from database import users_collection, supabase
@@ -16,6 +18,9 @@ router = APIRouter(
 
 # Legacy file attribute for test monkeypatch compatibility
 APPLICATIONS_FILE = None
+RESUME_BUCKET = "application-resumes"
+RESUME_PATH_PREFIX = f"{RESUME_BUCKET}/"
+MAX_RESUME_SIZE_BYTES = 5 * 1024 * 1024
 
 
 # ============================================================
@@ -65,6 +70,106 @@ class ApplicationStatusUpdateRequest(BaseModel):
 # ============================================================
 # HELPERS
 # ============================================================
+
+def resolve_resume_url(resume_value: str | None) -> str:
+    """Return a short-lived download URL for a privately stored application resume.
+
+    Legacy externally hosted resume URLs remain supported during migration.
+    """
+    value = str(resume_value or "").strip()
+    if not value.startswith(RESUME_PATH_PREFIX):
+        return value
+
+    storage_path = value[len(RESUME_PATH_PREFIX):]
+    if not storage_path:
+        return ""
+
+    try:
+        signed = supabase.storage.from_(RESUME_BUCKET).create_signed_url(
+            storage_path,
+            expires_in=3600,
+        )
+        if isinstance(signed, dict):
+            signed = signed.get("signedURL") or signed.get("signedUrl") or ""
+        return str(signed or "")
+    except Exception as exc:
+        print(f"Could not create a signed application-resume URL: {exc}")
+        return ""
+
+
+def _delete_stored_resume(resume_value: str | None) -> None:
+    """Delete a private application resume object, leaving legacy URLs untouched."""
+    value = str(resume_value or "").strip()
+    if not value.startswith(RESUME_PATH_PREFIX):
+        return
+    storage_path = value[len(RESUME_PATH_PREFIX):]
+    if storage_path:
+        try:
+            supabase.storage.from_(RESUME_BUCKET).delete([storage_path])
+        except Exception as exc:
+            print(f"Could not delete application resume object: {exc}")
+
+
+async def _store_application_resume(upload: Any, applicant_id: str) -> str:
+    """Validate and upload one PDF/DOC/DOCX resume to the private storage bucket."""
+    filename = str(getattr(upload, "filename", "") or "").strip()
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    allowed_mimes = {
+        "pdf": {"application/pdf", "application/x-pdf", "application/octet-stream"},
+        "doc": {"application/msword", "application/octet-stream"},
+        "docx": {
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/octet-stream",
+        },
+    }
+    if extension not in allowed_mimes:
+        raise HTTPException(status_code=400, detail="Resume must be a PDF, DOC, or DOCX file.")
+
+    mime_type = str(getattr(upload, "content_type", "") or "").split(";", 1)[0].strip().lower()
+    if mime_type not in allowed_mimes[extension]:
+        raise HTTPException(status_code=400, detail="The uploaded resume file type does not match its extension.")
+
+    try:
+        file_bytes = await upload.read(MAX_RESUME_SIZE_BYTES + 1)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not read the selected resume file.")
+
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="The selected resume file is empty.")
+    if len(file_bytes) > MAX_RESUME_SIZE_BYTES:
+        raise HTTPException(status_code=413, detail="Resume file must not exceed 5 MB.")
+
+    if extension == "pdf" and not file_bytes.startswith(b"%PDF-"):
+        raise HTTPException(status_code=400, detail="The uploaded file is not a valid PDF document.")
+    if extension == "doc" and not file_bytes.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"):
+        raise HTTPException(status_code=400, detail="The uploaded file is not a valid DOC document.")
+    if extension == "docx":
+        try:
+            with zipfile.ZipFile(io.BytesIO(file_bytes)) as document:
+                valid_docx = "word/document.xml" in document.namelist()
+        except (OSError, zipfile.BadZipFile):
+            valid_docx = False
+        if not valid_docx:
+            raise HTTPException(status_code=400, detail="The uploaded file is not a valid DOCX document.")
+
+    storage_path = f"{applicant_id}/{uuid.uuid4().hex}.{extension}"
+    normalized_mime = mime_type if mime_type != "application/octet-stream" else {
+        "pdf": "application/pdf",
+        "doc": "application/msword",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }[extension]
+    try:
+        supabase.storage.from_(RESUME_BUCKET).upload(
+            storage_path,
+            file_bytes,
+            content_type=normalized_mime,
+        )
+    except Exception as exc:
+        print(f"Application resume upload failed: {exc}")
+        raise HTTPException(status_code=503, detail="Resume upload is temporarily unavailable. Please try again.")
+
+    return f"{RESUME_PATH_PREFIX}{storage_path}"
+
 
 def load_applications() -> list[dict]:
     """Load job applications from Supabase PostgreSQL."""
