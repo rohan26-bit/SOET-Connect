@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import os
+import re
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -16,6 +17,9 @@ password_hasher = PasswordHash.recommended()
 CODE_EXPIRATION_MINUTES = 10
 TOKEN_EXPIRATION_MINUTES = 10
 MAX_ATTEMPTS = 5
+PHONE_CODE_COOLDOWN_SECONDS = 60
+PHONE_CODE_MAX_SENDS_PER_HOUR = 3
+PHONE_CODE_MAX_ATTEMPTS = 5
 
 
 def _get_reset_secret() -> str:
@@ -410,99 +414,233 @@ def reset_password_with_token(reset_token: str, new_password: str) -> Tuple[bool
 # PHONE VERIFICATION IN ACCOUNT SETTINGS
 # ==============================================================================
 
+def _parse_phone_code_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def _invalidate_phone_verification_code(code_id: str) -> None:
+    try:
+        supabase.table("phone_verification_codes").update({
+            "is_used": True,
+        }).eq("id", str(code_id)).execute()
+    except Exception as exc:
+        print(f"Unable to invalidate phone verification code {code_id}: {exc}")
+
+
+def _record_phone_verification_failure(record: dict) -> tuple[int, bool]:
+    """Increment failed attempts atomically on production, with mock-mode parity."""
+    code_id = str(record.get("id"))
+    if os.getenv("DATABASE_MODE", "").strip().lower() == "mock":
+        attempts = int(record.get("attempts") or 0) + 1
+        locked = attempts >= PHONE_CODE_MAX_ATTEMPTS
+        supabase.table("phone_verification_codes").update({
+            "attempts": attempts,
+            "is_used": locked,
+        }).eq("id", code_id).execute()
+        return attempts, locked
+
+    result = supabase.rpc(
+        "record_phone_verification_failure",
+        {
+            "p_code_id": code_id,
+            "p_max_attempts": PHONE_CODE_MAX_ATTEMPTS,
+        },
+    ).execute()
+    rows = result.data or []
+    if not rows:
+        return PHONE_CODE_MAX_ATTEMPTS, True
+    row = rows[0]
+    return int(row.get("attempts") or PHONE_CODE_MAX_ATTEMPTS), bool(row.get("is_locked"))
+
+
 def send_phone_verification_code(user_id: str, phone: str) -> Tuple[bool, str, Optional[str]]:
-    """Generate and send phone verification code to user's phone."""
-    phone_clean = phone.strip()
-    if not phone_clean:
-        return False, "Phone number cannot be empty.", None
+    """Send a short-lived phone code, applying delivery checks and server-side rate limits."""
+    phone_clean = delivery.normalize_phone_number(str(phone or "").strip())
+    if not re.fullmatch(r"\\+[1-9][0-9]{7,14}", phone_clean):
+        return False, "Enter a valid phone number with country code.", None
+
+    user_id = str(user_id)
+    user = users_collection.find_one({"_id": user_id}, include_profiles=False)
+    if not user:
+        return False, "User account not found.", None
+    if not user.get("is_active", True):
+        return False, "This account has been deactivated.", None
+
+    if not delivery.is_sms_configured():
+        delivery.record_delivery(
+            user_id=user_id,
+            channel="sms",
+            recipient=phone_clean,
+            status="skipped",
+            event_type="phone_verification",
+            provider="twilio",
+            error_message="SMS provider is not configured.",
+        )
+        return False, "SMS verification is temporarily unavailable. Please try again later.", None
 
     now = datetime.now(timezone.utc)
-    code = generate_verification_code()
-    code_hash = _hash_value(code)
-    expires_at = (now + timedelta(minutes=CODE_EXPIRATION_MINUTES)).isoformat()
+    one_hour_ago = now - timedelta(hours=1)
+    try:
+        prior_rows = (
+            supabase.table("phone_verification_codes")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(100)
+            .execute()
+            .data or []
+        )
+    except Exception as exc:
+        print(f"Unable to check phone verification send limits for {user_id}: {exc}")
+        return False, "Unable to request a verification code right now. Please try again.", None
 
+    recent_sends = []
+    for row in prior_rows:
+        created_at = _parse_phone_code_timestamp(row.get("created_at"))
+        if created_at and created_at >= one_hour_ago:
+            recent_sends.append((row, created_at))
+
+    if recent_sends:
+        latest_created_at = max(item[1] for item in recent_sends)
+        seconds_since_last = (now - latest_created_at).total_seconds()
+        if seconds_since_last < PHONE_CODE_COOLDOWN_SECONDS:
+            wait_seconds = max(1, int(PHONE_CODE_COOLDOWN_SECONDS - seconds_since_last + 0.999))
+            return False, f"Please wait {wait_seconds} seconds before requesting another code.", None
+
+    if len(recent_sends) >= PHONE_CODE_MAX_SENDS_PER_HOUR:
+        return False, "You have reached the phone verification send limit. Please try again in an hour.", None
+
+    # Invalidate any older code before issuing a new one.
+    try:
+        supabase.table("phone_verification_codes").update({
+            "is_used": True,
+        }).eq("user_id", user_id).eq("is_used", False).execute()
+    except Exception as exc:
+        print(f"Unable to invalidate older phone verification codes for {user_id}: {exc}")
+        return False, "Unable to request a verification code right now. Please try again.", None
+
+    code = generate_verification_code()
     record = {
         "id": str(uuid.uuid4()),
-        "user_id": str(user_id),
+        "user_id": user_id,
         "phone": phone_clean,
-        "code_hash": code_hash,
+        "code_hash": _hash_value(code),
         "attempts": 0,
         "is_used": False,
-        "expires_at": expires_at,
+        "expires_at": (now + timedelta(minutes=CODE_EXPIRATION_MINUTES)).isoformat(),
         "created_at": now.isoformat(),
     }
-    supabase.table("phone_verification_codes").insert(record).execute()
-
-    msg = f"Your SOET Connect phone verification code is {code}."
     try:
-        if delivery.is_sms_configured():
-            success, msg_id, err = delivery.send_sms_message(phone_clean, msg)
-            delivery.record_delivery(
-                user_id=user_id,
-                channel="sms",
-                recipient=phone_clean,
-                status="accepted" if success else "failed",
-                event_type="phone_verification",
-                provider="twilio",
-                provider_message_id=msg_id,
-                error_message=err,
-            )
-        else:
-            delivery.record_delivery(
-                user_id=user_id,
-                channel="sms",
-                recipient=phone_clean,
-                status="skipped",
-                event_type="phone_verification",
-                provider="twilio",
-                error_message="Twilio credentials not configured (TWILIO_ACCOUNT_SID missing).",
-            )
-    except Exception as e:
-        print(f"Error recording phone verification delivery: {e}")
+        supabase.table("phone_verification_codes").insert(record).execute()
+    except Exception as exc:
+        print(f"Unable to create phone verification challenge for {user_id}: {exc}")
+        return False, "Unable to request a verification code right now. Please try again.", None
+
+    message = f"Your SOET Connect phone verification code is {code}. It expires in 10 minutes. Do not share this code."
+    try:
+        success, provider_message_id, error = delivery.send_sms_message(phone_clean, message)
+    except Exception as exc:
+        success, provider_message_id, error = False, None, str(exc)
+
+    delivery.record_delivery(
+        user_id=user_id,
+        channel="sms",
+        recipient=phone_clean,
+        status="accepted" if success else "failed",
+        event_type="phone_verification",
+        provider="twilio",
+        provider_message_id=provider_message_id,
+        error_message=None if success else (error or "SMS delivery failed"),
+    )
+
+    if not success:
+        _invalidate_phone_verification_code(record["id"])
+        print(f"Phone verification SMS delivery failed for user {user_id}.")
+        return False, "We could not deliver the verification code. Please check the number or try again later.", None
 
     debug_code = code if os.getenv("PYTEST_CURRENT_TEST") else None
     return True, "Verification code sent to your phone.", debug_code
 
 
 def confirm_phone_verification(user_id: str, code: str) -> Tuple[bool, str]:
-    """Verify phone code and mark phone as verified on user account."""
+    """Verify the latest phone code with expiry and a five-attempt lockout."""
+    user_id = str(user_id)
+    supplied_code = str(code or "").strip()
     now = datetime.now(timezone.utc)
+
     try:
-        res = supabase.table("phone_verification_codes") \
-            .select("*") \
-            .eq("user_id", str(user_id)) \
-            .eq("is_used", False) \
-            .order("created_at", desc=True) \
-            .limit(1) \
+        res = (
+            supabase.table("phone_verification_codes")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("is_used", False)
+            .order("created_at", desc=True)
+            .limit(1)
             .execute()
+        )
         if not res.data:
             return False, "Invalid or expired phone verification code."
-        rec = res.data[0]
-    except Exception:
-        return False, "Error verifying phone code."
+        record = res.data[0]
+    except Exception as exc:
+        print(f"Unable to load phone verification challenge for {user_id}: {exc}")
+        return False, "Unable to verify the phone code right now. Please try again."
 
-    # Check expiration
+    expires_at = _parse_phone_code_timestamp(record.get("expires_at"))
+    if not expires_at:
+        _invalidate_phone_verification_code(record["id"])
+        return False, "Invalid phone verification challenge."
+    if expires_at <= now:
+        _invalidate_phone_verification_code(record["id"])
+        return False, "Verification code has expired. Please request a new one."
+
+    if int(record.get("attempts") or 0) >= PHONE_CODE_MAX_ATTEMPTS:
+        _invalidate_phone_verification_code(record["id"])
+        return False, "Maximum verification attempts exceeded. Please request a new code."
+
+    expected_hash = str(record.get("code_hash") or "")
+    provided_hash = _hash_value(supplied_code)
+    if not _constant_time_compare(expected_hash, provided_hash):
+        try:
+            attempts, locked = _record_phone_verification_failure(record)
+        except Exception as exc:
+            print(f"Unable to count failed phone verification attempt for {user_id}: {exc}")
+            return False, "Unable to verify the phone code right now. Please try again."
+
+        if locked:
+            return False, "Maximum verification attempts exceeded. Please request a new code."
+        remaining = max(0, PHONE_CODE_MAX_ATTEMPTS - attempts)
+        return False, f"Incorrect verification code. {remaining} attempt(s) remaining."
+
+    user = users_collection.find_one({"_id": user_id}, include_profiles=False)
+    if not user or not user.get("is_active", True):
+        return False, "User account is unavailable."
+
+    # Bind the verified number to the exact phone stored in this challenge.
+    update_fields = {
+        "phone": record["phone"],
+        "is_phone_verified": True,
+    }
+    if user.get("role") == "student":
+        update_fields["student_profile"] = {"phone": record["phone"]}
+
     try:
-        exp_dt = datetime.fromisoformat(rec.get("expires_at", "").replace("Z", "+00:00"))
-        if exp_dt <= now:
-            return False, "Verification code has expired."
-    except Exception:
-        return False, "Invalid timestamp."
-
-    # Check hash
-    if not _constant_time_compare(rec.get("code_hash", ""), _hash_value(code.strip())):
-        return False, "Incorrect verification code."
-
-    # Mark code used
-    supabase.table("phone_verification_codes").update({"is_used": True}).eq("id", rec["id"]).execute()
-
-    # Update user account: set phone and is_phone_verified = True
-    users_collection.update_one(
-        {"_id": str(user_id)},
-        {"$set": {
-            "phone": rec["phone"],
-            "is_phone_verified": True,
-        }}
-    )
+        updated = users_collection.update_one(
+            {"_id": user_id},
+            {"$set": update_fields},
+        )
+        if not updated.modified_count:
+            return False, "Unable to update the verified phone number. Please try again."
+        supabase.table("phone_verification_codes").update({
+            "is_used": True,
+        }).eq("id", str(record["id"])).eq("is_used", False).execute()
+    except Exception as exc:
+        print(f"Phone verification completion failed for user {user_id}: {exc}")
+        return False, "Unable to complete phone verification right now. Please try again."
 
     return True, "Phone number verified successfully."
