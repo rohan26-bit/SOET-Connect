@@ -47,6 +47,12 @@ def test_external_application_url_is_persisted_and_returned(client, admin_user):
     assert stored and stored[0].get("application_url") == application_url
     assert response.json()["job"]["application_url"] == application_url
 
+    listed = client.get("/jobs", headers=admin_user["headers"])
+    assert listed.status_code == 200
+    persisted_job = next((job for job in listed.json() if job["id"] == job_id), None)
+    assert persisted_job is not None
+    assert persisted_job["application_url"] == application_url
+
 
 def test_admin_creates_approved_job(client, admin_user):
     """Admin created jobs are approved immediately."""
