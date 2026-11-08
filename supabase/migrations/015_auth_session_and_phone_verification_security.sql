@@ -157,6 +157,66 @@ BEGIN
 END;
 $otp_consume$;
 
+-- Atomically consume the OTP and update the user's phone so profile edits and
+-- verification cannot race and restore an older contact number.
+CREATE OR REPLACE FUNCTION public.complete_phone_verification(
+  p_user_id UUID,
+  p_code_id UUID,
+  p_now TIMESTAMPTZ,
+  p_max_attempts INTEGER
+)
+RETURNS TABLE (
+  verified_phone TEXT,
+  user_role TEXT
+)
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $phone_complete$
+DECLARE
+  v_phone TEXT;
+  v_role TEXT;
+BEGIN
+  SELECT u.role, pvc.phone
+    INTO v_role, v_phone
+    FROM public.users AS u
+    JOIN public.phone_verification_codes AS pvc
+      ON pvc.user_id = u.id
+   WHERE u.id = p_user_id
+     AND u.is_active = TRUE
+     AND pvc.id = p_code_id
+     AND pvc.is_used = FALSE
+     AND COALESCE(pvc.attempts, 0) < p_max_attempts
+     AND pvc.expires_at > p_now
+   FOR UPDATE OF u, pvc;
+
+  IF NOT FOUND THEN
+    RETURN;
+  END IF;
+
+  UPDATE public.phone_verification_codes
+     SET is_used = TRUE
+   WHERE id = p_code_id
+     AND user_id = p_user_id
+     AND is_used = FALSE;
+
+  UPDATE public.users
+     SET phone = v_phone,
+         is_phone_verified = TRUE,
+         updated_at = p_now
+   WHERE id = p_user_id;
+
+  IF v_role = 'student' THEN
+    UPDATE public.student_profiles
+       SET phone = v_phone,
+           updated_at = p_now
+     WHERE user_id = p_user_id;
+  END IF;
+
+  RETURN QUERY SELECT v_phone, v_role;
+END;
+$phone_complete$;
+
 -- Atomic attempt counter prevents concurrent wrong OTP requests from bypassing the lockout.
 CREATE OR REPLACE FUNCTION public.record_phone_verification_failure(
   p_code_id UUID,
@@ -188,6 +248,10 @@ $$;
 REVOKE EXECUTE ON FUNCTION public.create_phone_verification_challenge(UUID, UUID, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.create_phone_verification_challenge(UUID, UUID, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ) FROM anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.create_phone_verification_challenge(UUID, UUID, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ) TO service_role;
+
+REVOKE EXECUTE ON FUNCTION public.complete_phone_verification(UUID, UUID, TIMESTAMPTZ, INTEGER) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.complete_phone_verification(UUID, UUID, TIMESTAMPTZ, INTEGER) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.complete_phone_verification(UUID, UUID, TIMESTAMPTZ, INTEGER) TO service_role;
 
 REVOKE EXECUTE ON FUNCTION public.consume_phone_verification_challenge(UUID, UUID, TIMESTAMPTZ, INTEGER) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.consume_phone_verification_challenge(UUID, UUID, TIMESTAMPTZ, INTEGER) FROM anon, authenticated;
