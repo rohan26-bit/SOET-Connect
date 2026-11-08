@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 from database import users_collection
 from schemas.profile import ProfileUpdateRequest
 from security.dependencies import get_current_user
+from services.delivery import normalize_phone_number
 
 
 router = APIRouter(
@@ -163,12 +164,26 @@ def update_my_profile(
         }
 
         for key, value in fields.items():
-            if value is not None:
+            if value is not None and key != "phone":
                 current_sub[key] = (
                     value.strip()
                     if isinstance(value, str)
                     else value
                 )
+
+        if fields["phone"] is not None:
+            normalized_phone = normalize_phone_number(fields["phone"])
+            if not normalized_phone or not normalized_phone.startswith("+"):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Enter a valid phone number with country code.",
+                )
+            previous_phone = normalize_phone_number(existing_user.get("phone") or current_sub.get("phone") or "")
+            current_sub["phone"] = normalized_phone
+            update_data["phone"] = normalized_phone
+            # A changed number must be re-verified before SMS recovery or SMS notifications.
+            if normalized_phone != previous_phone:
+                update_data["is_phone_verified"] = False
 
         if any(value is not None for value in fields.values()):
             update_data["student_profile"] = current_sub
