@@ -21,18 +21,28 @@ const EVENT_TYPES = [
   'Conference', 'Career Fair', 'Cultural Event', 'Sports Event', 'Other'
 ];
 
-const VISIBILITY_OPTIONS = ['Everyone', 'Students Only', 'Alumni Only', 'Admin Only'];
+const VISIBILITY_OPTIONS = [
+  { label: 'Everyone', value: 'everyone' },
+  { label: 'Students Only', value: 'students_only' },
+  { label: 'Alumni Only', value: 'alumni_only' },
+  { label: 'Admin Only', value: 'admin_only' },
+];
 
 interface EventFormData {
   title: string;
   organizer: string;
   description: string;
   event_date: string;
+  end_date: string;
   start_time: string;
+  end_time: string;
   location: string;
   event_type: string;
+  organizer: string;
   registration_deadline: string;
   visibility: string;
+  capacity: string;
+  tags: string;
   attachment: DocumentAttachmentData | null;
 }
 
@@ -41,11 +51,16 @@ const emptyForm: EventFormData = {
   organizer: '',
   description: '',
   event_date: '',
+  end_date: '',
   start_time: '',
+  end_time: '',
   location: '',
   event_type: '',
+  organizer: '',
   registration_deadline: '',
-  visibility: 'Everyone',
+  visibility: 'everyone',
+  capacity: '',
+  tags: '',
   attachment: null,
 };
 
@@ -110,14 +125,18 @@ export default function AdminEventsPage() {
     setEditingEvent(event);
     setFormData({
       title: event.title,
-      organizer: event.creator_name || '',
+      organizer: event.organizer || event.creator_name || '',
       description: event.description,
       event_date: event.event_date,
+      end_date: event.end_date || '',
       start_time: event.start_time || '',
+      end_time: event.end_time || '',
       location: event.location,
       event_type: event.event_type || '',
       registration_deadline: event.registration_deadline || '',
-      visibility: 'Everyone',
+      visibility: event.visibility || 'everyone',
+      capacity: event.capacity == null ? '' : String(event.capacity),
+      tags: (event.tags || []).join(', '),
       attachment: event.attachment || null,
     });
     setFormError(null);
@@ -136,10 +155,16 @@ export default function AdminEventsPage() {
           title: formData.title,
           description: formData.description,
           event_date: formData.event_date,
+          end_date: formData.end_date || null,
           start_time: formData.start_time || undefined,
+          end_time: formData.end_time || null,
+          organizer: formData.organizer,
           location: formData.location,
           event_type: formData.event_type || undefined,
           registration_deadline: formData.registration_deadline || undefined,
+          visibility: formData.visibility as EventItem['visibility'],
+          capacity: formData.capacity.trim() ? Number(formData.capacity) : null,
+          tags: formData.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
           attachment: formData.attachment,
         });
       } else {
@@ -149,10 +174,16 @@ export default function AdminEventsPage() {
           title: formData.title,
           description: formData.description,
           event_date: formData.event_date,
+          end_date: formData.end_date || undefined,
           start_time: formData.start_time || undefined,
+          end_time: formData.end_time || undefined,
+          organizer: formData.organizer,
           location: formData.location,
           event_type: formData.event_type || undefined,
           registration_deadline: formData.registration_deadline || undefined,
+          visibility: formData.visibility as EventItem['visibility'],
+          capacity: formData.capacity.trim() ? Number(formData.capacity) : null,
+          tags: formData.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
           attachment: formData.attachment,
         });
       }
@@ -176,7 +207,7 @@ export default function AdminEventsPage() {
       searchQuery === '' ||
       e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       e.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (e.creator_name || '').toLowerCase().includes(searchQuery.toLowerCase())
+      (e.organizer || e.creator_name || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
 
   const stats = {
@@ -357,7 +388,8 @@ export default function AdminEventsPage() {
 
                 <div className="flex items-center justify-between text-[11px] text-slate-400">
                   <span>
-                    Organizer: <span className="font-semibold text-slate-700">{event.creator_name || 'Admin'}</span>
+                    Organizer: <span className="font-semibold text-slate-700">{event.organizer || event.creator_name || 'Admin'}</span>
+                    <span className="ml-2 text-slate-400">• {event.visibility?.replace('_only', ' only').replace(/^./, (value) => value.toUpperCase()) || 'Everyone'}</span>
                   </span>
                   <span className="flex items-center gap-1">
                     <Users className="w-3 h-3" /> {event.registration_count || 0} registered
@@ -482,10 +514,10 @@ export default function AdminEventsPage() {
                 />
               </div>
 
-              {/* Date & Time */}
+              {/* Start and end date/time */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Date *</label>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Start Date *</label>
                   <input
                     type="date"
                     required
@@ -495,12 +527,31 @@ export default function AdminEventsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Time *</label>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Start Time *</label>
                   <input
                     type="time"
                     required
                     value={formData.start_time}
                     onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/50 transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">End Date (Optional)</label>
+                  <input
+                    type="date"
+                    min={formData.event_date || undefined}
+                    value={formData.end_date}
+                    onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/50 transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">End Time (Optional)</label>
+                  <input
+                    type="time"
+                    value={formData.end_time}
+                    onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
                     className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/50 transition"
                   />
                 </div>
@@ -556,9 +607,34 @@ export default function AdminEventsPage() {
                     className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/50 transition"
                   >
                     {VISIBILITY_OPTIONS.map((opt) => (
-                      <option key={opt} value={opt}>{opt}</option>
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Capacity (Optional)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={formData.capacity}
+                    onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/50 transition"
+                    placeholder="Leave blank for unlimited registrations"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Topics / Tags (Optional)</label>
+                  <input
+                    type="text"
+                    value={formData.tags}
+                    onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/50 transition"
+                    placeholder="AI, Networking, Career"
+                  />
                 </div>
               </div>
 
