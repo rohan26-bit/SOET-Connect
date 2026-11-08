@@ -253,6 +253,7 @@ def create_job(
         "skills": job.skills or [],
         "status": initial_status,
         "application_deadline": deadline_val,
+        "application_url": job.application_url or "",
         "created_at": now_iso,
         "updated_at": now_iso,
     }
