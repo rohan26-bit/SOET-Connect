@@ -548,6 +548,13 @@ def test_full_password_recovery_flow(client: TestClient, monkeypatch):
     )
     assert reset_res.status_code == 200
 
+    # A reset token can only be consumed once.
+    replay_res = client.post(
+        "/api/auth/reset-password",
+        json={"reset_token": reset_token, "new_password": "AnotherStrongPass789!"},
+    )
+    assert replay_res.status_code == 400
+
     # Tokens issued before the reset must no longer access protected endpoints.
     assert client.get("/profile/me", headers=prior_session_headers).status_code == 401
 
@@ -558,6 +565,81 @@ def test_full_password_recovery_flow(client: TestClient, monkeypatch):
     # 7. Verify new password succeeds
     new_login = client.post("/api/auth/login", json={"email": email, "password": new_password})
     assert new_login.status_code == 200
+
+
+def test_password_recovery_locks_after_five_incorrect_attempts(client: TestClient, verified_alumni_user: dict, monkeypatch):
+    """Five wrong reset-code guesses invalidate the challenge."""
+    monkeypatch.setattr("services.delivery.is_email_configured", lambda: True)
+    monkeypatch.setattr(
+        "services.delivery.send_email_message",
+        lambda to, subj, msg: (True, "resend_attempt_lock_001", None),
+    )
+
+    success, _, valid_code = request_password_reset(verified_alumni_user["email"], "email")
+    assert success is True
+    assert valid_code
+
+    wrong_code = "000000" if valid_code != "000000" else "111111"
+    for attempt in range(5):
+        ok, message, token = verify_password_reset_code(verified_alumni_user["email"], wrong_code)
+        assert ok is False
+        assert token is None
+        if attempt == 4:
+            assert "maximum" in message.lower()
+
+    ok, message, token = verify_password_reset_code(verified_alumni_user["email"], valid_code)
+    assert ok is False
+    assert token is None
+
+
+def test_twilio_verify_password_reset_uses_provider_code(client: TestClient, verified_alumni_user: dict, monkeypatch):
+    """Twilio Verify-managed OTPs are checked through Twilio, not against a local hash."""
+    user_id = verified_alumni_user["id"]
+    phone = "+919876543210"
+    users_collection.update_one(
+        {"_id": user_id},
+        {"$set": {"phone": phone, "is_phone_verified": True}},
+    )
+
+    monkeypatch.setattr("services.delivery.is_twilio_verify_configured", lambda: True)
+    monkeypatch.setattr("services.delivery.is_sms_configured", lambda: False)
+    monkeypatch.setattr(
+        "services.delivery.send_twilio_verify_otp",
+        lambda to: (True, "VE_unit_test_reset_001", None),
+    )
+    checked_codes = []
+    monkeypatch.setattr(
+        "services.delivery.check_twilio_verify_otp",
+        lambda to, code: (checked_codes.append(code) or (code == "123456"), "Incorrect verification code."),
+    )
+
+    success, message, debug_code = request_password_reset(phone, "sms")
+    assert success is True
+    assert debug_code is None
+
+    challenge = (
+        supabase.table("password_reset_challenges")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+        .data[0]
+    )
+    assert challenge["verification_provider"] == "twilio_verify"
+
+    incorrect, error, reset_token = verify_password_reset_code(phone, "000000")
+    assert incorrect is False
+    assert reset_token is None
+    assert "attempt" in error.lower()
+
+    verified, message, reset_token = verify_password_reset_code(phone, "123456")
+    assert verified is True
+    assert reset_token
+    assert checked_codes == ["000000", "123456"]
+
+    reset_ok, reset_message = reset_password_with_token(reset_token, "TwilioResetPassword789!")
+    assert reset_ok is True
 
 
 def test_password_recovery_preserves_verification_status(
@@ -788,6 +870,25 @@ def test_phone_verification_locks_after_five_incorrect_attempts(
 # ==============================================================================
 # 4. PRE-MIGRATION INTEGRITY & SAFETY REVIEWS
 # ==============================================================================
+
+def test_migration_015_session_revocation_and_otp_security():
+    """Migration 015 persists token versions and adds locked, service-only recovery RPCs."""
+    import pathlib
+
+    migration_path = pathlib.Path(__file__).parents[2] / "supabase" / "migrations" / "015_auth_session_and_phone_verification_security.sql"
+    assert migration_path.exists()
+    sql = migration_path.read_text(encoding="utf-8")
+
+    assert "ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0" in sql
+    assert "verification_provider" in sql
+    assert "create_phone_verification_challenge" in sql
+    assert "consume_phone_verification_challenge" in sql
+    assert "record_phone_verification_failure" in sql
+    assert "record_password_reset_failure" in sql
+    assert "reset_password_and_revoke_sessions" in sql
+    assert "GRANT EXECUTE ON FUNCTION public.reset_password_and_revoke_sessions" in sql
+    assert "FROM anon, authenticated" in sql
+
 
 def test_migration_004_creates_private_storage_and_safe_backfill():
     """Verify migration 004 declares private bucket, storage RLS, and safe phone backfill."""
