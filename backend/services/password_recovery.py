@@ -596,6 +596,7 @@ def send_phone_verification_code(user_id: str, phone: str) -> Tuple[bool, str, O
     user_id = str(user.get("_db_id") or user.get("_id"))
     if not user.get("is_active", True):
         return False, "This account has been deactivated.", None
+    phone_version = int(user.get("phone_version") or 0)
 
     if not delivery.is_sms_configured():
         delivery.record_delivery(
@@ -615,6 +616,7 @@ def send_phone_verification_code(user_id: str, phone: str) -> Tuple[bool, str, O
         "id": str(uuid.uuid4()),
         "user_id": user_id,
         "phone": phone_clean,
+        "phone_version": phone_version,
         "code_hash": _hash_value(code),
         "attempts": 0,
         "is_used": False,
@@ -670,6 +672,7 @@ def send_phone_verification_code(user_id: str, phone: str) -> Tuple[bool, str, O
                 {
                     "p_user_id": user_id,
                     "p_code_id": record["id"],
+                    "p_phone_version": phone_version,
                     "p_phone": phone_clean,
                     "p_code_hash": record["code_hash"],
                     "p_expires_at": record["expires_at"],
@@ -690,6 +693,8 @@ def send_phone_verification_code(user_id: str, phone: str) -> Tuple[bool, str, O
             return False, "You have reached the phone verification send limit. Please try again in an hour.", None
         if outcome == "not_found":
             return False, "User account not found or deactivated.", None
+        if outcome == "profile_changed":
+            return False, "Your phone number was updated in another session. Refresh and request a new code.", None
         if outcome != "created":
             return False, "Unable to request a verification code right now. Please try again.", None
 
@@ -783,6 +788,10 @@ def confirm_phone_verification(user_id: str, code: str) -> Tuple[bool, str]:
     except Exception as exc:
         print(f"Unable to load phone verification challenge for {user_id}: {exc}")
         return False, "Unable to verify the phone code right now. Please try again."
+
+    if int(record.get("phone_version") or 0) != int(user.get("phone_version") or 0):
+        _invalidate_phone_verification_code(str(record["id"]))
+        return False, "Your phone number changed after this code was sent. Please request a new code."
 
     expires_at = _parse_phone_code_timestamp(record.get("expires_at"))
     if not expires_at:
