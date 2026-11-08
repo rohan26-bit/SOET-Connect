@@ -12,6 +12,7 @@ from schemas.auth import RegisterRequest, LoginRequest, ChangePasswordRequest
 from pwdlib import PasswordHash
 from security.jwt import create_access_token
 from security.dependencies import get_current_user
+from services.session_security import update_password_and_revoke_sessions
 
 
 load_dotenv()
@@ -210,7 +211,8 @@ def login_user(user: LoginRequest):
 
     access_token = create_access_token(
         user_id=str(existing_user["_id"]),
-        role=existing_user["role"]
+        role=existing_user["role"],
+        session_version=existing_user.get("session_version", 0),
     )
 
     return {
@@ -281,18 +283,30 @@ def change_password(
     # 5. Hash new password securely with Argon2
     new_hashed = password_hash.hash(payload.new_password)
 
-    # 6. Update user document
-    now = datetime.now(timezone.utc).isoformat()
-    users_collection.update_one(
-        {"_id": existing_user["_id"]},
-        {"$set": {
-            "password_hash": new_hashed,
-            "updated_at": now
-        }}
+    # 6. Persist the new password and revoke every previously issued token.
+    try:
+        new_session_version = update_password_and_revoke_sessions(
+            str(existing_user["_id"]),
+            new_hashed,
+        )
+    except Exception as exc:
+        print(f"Password change failed for user {user_id}: {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to update your password right now. Please try again.",
+        ) from exc
+
+    # Keep the current browser session alive with a freshly issued token.
+    replacement_token = create_access_token(
+        user_id=str(existing_user["_id"]),
+        role=existing_user["role"],
+        session_version=new_session_version,
     )
 
     return {
-        "message": "Password changed successfully."
+        "message": "Password changed successfully. Other active sessions have been signed out.",
+        "access_token": replacement_token,
+        "token_type": "bearer",
     }
 
 
