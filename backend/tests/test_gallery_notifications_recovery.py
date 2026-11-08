@@ -567,6 +567,21 @@ def test_full_password_recovery_flow(client: TestClient, monkeypatch):
     assert new_login.status_code == 200
 
 
+def test_password_recovery_finds_formatted_phone_identifier(verified_alumni_user: dict):
+    """Formatted phone number input resolves the user's canonical E.164 contact."""
+    from services.password_recovery import find_user_by_contact
+
+    canonical_phone = "+919876543210"
+    users_collection.update_one(
+        {"_id": verified_alumni_user["id"]},
+        {"$set": {"phone": canonical_phone, "is_phone_verified": True}},
+    )
+
+    found = find_user_by_contact("+91 98765-43210")
+    assert found is not None
+    assert found["_id"] == verified_alumni_user["id"]
+
+
 def test_password_recovery_locks_after_five_incorrect_attempts(client: TestClient, verified_alumni_user: dict, monkeypatch):
     """Five wrong reset-code guesses invalidate the challenge."""
     monkeypatch.setattr("services.delivery.is_email_configured", lambda: True)
