@@ -22,6 +22,9 @@ export interface EventItem {
   created_at: string;
   updated_at?: string;
   creator_name?: string;
+  organizer?: string;
+  visibility?: 'everyone' | 'students_only' | 'alumni_only' | 'admin_only';
+  capacity?: number | null;
   creator_avatar?: string;
   registration_count?: number;
   is_registered?: boolean;
@@ -85,6 +88,9 @@ function normalizeEvent(e: any): EventItem {
     created_at: e.created_at,
     updated_at: e.updated_at,
     creator_name: e.creator_name,
+    organizer: e.organizer || e.creator_name || 'SOET Connect',
+    visibility: e.visibility || 'everyone',
+    capacity: e.capacity == null ? null : Number(e.capacity),
     registration_count: e.registration_count || 0,
     is_registered: !!e.is_registered,
     is_past: !!e.is_past,
@@ -171,8 +177,12 @@ export const eventService = {
     title: string;
     description: string;
     event_date: string;
+    end_date?: string;
     start_time?: string;
     end_time?: string;
+    organizer?: string;
+    visibility?: 'everyone' | 'students_only' | 'alumni_only' | 'admin_only';
+    capacity?: number | null;
     location: string;
     image_file?: File;
     image_url?: string;
@@ -193,8 +203,12 @@ export const eventService = {
         title: eventData.title,
         description: serializedDescription,
         event_date: eventData.event_date,
+        end_date: eventData.end_date || null,
         start_time: eventData.start_time || '',
-        end_time: eventData.end_time || '',
+        end_time: eventData.end_time || null,
+        organizer: eventData.organizer || '',
+        visibility: eventData.visibility || 'everyone',
+        capacity: eventData.capacity ?? null,
         location: eventData.location,
         event_type: eventData.event_type || '',
         image_url: eventData.image_url || '',
