@@ -811,23 +811,39 @@ def confirm_phone_verification(user_id: str, code: str) -> Tuple[bool, str]:
         return False, f"Incorrect verification code. {remaining} attempt(s) remaining."
 
     try:
-        if not _consume_phone_verification_code(record, user_id, now):
-            return False, "This verification code has already been used. Please request a new code."
+        if os.getenv("DATABASE_MODE", "").strip().lower() == "mock":
+            if not _consume_phone_verification_code(record, user_id, now):
+                return False, "This verification code has already been used. Please request a new code."
 
-        # Bind the verified number to the exact phone stored in this challenge.
-        update_fields = {
-            "phone": record["phone"],
-            "is_phone_verified": True,
-        }
-        if user.get("role") == "student":
-            update_fields["student_profile"] = {"phone": record["phone"]}
+            # Keep mock-mode behavior aligned with the production transaction.
+            update_fields = {
+                "phone": record["phone"],
+                "is_phone_verified": True,
+            }
+            if user.get("role") == "student":
+                update_fields["student_profile"] = {"phone": record["phone"]}
 
-        updated = users_collection.update_one(
-            {"_id": user_id},
-            {"$set": update_fields},
-        )
-        if not updated.modified_count:
-            return False, "Unable to update the verified phone number. Please try again."
+            updated = users_collection.update_one(
+                {"_id": user_id},
+                {"$set": update_fields},
+            )
+            if not updated.modified_count:
+                return False, "Unable to update the verified phone number. Please try again."
+        else:
+            # Production locks both the account and challenge, consumes the OTP,
+            # and updates users/student_profiles within one database transaction.
+            completion = supabase.rpc(
+                "complete_phone_verification",
+                {
+                    "p_user_id": user_id,
+                    "p_code_id": str(record["id"]),
+                    "p_now": now.isoformat(),
+                    "p_max_attempts": PHONE_CODE_MAX_ATTEMPTS,
+                },
+            ).execute()
+            rows = completion.data or []
+            if not rows:
+                return False, "This verification code is no longer active. Please request a new code."
     except Exception as exc:
         print(f"Phone verification completion failed for user {user_id}: {exc}")
         return False, "Unable to complete phone verification right now. Please try again."
