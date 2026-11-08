@@ -893,6 +893,7 @@ class SupabaseUsersCollection:
             "phone": user_row.get("phone"),
             "is_phone_verified": user_row.get("is_phone_verified", False),
             "session_version": int(user_row.get("session_version") or 0),
+            "phone_version": int(user_row.get("phone_version") or 0),
             "is_active": user_row.get("is_active", True),
             "is_verified": user_row.get("is_verified", False),
             "verification_status": (
@@ -1201,7 +1202,7 @@ class SupabaseUsersCollection:
 
         # Base user fields
         base_updates = {}
-        for k in ["name", "email", "password_hash", "avatar_url", "is_active", "is_verified", "verification_status", "phone", "is_phone_verified", "session_version", "last_seen_at"]:
+        for k in ["name", "email", "password_hash", "avatar_url", "is_active", "is_verified", "verification_status", "phone", "is_phone_verified", "session_version", "phone_version", "last_seen_at"]:
             if k in set_fields:
                 base_updates[k] = set_fields[k]
 
