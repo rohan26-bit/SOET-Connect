@@ -114,11 +114,12 @@ DECLARE
   v_wait_seconds INTEGER;
   v_current_phone_version INTEGER;
 BEGIN
-  PERFORM 1
+  SELECT u.phone_version
+    INTO v_current_phone_version
     FROM public.users AS u
    WHERE u.id = p_user_id
      AND u.is_active = TRUE
-   RETURNING u.phone_version INTO v_current_phone_version;
+   FOR UPDATE;
 
   IF NOT FOUND THEN
     RETURN QUERY SELECT 'not_found'::TEXT, 0;
