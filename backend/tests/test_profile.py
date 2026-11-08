@@ -170,7 +170,7 @@ def test_update_student_profile():
     assert data["student_profile"]["department"] == "Mechanical Engineering"
     assert data["student_profile"]["course"] == "M.Tech"
     assert data["student_profile"]["graduation_year"] == "2027"
-    assert data["student_profile"]["phone"] == "9998887776"
+    assert data["student_profile"]["phone"] == "+919998887776"
 
 
 def test_update_student_profile_patch():
@@ -186,7 +186,7 @@ def test_update_student_profile_patch():
     data = res.json()
     assert data["message"] == "Profile updated successfully."
     assert data["profile"]["name"] == "Patch Student Name"
-    assert data["profile"]["student_profile"]["phone"] == "9991112233"
+    assert data["profile"]["student_profile"]["phone"] == "+919991112233"
     assert data["profile"]["student_profile"]["course"] == "B.Tech CSE"
 
 
@@ -372,11 +372,11 @@ def test_profile_valid_phone_succeeds():
 
     resp = test_client.patch("/profile/me", json={"phone": "+91 98765-43210"}, headers=headers["student"])
     assert resp.status_code == 200
-    assert resp.json()["student_profile"]["phone"] == "+91 98765-43210"
+    assert resp.json()["student_profile"]["phone"] == "+919876543210"
 
     resp = test_client.patch("/profile/me", json={"phone": "(123) 456-7890"}, headers=headers["student"])
     assert resp.status_code == 200
-    assert resp.json()["student_profile"]["phone"] == "(123) 456-7890"
+    assert resp.json()["student_profile"]["phone"] == "+911234567890"
 
 
 def test_profile_invalid_graduation_year_fails():

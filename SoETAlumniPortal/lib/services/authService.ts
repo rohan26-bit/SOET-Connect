@@ -464,7 +464,7 @@ export const authService = {
     current_password: string;
     new_password: string;
     confirm_new_password: string;
-  }): Promise<{ message: string }> {
+  }): Promise<{ message: string; access_token: string; token_type: string }> {
     const token = localStorage.getItem('soet_access_token');
     if (!token) {
       throw new Error('Your session has expired. Please log in again.');
@@ -483,6 +483,11 @@ export const authService = {
     if (!response.ok) {
       throw new Error(result.detail || 'Failed to change password.');
     }
+    if (!result.access_token) {
+      throw new Error('Password changed, but a replacement session token was not returned. Please sign in again.');
+    }
+    // The server has revoked the previous token version; store the rotated one.
+    localStorage.setItem('soet_access_token', result.access_token);
     return result;
   },
 };

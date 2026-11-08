@@ -1,9 +1,15 @@
+import json
+import os
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from database import supabase
 from security.dependencies import get_current_user
+from security.webhook_signatures import (
+    verify_resend_webhook_signature,
+    verify_twilio_webhook_signature,
+)
 from services.notifications import (
     load_notifications,
     create_notification,
@@ -225,28 +231,54 @@ def get_notification_deliveries(
 
 @router.post("/deliveries/webhook/resend")
 async def resend_delivery_webhook(request: Request):
-    """
-    Handle incoming Resend delivery status webhooks (e.g. email.delivered, email.bounced).
-    """
-    try:
-        body = await request.json()
-        event_type = body.get("type", "")
-        data = body.get("data", {})
-        email_id = data.get("email_id")
-        if not email_id:
-            return {"status": "ignored", "reason": "No email_id in payload"}
+    """Accept Resend status events only after Svix signature/timestamp validation."""
+    webhook_secret = os.getenv("RESEND_WEBHOOK_SECRET", "").strip()
+    if not webhook_secret:
+        raise HTTPException(
+            status_code=503,
+            detail="Resend webhook verification is not configured.",
+        )
 
-        from services.delivery import update_delivery_status
+    raw_body = await request.body()
+    if not verify_resend_webhook_signature(raw_body, request.headers, webhook_secret):
+        raise HTTPException(status_code=403, detail="Invalid Resend webhook signature.")
+
+    try:
+        body = json.loads(raw_body)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raise HTTPException(status_code=400, detail="Invalid webhook payload.")
+
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Invalid webhook payload.")
+
+    event_type = str(body.get("type") or "")
+    data = body.get("data") or {}
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="Invalid webhook data.")
+
+    email_id = data.get("email_id")
+    if not email_id:
+        return {"status": "ignored", "reason": "No email_id in payload"}
+
+    from services.delivery import update_delivery_status
+
+    try:
         if event_type == "email.delivered":
-            update_delivery_status(provider_message_id=email_id, status="delivered")
+            update_delivery_status(provider_message_id=str(email_id), status="delivered")
             return {"status": "success", "event": event_type}
-        elif event_type in ("email.bounced", "email.failed"):
-            err_msg = data.get("bounce", {}).get("message") or f"Resend event: {event_type}"
-            update_delivery_status(provider_message_id=email_id, status="failed", error_message=err_msg)
+        if event_type in ("email.bounced", "email.failed"):
+            bounce = data.get("bounce") or {}
+            err_msg = bounce.get("message") if isinstance(bounce, dict) else None
+            update_delivery_status(
+                provider_message_id=str(email_id),
+                status="failed",
+                error_message=err_msg or f"Resend event: {event_type}",
+            )
             return {"status": "success", "event": event_type}
         return {"status": "ignored", "event": event_type}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+    except Exception as exc:
+        print(f"Resend delivery webhook processing failed: {exc}")
+        raise HTTPException(status_code=503, detail="Unable to process delivery webhook.") from exc
 
 
 # ============================================================
@@ -255,27 +287,59 @@ async def resend_delivery_webhook(request: Request):
 
 @router.post("/deliveries/webhook/twilio")
 async def twilio_delivery_webhook(request: Request):
-    """
-    Handle incoming Twilio message status callbacks (e.g. MessageStatus=delivered).
-    """
+    """Accept Twilio callbacks only after the official SDK validates the signature."""
+    auth_token = os.getenv("TWILIO_AUTH_TOKEN", "").strip()
+    if not auth_token:
+        raise HTTPException(
+            status_code=503,
+            detail="Twilio webhook verification is not configured.",
+        )
+
     try:
         form = await request.form()
-        msg_sid = form.get("MessageSid") or form.get("SmsSid")
-        msg_status = (form.get("MessageStatus") or form.get("SmsStatus") or "").lower()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid Twilio callback payload.") from exc
 
-        if not msg_sid:
-            return {"status": "ignored", "reason": "No MessageSid in callback"}
+    signature = request.headers.get("X-Twilio-Signature", "")
+    callback_url = (
+        os.getenv("TWILIO_WEBHOOK_URL", "").strip()
+        or (
+            os.getenv("PUBLIC_APP_URL", "https://soet-connect.vercel.app").rstrip("/")
+            + "/api/notifications/deliveries/webhook/twilio"
+        )
+    )
+    if request.url.query and "?" not in callback_url:
+        callback_url = f"{callback_url}?{request.url.query}"
 
-        from services.delivery import update_delivery_status
+    if not verify_twilio_webhook_signature(callback_url, form, signature, auth_token):
+        raise HTTPException(status_code=403, detail="Invalid Twilio webhook signature.")
+
+    msg_sid = form.get("MessageSid") or form.get("SmsSid")
+    msg_status = str(form.get("MessageStatus") or form.get("SmsStatus") or "").lower()
+    if not msg_sid:
+        return {"status": "ignored", "reason": "No MessageSid in callback"}
+
+    from services.delivery import update_delivery_status
+
+    try:
         if msg_status in ("delivered", "read"):
             update_delivery_status(provider_message_id=str(msg_sid), status="delivered")
         elif msg_status in ("failed", "undelivered"):
             err_code = form.get("ErrorCode", "")
             err_msg = f"Twilio delivery failed (code {err_code})" if err_code else "Twilio delivery failed"
-            update_delivery_status(provider_message_id=str(msg_sid), status="failed", error_message=err_msg)
+            update_delivery_status(
+                provider_message_id=str(msg_sid),
+                status="failed",
+                error_message=err_msg,
+            )
         elif msg_status in ("sent", "queued"):
             update_delivery_status(provider_message_id=str(msg_sid), status="accepted")
 
-        return {"status": "success", "message_sid": str(msg_sid), "message_status": msg_status}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {
+            "status": "success",
+            "message_sid": str(msg_sid),
+            "message_status": msg_status,
+        }
+    except Exception as exc:
+        print(f"Twilio delivery webhook processing failed: {exc}")
+        raise HTTPException(status_code=503, detail="Unable to process delivery webhook.") from exc

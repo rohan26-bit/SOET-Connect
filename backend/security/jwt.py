@@ -36,13 +36,14 @@ except ValueError:
     SECRET_KEY = ""
 
 
-def create_access_token(user_id: str, role: str):
+def create_access_token(user_id: str, role: str, session_version: int = 0):
     secret_key = get_jwt_secret_key()
     expire = datetime.now(timezone.utc) + timedelta(hours=24)
 
     payload = {
         "sub": user_id,
         "role": role,
+        "sv": max(0, int(session_version)),
         "exp": expire
     }
 
@@ -71,9 +72,20 @@ def decode_access_token(token: str):
                 detail="Invalid authentication token."
             )
 
+        try:
+            session_version = int(payload.get("sv", 0))
+            if session_version < 0:
+                raise ValueError("Negative session version")
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication token."
+            )
+
         return {
             "user_id": user_id,
-            "role": role
+            "role": role,
+            "session_version": session_version,
         }
 
     except jwt.ExpiredSignatureError:

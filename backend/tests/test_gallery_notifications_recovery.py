@@ -1,5 +1,10 @@
 import io
 import pytest
+import base64
+import hashlib
+import hmac
+import json
+import time
 from PIL import Image
 from fastapi.testclient import TestClient
 
@@ -509,6 +514,11 @@ def test_full_password_recovery_flow(client: TestClient, monkeypatch):
         {"$set": {"is_verified": True, "verification_status": "approved"}}
     )
 
+    # Capture an active token before reset; reset must revoke existing sessions.
+    prior_login = client.post("/api/auth/login", json={"email": email, "password": old_password})
+    assert prior_login.status_code == 200
+    prior_session_headers = {"Authorization": f"Bearer {prior_login.json()['access_token']}"}
+
     # 2. Request password reset code via service (to get debug code in mock mode)
     success, msg, debug_code = request_password_reset(email, "email")
     assert success is True
@@ -538,6 +548,16 @@ def test_full_password_recovery_flow(client: TestClient, monkeypatch):
     )
     assert reset_res.status_code == 200
 
+    # A reset token can only be consumed once.
+    replay_res = client.post(
+        "/api/auth/reset-password",
+        json={"reset_token": reset_token, "new_password": "AnotherStrongPass789!"},
+    )
+    assert replay_res.status_code == 400
+
+    # Tokens issued before the reset must no longer access protected endpoints.
+    assert client.get("/profile/me", headers=prior_session_headers).status_code == 401
+
     # 6. Verify old password fails
     old_login = client.post("/api/auth/login", json={"email": email, "password": old_password})
     assert old_login.status_code == 401
@@ -545,6 +565,96 @@ def test_full_password_recovery_flow(client: TestClient, monkeypatch):
     # 7. Verify new password succeeds
     new_login = client.post("/api/auth/login", json={"email": email, "password": new_password})
     assert new_login.status_code == 200
+
+
+def test_password_recovery_finds_formatted_phone_identifier(verified_alumni_user: dict):
+    """Formatted phone number input resolves the user's canonical E.164 contact."""
+    from services.password_recovery import find_user_by_contact
+
+    canonical_phone = "+919876543210"
+    users_collection.update_one(
+        {"_id": verified_alumni_user["id"]},
+        {"$set": {"phone": canonical_phone, "is_phone_verified": True}},
+    )
+
+    found = find_user_by_contact("+91 98765-43210")
+    assert found is not None
+    assert found["_id"] == verified_alumni_user["id"]
+
+
+def test_password_recovery_locks_after_five_incorrect_attempts(client: TestClient, verified_alumni_user: dict, monkeypatch):
+    """Five wrong reset-code guesses invalidate the challenge."""
+    monkeypatch.setattr("services.delivery.is_email_configured", lambda: True)
+    monkeypatch.setattr(
+        "services.delivery.send_email_message",
+        lambda to, subj, msg: (True, "resend_attempt_lock_001", None),
+    )
+
+    success, _, valid_code = request_password_reset(verified_alumni_user["email"], "email")
+    assert success is True
+    assert valid_code
+
+    wrong_code = "000000" if valid_code != "000000" else "111111"
+    for attempt in range(5):
+        ok, message, token = verify_password_reset_code(verified_alumni_user["email"], wrong_code)
+        assert ok is False
+        assert token is None
+        if attempt == 4:
+            assert "maximum" in message.lower()
+
+    ok, message, token = verify_password_reset_code(verified_alumni_user["email"], valid_code)
+    assert ok is False
+    assert token is None
+
+
+def test_twilio_verify_password_reset_uses_provider_code(client: TestClient, verified_alumni_user: dict, monkeypatch):
+    """Twilio Verify-managed OTPs are checked through Twilio, not against a local hash."""
+    user_id = verified_alumni_user["id"]
+    phone = "+919876543210"
+    users_collection.update_one(
+        {"_id": user_id},
+        {"$set": {"phone": phone, "is_phone_verified": True}},
+    )
+
+    monkeypatch.setattr("services.delivery.is_twilio_verify_configured", lambda: True)
+    monkeypatch.setattr("services.delivery.is_sms_configured", lambda: False)
+    monkeypatch.setattr(
+        "services.delivery.send_twilio_verify_otp",
+        lambda to: (True, "VE_unit_test_reset_001", None),
+    )
+    checked_codes = []
+    monkeypatch.setattr(
+        "services.delivery.check_twilio_verify_otp",
+        lambda to, code: (checked_codes.append(code) or (code == "123456"), "Incorrect verification code."),
+    )
+
+    success, message, debug_code = request_password_reset(phone, "sms")
+    assert success is True
+    assert debug_code is None
+
+    challenge = (
+        supabase.table("password_reset_challenges")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+        .data[0]
+    )
+    assert challenge["verification_provider"] == "twilio_verify"
+
+    incorrect, error, reset_token = verify_password_reset_code(phone, "000000")
+    assert incorrect is False
+    assert reset_token is None
+    assert "attempt" in error.lower()
+
+    verified, message, reset_token = verify_password_reset_code(phone, "123456")
+    assert verified is True
+    assert reset_token
+    assert checked_codes == ["000000", "123456"]
+
+    reset_ok, reset_message = reset_password_with_token(reset_token, "TwilioResetPassword789!")
+    assert reset_ok is True
 
 
 def test_password_recovery_preserves_verification_status(
@@ -618,30 +728,238 @@ def test_password_recovery_expired_code_rejected(client: TestClient, verified_al
     assert "expired" in res.json().get("detail", "").lower()
 
 
-def test_phone_verification_flow(client: TestClient, verified_alumni_user: dict):
-    """Users can request phone verification code and verify their phone number."""
+def test_phone_verification_flow(client: TestClient, verified_alumni_user: dict, monkeypatch):
+    """SMS delivery is confirmed before success; wrong attempts count; valid code verifies the phone."""
     test_phone = "+919876543210"
+    monkeypatch.setattr("services.delivery.is_sms_configured", lambda: True)
+    monkeypatch.setattr(
+        "services.delivery.send_sms_message",
+        lambda to, msg: (True, "twilio_phone_ok_001", None),
+    )
 
-    # 1. Send phone code
-    res = client.post(
+    response = client.post(
         "/api/auth/phone/send-code",
         headers=verified_alumni_user["headers"],
         json={"phone": test_phone},
     )
-    assert res.status_code == 200
+    assert response.status_code == 200
+    debug_code = response.json().get("_debug_code")
+    assert debug_code and len(debug_code) == 6
 
-    # 2. Verify invalid code is rejected
-    bad_res = client.post(
+    wrong_code = "000000" if debug_code != "000000" else "111111"
+    wrong = client.post(
         "/api/auth/phone/verify-code",
         headers=verified_alumni_user["headers"],
-        json={"phone": test_phone, "code": "000000"},
+        json={"code": wrong_code},
     )
-    assert bad_res.status_code == 400
+    assert wrong.status_code == 400
+    assert "attempt" in wrong.json()["detail"].lower()
+
+    valid = client.post(
+        "/api/auth/phone/verify-code",
+        headers=verified_alumni_user["headers"],
+        json={"code": debug_code},
+    )
+    assert valid.status_code == 200
+    saved_user = users_collection.find_one({"_id": verified_alumni_user["id"]})
+    assert saved_user["phone"] == test_phone
+    assert saved_user["is_phone_verified"] is True
+
+    repeated = client.post(
+        "/api/auth/phone/verify-code",
+        headers=verified_alumni_user["headers"],
+        json={"code": debug_code},
+    )
+    assert repeated.status_code == 400
+
+
+def test_phone_verification_rejects_failed_sms_delivery(
+    client: TestClient,
+    verified_alumni_user: dict,
+    monkeypatch,
+):
+    """A rejected provider request cannot yield a false 'code sent' response."""
+    monkeypatch.setattr("services.delivery.is_sms_configured", lambda: True)
+    monkeypatch.setattr(
+        "services.delivery.send_sms_message",
+        lambda to, msg: (False, None, "provider rejected request"),
+    )
+
+    response = client.post(
+        "/api/auth/phone/send-code",
+        headers=verified_alumni_user["headers"],
+        json={"phone": "+919876543210"},
+    )
+    assert response.status_code == 503
+    assert "could not deliver" in response.json()["detail"].lower()
+
+    challenges = (
+        supabase.table("phone_verification_codes")
+        .select("*")
+        .eq("user_id", verified_alumni_user["id"])
+        .execute()
+        .data
+    )
+    assert len(challenges) == 1
+    assert challenges[0]["is_used"] is True
+
+    deliveries = (
+        supabase.table("notification_deliveries")
+        .select("*")
+        .eq("user_id", verified_alumni_user["id"])
+        .eq("event_type", "phone_verification")
+        .execute()
+        .data
+    )
+    assert len(deliveries) == 1
+    assert deliveries[0]["status"] == "failed"
+
+
+def test_phone_verification_enforces_server_side_cooldown(
+    client: TestClient,
+    verified_alumni_user: dict,
+    monkeypatch,
+):
+    """A second send within sixty seconds is rejected by the backend."""
+    send_calls = []
+    monkeypatch.setattr("services.delivery.is_sms_configured", lambda: True)
+    monkeypatch.setattr(
+        "services.delivery.send_sms_message",
+        lambda to, msg: (send_calls.append(to) or True, "twilio_cooldown_001", None),
+    )
+
+    first = client.post(
+        "/api/auth/phone/send-code",
+        headers=verified_alumni_user["headers"],
+        json={"phone": "+919876543210"},
+    )
+    second = client.post(
+        "/api/auth/phone/send-code",
+        headers=verified_alumni_user["headers"],
+        json={"phone": "+919876543211"},
+    )
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert "wait" in second.json()["detail"].lower()
+    assert len(send_calls) == 1
+
+
+def test_phone_challenge_is_invalidated_after_profile_number_change(
+    client: TestClient,
+    verified_alumni_user: dict,
+    monkeypatch,
+):
+    """An OTP sent before a later profile phone edit cannot restore the old number."""
+    monkeypatch.setattr("services.delivery.is_sms_configured", lambda: True)
+    monkeypatch.setattr(
+        "services.delivery.send_sms_message",
+        lambda to, msg: (True, "twilio_stale_phone_001", None),
+    )
+
+    old_phone = "+919876543210"
+    sent = client.post(
+        "/api/auth/phone/send-code",
+        headers=verified_alumni_user["headers"],
+        json={"phone": old_phone},
+    )
+    assert sent.status_code == 200
+    old_code = sent.json()["_debug_code"]
+
+    updated = client.put(
+        "/profile/me",
+        headers=verified_alumni_user["headers"],
+        json={"phone": "+919999888877"},
+    )
+    assert updated.status_code == 200
+
+    challenges = (
+        supabase.table("phone_verification_codes")
+        .select("*")
+        .eq("phone", old_phone)
+        .execute()
+        .data
+    )
+    assert len(challenges) == 1
+    assert challenges[0]["is_used"] is True
+    assert challenges[0]["phone_version"] == 0
+
+    stale_verify = client.post(
+        "/api/auth/phone/verify-code",
+        headers=verified_alumni_user["headers"],
+        json={"code": old_code},
+    )
+    assert stale_verify.status_code == 400
+
+    saved = users_collection.find_one({"_id": verified_alumni_user["id"]})
+    assert saved["phone"] == "+919999888877"
+    assert saved["is_phone_verified"] is False
+    assert saved["phone_version"] == 1
+
+
+def test_phone_verification_locks_after_five_incorrect_attempts(
+    client: TestClient,
+    verified_alumni_user: dict,
+    monkeypatch,
+):
+    """Five wrong guesses invalidate the challenge and prevent any later valid guess."""
+    monkeypatch.setattr("services.delivery.is_sms_configured", lambda: True)
+    monkeypatch.setattr(
+        "services.delivery.send_sms_message",
+        lambda to, msg: (True, "twilio_lock_001", None),
+    )
+    sent = client.post(
+        "/api/auth/phone/send-code",
+        headers=verified_alumni_user["headers"],
+        json={"phone": "+919876543210"},
+    )
+    assert sent.status_code == 200
+    valid_code = sent.json()["_debug_code"]
+    wrong_code = "999999" if valid_code != "999999" else "888888"
+
+    for attempt in range(5):
+        result = client.post(
+            "/api/auth/phone/verify-code",
+            headers=verified_alumni_user["headers"],
+            json={"code": wrong_code},
+        )
+        assert result.status_code == 400
+        if attempt == 4:
+            assert "maximum" in result.json()["detail"].lower()
+
+    final_try = client.post(
+        "/api/auth/phone/verify-code",
+        headers=verified_alumni_user["headers"],
+        json={"code": valid_code},
+    )
+    assert final_try.status_code == 400
 
 
 # ==============================================================================
 # 4. PRE-MIGRATION INTEGRITY & SAFETY REVIEWS
 # ==============================================================================
+
+def test_migration_015_session_revocation_and_otp_security():
+    """Migration 015 persists token versions and adds locked, service-only recovery RPCs."""
+    import pathlib
+
+    migration_path = pathlib.Path(__file__).parents[2] / "supabase" / "migrations" / "015_auth_session_and_phone_verification_security.sql"
+    assert migration_path.exists()
+    sql = migration_path.read_text(encoding="utf-8")
+
+    assert "ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0" in sql
+    assert "verification_provider" in sql
+    assert "create_phone_verification_challenge" in sql
+    assert "consume_phone_verification_challenge" in sql
+    assert "complete_phone_verification" in sql
+    assert "phone_version" in sql
+    assert "p_phone_version INTEGER" in sql
+    assert "FOR UPDATE OF u, pvc" in sql
+    assert "record_phone_verification_failure" in sql
+    assert "record_password_reset_failure" in sql
+    assert "reset_password_and_revoke_sessions" in sql
+    assert "GRANT EXECUTE ON FUNCTION public.reset_password_and_revoke_sessions" in sql
+    assert "FROM anon, authenticated" in sql
+
 
 def test_migration_004_creates_private_storage_and_safe_backfill():
     """Verify migration 004 declares private bucket, storage RLS, and safe phone backfill."""
@@ -731,11 +1049,17 @@ def test_password_recovery_and_phone_verify_audit_deliveries(monkeypatch, verifi
     assert verify_deliv[0]["status"] == "accepted"
 
 
-def test_resend_and_twilio_webhooks(client: TestClient):
-    """Resend and Twilio delivery webhooks update notification_deliveries status to 'delivered'."""
+def test_resend_and_twilio_webhooks(client: TestClient, monkeypatch):
+    """Unsigned callbacks are rejected; valid Resend/Svix and Twilio signatures update delivery status."""
+    import base64
+    import hashlib
+    import hmac
+    import json
+    import time
+    from twilio.request_validator import RequestValidator
     from services.delivery import record_delivery
 
-    # Record accepted email delivery
+    # Record accepted email delivery first.
     record_delivery(
         user_id="user_webhook_test",
         channel="email",
@@ -744,21 +1068,48 @@ def test_resend_and_twilio_webhooks(client: TestClient):
         provider_message_id="resend_hook_123",
     )
 
-    # Webhook updates email to delivered
+    # Sign the exact raw bytes and required Svix headers.
+    resend_secret_bytes = b"soet-resend-test-webhook-secret"
+    resend_secret = "whsec_" + base64.b64encode(resend_secret_bytes).decode("ascii")
+    monkeypatch.setenv("RESEND_WEBHOOK_SECRET", resend_secret)
+    raw_body = json.dumps({
+        "type": "email.delivered",
+        "data": {"email_id": "resend_hook_123"},
+    }, separators=(",", ":")).encode("utf-8")
+    webhook_id = "msg_unit_test_resend_001"
+    timestamp = str(int(time.time()))
+    signed_payload = webhook_id.encode() + b"." + timestamp.encode() + b"." + raw_body
+    signature = base64.b64encode(
+        hmac.new(resend_secret_bytes, signed_payload, hashlib.sha256).digest()
+    ).decode("ascii")
+    resend_headers = {
+        "svix-id": webhook_id,
+        "svix-timestamp": timestamp,
+        "svix-signature": f"v1,{signature}",
+        "content-type": "application/json",
+    }
+
+    unsigned_resend = client.post(
+        "/api/notifications/deliveries/webhook/resend",
+        content=raw_body,
+        headers={"content-type": "application/json"},
+    )
+    assert unsigned_resend.status_code == 403
+
     resend_res = client.post(
         "/api/notifications/deliveries/webhook/resend",
-        json={
-            "type": "email.delivered",
-            "data": {"email_id": "resend_hook_123"},
-        },
+        content=raw_body,
+        headers=resend_headers,
     )
     assert resend_res.status_code == 200
     assert resend_res.json()["status"] == "success"
 
-    email_rec = supabase.table("notification_deliveries").select("*").eq("provider_message_id", "resend_hook_123").execute().data[0]
+    email_rec = supabase.table("notification_deliveries").select("*").eq(
+        "provider_message_id", "resend_hook_123"
+    ).execute().data[0]
     assert email_rec["status"] == "delivered"
 
-    # Record accepted SMS delivery
+    # Record accepted SMS delivery.
     record_delivery(
         user_id="user_webhook_test",
         channel="sms",
@@ -767,19 +1118,67 @@ def test_resend_and_twilio_webhooks(client: TestClient):
         provider_message_id="SM_webhook_twilio_456",
     )
 
-    # Webhook updates SMS to delivered
+    # Twilio callback signatures cover the canonical URL and POST form parameters.
+    twilio_auth_token = "soet-unit-test-twilio-auth-token"
+    callback_url = "https://soet-connect.vercel.app/api/notifications/deliveries/webhook/twilio"
+    monkeypatch.setenv("TWILIO_AUTH_TOKEN", twilio_auth_token)
+    monkeypatch.setenv("TWILIO_WEBHOOK_URL", callback_url)
+    callback_data = {
+        "MessageSid": "SM_webhook_twilio_456",
+        "MessageStatus": "delivered",
+    }
+    validator = RequestValidator(twilio_auth_token)
+    twilio_signature = validator.compute_signature(callback_url, callback_data)
+
+    unsigned_twilio = client.post(
+        "/api/notifications/deliveries/webhook/twilio",
+        data=callback_data,
+    )
+    assert unsigned_twilio.status_code == 403
+
     twilio_res = client.post(
         "/api/notifications/deliveries/webhook/twilio",
-        data={
-            "MessageSid": "SM_webhook_twilio_456",
-            "MessageStatus": "delivered",
-        },
+        data=callback_data,
+        headers={"X-Twilio-Signature": twilio_signature},
     )
     assert twilio_res.status_code == 200
     assert twilio_res.json()["status"] == "success"
 
-    sms_rec = supabase.table("notification_deliveries").select("*").eq("provider_message_id", "SM_webhook_twilio_456").execute().data[0]
+    sms_rec = supabase.table("notification_deliveries").select("*").eq(
+        "provider_message_id", "SM_webhook_twilio_456"
+    ).execute().data[0]
     assert sms_rec["status"] == "delivered"
+
+
+def test_resend_webhook_rejects_stale_or_tampered_payload(client: TestClient, monkeypatch):
+    """A valid signature for an altered raw body and a stale timestamp both fail."""
+    import base64
+    import hashlib
+    import hmac
+    import json
+    import time
+
+    secret_bytes = b"soet-resend-test-secret"
+    secret = "whsec_" + base64.b64encode(secret_bytes).decode("ascii")
+    monkeypatch.setenv("RESEND_WEBHOOK_SECRET", secret)
+    webhook_id = "msg_unit_test_resend_stale"
+    raw_body = json.dumps({"type": "email.delivered", "data": {"email_id": "x"}}).encode()
+    stale_timestamp = str(int(time.time()) - 600)
+    signed = webhook_id.encode() + b"." + stale_timestamp.encode() + b"." + raw_body
+    signature = base64.b64encode(
+        hmac.new(secret_bytes, signed, hashlib.sha256).digest()
+    ).decode("ascii")
+    response = client.post(
+        "/api/notifications/deliveries/webhook/resend",
+        content=raw_body,
+        headers={
+            "content-type": "application/json",
+            "svix-id": webhook_id,
+            "svix-timestamp": stale_timestamp,
+            "svix-signature": f"v1,{signature}",
+        },
+    )
+    assert response.status_code == 403
 
 
 def test_provider_failure_does_not_break_notifications_or_recovery(monkeypatch, verified_alumni_user: dict):
