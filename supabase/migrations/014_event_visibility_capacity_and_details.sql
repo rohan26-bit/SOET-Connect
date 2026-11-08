@@ -99,7 +99,7 @@ BEGIN
       FROM public.event_registrations AS er
      WHERE er.event_id = p_event_id
        AND er.user_id = p_user_id
-       AND er.status = 'registered'
+       AND er.status IN ('registered', 'attended')
   ) THEN
     RETURN QUERY SELECT 'duplicate'::TEXT, NULL::UUID, NULL::TIMESTAMPTZ;
     RETURN;
@@ -109,7 +109,7 @@ BEGIN
     INTO v_registered_count
     FROM public.event_registrations AS er
    WHERE er.event_id = p_event_id
-     AND er.status = 'registered';
+     AND er.status IN ('registered', 'attended');
 
   IF v_capacity IS NOT NULL AND v_registered_count >= v_capacity THEN
     RETURN QUERY SELECT 'full'::TEXT, NULL::UUID, NULL::TIMESTAMPTZ;
