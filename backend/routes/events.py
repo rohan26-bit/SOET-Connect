@@ -1,6 +1,6 @@
 import os
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date as date_cls
 
 try:
     from zoneinfo import ZoneInfo
@@ -9,7 +9,7 @@ except Exception:
     KOLKATA_TZ = timezone(timedelta(hours=5, minutes=30))
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from database import users_collection, supabase
 from security.dependencies import get_current_user
@@ -27,6 +27,74 @@ EVENTS_FILE = None
 REGISTRATIONS_FILE = None
 
 VALID_EVENT_STATUSES = {"pending", "approved", "rejected", "cancelled", "completed"}
+VALID_EVENT_VISIBILITIES = {"everyone", "students_only", "alumni_only", "admin_only"}
+
+
+def normalize_event_visibility(value: str | None) -> str:
+    """Normalize UI labels and API aliases to the persisted visibility keys."""
+    normalized = str(value or "everyone").strip().lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "all": "everyone",
+        "students": "students_only",
+        "alumni": "alumni_only",
+        "admin": "admin_only",
+    }
+    normalized = aliases.get(normalized, normalized)
+    if normalized not in VALID_EVENT_VISIBILITIES:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid event visibility. Choose Everyone, Students Only, Alumni Only, or Admin Only.",
+        )
+    return normalized
+
+
+def event_is_visible_to_role(event: dict, role: str | None) -> bool:
+    """Enforce audience visibility at the API boundary, not only in the UI."""
+    if role == "admin":
+        return True
+    visibility = normalize_event_visibility(event.get("visibility"))
+    if visibility == "everyone":
+        return role in {"student", "alumni"}
+    if visibility == "students_only":
+        return role == "student"
+    if visibility == "alumni_only":
+        return role == "alumni"
+    return False
+
+
+def validate_event_schedule(start_date: str | None, end_date: str | None, start_time: str | None, end_time: str | None) -> None:
+    """Reject impossible date/time ranges before they reach PostgreSQL."""
+    parsed_start = None
+    parsed_end = None
+    try:
+        if start_date:
+            parsed_start = date_cls.fromisoformat(str(start_date).split("T")[0])
+        if end_date:
+            parsed_end = date_cls.fromisoformat(str(end_date).split("T")[0])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Enter valid event start and end dates.") from exc
+
+    if parsed_start and parsed_end and parsed_end < parsed_start:
+        raise HTTPException(status_code=400, detail="Event end date cannot be before its start date.")
+
+    effective_end_date = parsed_end or parsed_start
+    if parsed_start and effective_end_date == parsed_start and start_time and end_time:
+        def parse_event_time(value: str):
+            for time_format in ("%H:%M", "%H:%M:%S", "%I:%M %p", "%I:%M%p"):
+                try:
+                    return datetime.strptime(str(value).strip(), time_format).time()
+                except ValueError:
+                    continue
+            raise ValueError("Invalid event time")
+
+        try:
+            start_value = parse_event_time(start_time)
+            end_value = parse_event_time(end_time)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Enter valid event start and end times.") from exc
+        if end_value <= start_value:
+            raise HTTPException(status_code=400, detail="Event end time must be later than its start time.")
+
 
 
 def parse_iso_datetime(dt_str: str | None) -> datetime | None:
@@ -55,8 +123,8 @@ def event_expiration_datetime(event: dict) -> datetime | None:
     if not date_str:
         return None
     try:
-        clean_date = date_str.split("T")[0].split(" ")[0]
-        event_date = datetime.strptime(clean_date, "%Y-%m-%d").date()
+        retention_date = str(event.get("end_date") or date_str).split("T")[0].split(" ")[0]
+        event_date = datetime.strptime(retention_date, "%Y-%m-%d").date()
         expiry_date = event_date + timedelta(days=1)
         return datetime.combine(expiry_date, datetime.min.time(), tzinfo=KOLKATA_TZ).astimezone(timezone.utc)
     except (TypeError, ValueError):
@@ -137,21 +205,25 @@ def is_event_registration_closed(event: dict) -> bool:
 class EventCreateRequest(BaseModel):
     title: str
     description: str
+    organizer: str = ""
     event_type: str = ""
     location: str = ""
     event_date: str = ""
     start_date: str = ""
-    end_date: str = ""
+    end_date: str | None = None
     start_time: str = ""
-    end_time: str = ""
+    end_time: str | None = None
     registration_deadline: str | None = None
     image_url: str = ""
-    tags: list[str] = []
+    visibility: str = "everyone"
+    capacity: int | None = None
+    tags: list[str] = Field(default_factory=list)
 
 
 class EventUpdateRequest(BaseModel):
     title: str | None = None
     description: str | None = None
+    organizer: str | None = None
     event_type: str | None = None
     location: str | None = None
     event_date: str | None = None
@@ -161,6 +233,8 @@ class EventUpdateRequest(BaseModel):
     end_time: str | None = None
     registration_deadline: str | None = None
     image_url: str | None = None
+    visibility: str | None = None
+    capacity: int | None = None
     tags: list[str] | None = None
     status: str | None = None
 
@@ -207,6 +281,12 @@ def load_events(status: str | None = None, created_by: str | None = None) -> lis
             e["start_date"] = date_val
             e["start_time"] = str(row.get("time", ""))
             e["registration_deadline"] = row.get("registration_deadline")
+            e["end_date"] = str(row.get("end_date") or "")
+            e["end_time"] = str(row.get("end_time") or "")
+            e["visibility"] = normalize_event_visibility(row.get("visibility"))
+            e["tags"] = row.get("tags") if isinstance(row.get("tags"), list) else []
+            e["capacity"] = row.get("capacity")
+            e["organizer"] = row.get("organizer")
             e["is_past"] = is_event_past(e)
             e["is_registration_closed"] = is_event_registration_closed(e)
             e.update(event_retention_metadata(e))
@@ -218,6 +298,8 @@ def load_events(status: str | None = None, created_by: str | None = None) -> lis
                     u = users_collection.find_one({"_id": cid}, include_profiles=False)
                     if u:
                         e["creator_name"] = u.get("name", "User")
+            if not e.get("organizer"):
+                e["organizer"] = e.get("creator_name") or "SOET Connect"
             events.append(e)
         return events
     except Exception as e:
@@ -238,6 +320,12 @@ def _find_event(event_id: str) -> dict | None:
         e["start_date"] = date_val
         e["start_time"] = str(row.get("time", ""))
         e["registration_deadline"] = row.get("registration_deadline")
+        e["end_date"] = str(row.get("end_date") or "")
+        e["end_time"] = str(row.get("end_time") or "")
+        e["visibility"] = normalize_event_visibility(row.get("visibility"))
+        e["tags"] = row.get("tags") if isinstance(row.get("tags"), list) else []
+        e["capacity"] = row.get("capacity")
+        e["organizer"] = row.get("organizer")
         e["is_past"] = is_event_past(e)
         e["is_registration_closed"] = is_event_registration_closed(e)
         e.update(event_retention_metadata(e))
@@ -245,6 +333,8 @@ def _find_event(event_id: str) -> dict | None:
             u = users_collection.find_one({"_id": str(e["created_by"])}, include_profiles=False)
             if u:
                 e["creator_name"] = u.get("name", "User")
+        if not e.get("organizer"):
+            e["organizer"] = e.get("creator_name") or "SOET Connect"
         return e
     except Exception as e:
         print(f"Error fetching event {event_id}:", e)
@@ -348,6 +438,8 @@ def get_events(
     user_registered = set()
 
     for r in registrations:
+        if r.get("status", "registered") not in {"registered", "attended"}:
+            continue
         eid = str(r.get("event_id"))
         reg_counts[eid] = reg_counts.get(eid, 0) + 1
         if str(r.get("user_id")) == user_id:
@@ -363,9 +455,10 @@ def get_events(
         # Expired events stay visible only in the admin console during retention.
         # Creators do not retain a second copy in the student/alumni dashboard.
         expired = is_event_expired(event)
-        if role == "admin" or (
-            not expired and (creator_id == user_id or status == "approved")
-        ):
+        is_owner = creator_id == user_id
+        is_published_for_user = status == "approved" and event_is_visible_to_role(event, role)
+        can_manage_unapproved = is_owner and status != "approved"
+        if role == "admin" or (not expired and (can_manage_unapproved or is_published_for_user)):
             ev_copy = dict(event)
             ev_copy.update(event_retention_metadata(event))
             if not ev_copy.get("event_date") and ev_copy.get("start_date"):
@@ -418,6 +511,13 @@ def create_event(
 
     initial_status = "approved" if role == "admin" else "pending"
     event_date = body.event_date or body.start_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    validate_event_schedule(event_date, body.end_date, body.start_time, body.end_time)
+    if body.capacity is not None and body.capacity <= 0:
+        raise HTTPException(status_code=400, detail="Event capacity must be greater than zero.")
+    visibility = normalize_event_visibility(body.visibility)
+    tags = list(dict.fromkeys(str(tag).strip() for tag in body.tags if str(tag).strip()))
+    if len(tags) > 30 or any(len(tag) > 50 for tag in tags):
+        raise HTTPException(status_code=400, detail="Use up to 30 event tags, with a maximum of 50 characters each.")
 
     event_id = str(uuid.uuid4())
     user_id = str(current_user.get("user_id"))
@@ -433,7 +533,12 @@ def create_event(
         "time": body.start_time or "00:00",
         "location": body.location or "TBD",
         "virtual_link": body.image_url or "",
-        "capacity": 100,
+        "organizer": body.organizer.strip() or user.get("name", "SOET Connect"),
+        "end_date": body.end_date or None,
+        "end_time": body.end_time or None,
+        "visibility": visibility,
+        "capacity": body.capacity,
+        "tags": tags,
         "status": initial_status,
         "created_at": now_iso,
         "updated_at": now_iso,
@@ -448,12 +553,14 @@ def create_event(
         "creator_name": user.get("name", "User"),
         "event_date": event_date,
         "start_date": event_date,
-        "end_date": body.end_date,
+        "end_date": body.end_date or "",
         "start_time": body.start_time,
-        "end_time": body.end_time,
+        "end_time": body.end_time or "",
         "registration_deadline": body.registration_deadline,
         "image_url": body.image_url,
-        "tags": body.tags,
+        "visibility": visibility,
+        "capacity": body.capacity,
+        "tags": tags,
     }
 
     if initial_status == "pending":
@@ -496,12 +603,15 @@ def get_event_details(
     role = current_user.get("role")
     user_id = str(current_user.get("user_id"))
 
+    is_owner = str(event.get("created_by")) == user_id
+    owner_can_view_unapproved = is_owner and event.get("status") != "approved"
+    published_event_is_visible = (
+        event.get("status") == "approved"
+        and event_is_visible_to_role(event, role)
+    )
     if role != "admin" and (
         is_event_expired(event)
-        or (
-            event.get("status") != "approved"
-            and str(event.get("created_by")) != user_id
-        )
+        or not (owner_can_view_unapproved or published_event_is_visible)
     ):
         raise HTTPException(
             status_code=404,
@@ -509,11 +619,12 @@ def get_event_details(
         )
 
     registrations = load_registrations(hydrate_users=False, event_id=event_id)
-    reg_count = len(registrations)
-    is_reg = any(
-        str(r.get("user_id")) == user_id
-        for r in registrations
-    )
+    active_registrations = [
+        r for r in registrations
+        if r.get("status", "registered") in {"registered", "attended"}
+    ]
+    reg_count = len(active_registrations)
+    is_reg = any(str(r.get("user_id")) == user_id for r in active_registrations)
 
     ev_copy = dict(event)
     if not ev_copy.get("event_date") and ev_copy.get("start_date"):
@@ -569,11 +680,26 @@ def update_event(
         )
 
     old_status = event.get("status")
-    update_data = body.model_dump(exclude_none=True)
+    update_data = body.model_dump(exclude_unset=True)
+    effective_start_date = update_data.get("event_date", update_data.get("start_date", event.get("date")))
+    effective_end_date = update_data.get("end_date", event.get("end_date"))
+    effective_start_time = update_data.get("start_time", event.get("time"))
+    effective_end_time = update_data.get("end_time", event.get("end_time"))
+    validate_event_schedule(effective_start_date, effective_end_date, effective_start_time, effective_end_time)
+    if "capacity" in update_data and update_data["capacity"] is not None and update_data["capacity"] <= 0:
+        raise HTTPException(status_code=400, detail="Event capacity must be greater than zero.")
+    if "visibility" in update_data:
+        update_data["visibility"] = normalize_event_visibility(update_data["visibility"])
+    if "tags" in update_data:
+        tags_value = update_data["tags"] or []
+        tags_value = list(dict.fromkeys(str(tag).strip() for tag in tags_value if str(tag).strip()))
+        if len(tags_value) > 30 or any(len(tag) > 50 for tag in tags_value):
+            raise HTTPException(status_code=400, detail="Use up to 30 event tags, with a maximum of 50 characters each.")
+        update_data["tags"] = tags_value
     now_iso = datetime.now(timezone.utc).isoformat()
 
     db_updates = {"updated_at": now_iso}
-    if "status" in update_data:
+    if update_data.get("status") is not None:
         db_updates["status"] = update_data["status"]
     if "title" in update_data:
         db_updates["title"] = update_data["title"]
@@ -591,11 +717,34 @@ def update_event(
         db_updates["time"] = update_data["start_time"]
     if "registration_deadline" in update_data:
         db_updates["registration_deadline"] = update_data["registration_deadline"]
+    if "organizer" in update_data:
+        db_updates["organizer"] = (update_data["organizer"] or "").strip() or None
+    if "end_date" in update_data:
+        db_updates["end_date"] = (update_data["end_date"] or None)
+    if "end_time" in update_data:
+        db_updates["end_time"] = (update_data["end_time"] or None)
+    if "visibility" in update_data:
+        db_updates["visibility"] = update_data["visibility"]
+    if "capacity" in update_data:
+        db_updates["capacity"] = update_data["capacity"]
+    if "tags" in update_data:
+        db_updates["tags"] = update_data["tags"]
+    if "image_url" in update_data:
+        db_updates["virtual_link"] = update_data["image_url"] or ""
 
     supabase.table("events").update(db_updates).eq("id", str(event_id)).execute()
 
     for k, v in update_data.items():
         event[k] = v
+    if "event_date" in update_data:
+        event["date"] = update_data["event_date"]
+    elif "start_date" in update_data:
+        event["date"] = update_data["start_date"]
+    if "start_time" in update_data:
+        event["time"] = update_data["start_time"]
+    event["event_date"] = str(event.get("date") or "")
+    event["start_date"] = event["event_date"]
+    event["start_time"] = str(event.get("time") or "")
     event["updated_at"] = now_iso
 
     new_status = update_data.get("status")
@@ -706,6 +855,9 @@ def register_for_event(
             detail="Event not found."
         )
 
+    if not event_is_visible_to_role(event, current_user.get("role")):
+        raise HTTPException(status_code=404, detail="Event not found.")
+
     if event.get("status") != "approved":
         raise HTTPException(
             status_code=400,
@@ -719,41 +871,68 @@ def register_for_event(
         )
 
     user_id = str(current_user.get("user_id"))
-    registrations = load_registrations()
-
-    for reg in registrations:
-        if (
-            str(reg.get("user_id")) == user_id
-            and str(reg.get("event_id")) == str(event_id)
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail="You have already registered for this event."
-            )
-
     user = get_user_from_token(current_user)
     if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="User account not found."
-        )
-
+        raise HTTPException(status_code=404, detail="User account not found.")
     if not user.get("is_active", True):
-        raise HTTPException(
-            status_code=403,
-            detail="This account has been deactivated."
-        )
+        raise HTTPException(status_code=403, detail="This account has been deactivated.")
 
-    reg_id = str(uuid.uuid4())
-    now_iso = datetime.now(timezone.utc).isoformat()
+    if os.getenv("DATABASE_MODE", "").lower() == "mock":
+        existing = load_registrations(hydrate_users=False, event_id=event_id, user_id=user_id)
+        if existing:
+            registration_result = {"outcome": "duplicate"}
+        else:
+            current_count = len([
+                item for item in load_registrations(hydrate_users=False, event_id=event_id)
+                if item.get("status", "registered") in {"registered", "attended"}
+            ])
+            if event.get("capacity") is not None and current_count >= int(event["capacity"]):
+                registration_result = {"outcome": "full"}
+            else:
+                reg_id = str(uuid.uuid4())
+                now_iso = datetime.now(timezone.utc).isoformat()
+                supabase.table("event_registrations").insert({
+                    "id": reg_id,
+                    "event_id": str(event_id),
+                    "user_id": user_id,
+                    "status": "registered",
+                    "registered_at": now_iso,
+                }).execute()
+                registration_result = {
+                    "outcome": "registered",
+                    "registration_id": reg_id,
+                    "registered_at": now_iso,
+                }
+    else:
+        try:
+            rpc_result = supabase.rpc(
+                "register_event_with_capacity",
+                {"p_event_id": str(event_id), "p_user_id": user_id},
+            ).execute()
+            rows = rpc_result.data or []
+            registration_result = rows[0] if rows else {"outcome": "not_found"}
+        except Exception as exc:
+            message = str(exc).lower()
+            if "23505" in message or "duplicate key" in message or "unique constraint" in message:
+                raise HTTPException(status_code=400, detail="You have already registered for this event.") from exc
+            print(f"Event registration transaction failed for {event_id}: {exc}")
+            raise HTTPException(
+                status_code=503,
+                detail="Unable to complete registration right now. Please try again.",
+            ) from exc
 
-    supabase.table("event_registrations").insert({
-        "id": reg_id,
-        "event_id": str(event_id),
-        "user_id": user_id,
-        "status": "registered",
-        "registered_at": now_iso,
-    }).execute()
+    outcome = registration_result.get("outcome")
+    if outcome == "not_found":
+        raise HTTPException(status_code=404, detail="Event not found.")
+    if outcome == "duplicate":
+        raise HTTPException(status_code=400, detail="You have already registered for this event.")
+    if outcome == "full":
+        raise HTTPException(status_code=409, detail="This event has reached its registration capacity.")
+    if outcome != "registered":
+        raise HTTPException(status_code=503, detail="Unable to complete registration right now. Please try again.")
+
+    now_iso = registration_result.get("registered_at") or datetime.now(timezone.utc).isoformat()
+    reg_id = str(registration_result.get("registration_id") or uuid.uuid4())
 
     registration = {
         "id": reg_id,

@@ -189,7 +189,9 @@ export default function EventDetailsModal({
               <Users className="h-4 w-4 shrink-0 text-emerald-600" />
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Registrations</p>
-                <p className="break-words text-sm font-semibold text-slate-800">{event.registration_count ?? 0} registered</p>
+                <p className="break-words text-sm font-semibold text-slate-800">
+                  {event.registration_count ?? 0}{event.capacity != null ? ` / ${event.capacity}` : ''} registered
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3">
@@ -233,7 +235,7 @@ export default function EventDetailsModal({
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-4 text-xs text-slate-500">
             <span className="inline-flex items-center gap-1.5">
               <UserRound className="h-3.5 w-3.5" />
-              Organized by {event.creator_name || 'SOET Connect'}
+              Organized by {event.organizer || event.creator_name || 'SOET Connect'}
             </span>
             <span>{postedDate ? `Posted ${postedDate.toLocaleDateString()}` : ''}</span>
           </div>
