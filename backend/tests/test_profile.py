@@ -376,7 +376,7 @@ def test_profile_valid_phone_succeeds():
 
     resp = test_client.patch("/profile/me", json={"phone": "(123) 456-7890"}, headers=headers["student"])
     assert resp.status_code == 200
-    assert resp.json()["student_profile"]["phone"] == "(123) 456-7890"
+    assert resp.json()["student_profile"]["phone"] == "+911234567890"
 
 
 def test_profile_invalid_graduation_year_fails():
