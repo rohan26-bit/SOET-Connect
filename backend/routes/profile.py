@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 from typing import Optional, List
 
@@ -173,7 +174,7 @@ def update_my_profile(
 
         if fields["phone"] is not None:
             normalized_phone = normalize_phone_number(fields["phone"])
-            if not normalized_phone or not normalized_phone.startswith("+"):
+            if not re.fullmatch(r"\+[1-9][0-9]{7,14}", normalized_phone):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Enter a valid phone number with country code.",
