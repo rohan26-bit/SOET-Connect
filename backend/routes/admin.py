@@ -14,6 +14,7 @@ from fastapi.responses import Response
 from database import users_collection, supabase
 from security.dependencies import get_current_user
 from services.notifications import NOTIFICATION_TYPES, create_notification_once
+from routes.applications import resolve_resume_url
 
 
 router = APIRouter(
@@ -1526,7 +1527,7 @@ def get_admin_job_applicants(
             "course": course,
             "degree": degree,
             "status": app_status,
-            "resume_url": a.get("resume_url") or "",
+            "resume_url": resolve_resume_url(a.get("resume_url") or ""),
             "has_resume": bool(a.get("resume_url")),
             "cover_letter": a.get("cover_letter") or "",
             "applied_at": app_date,
