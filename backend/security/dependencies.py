@@ -46,6 +46,14 @@ def get_current_user(
             detail="This account has been deactivated."
         )
 
+    token_session_version = int(payload.get("session_version", 0))
+    user_session_version = int(user.get("session_version") or 0)
+    if token_session_version != user_session_version:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Your session has been revoked. Please sign in again."
+        )
+
     return {
         "user_id": str(user["_id"]),
         "role": user.get("role", payload.get("role")),
