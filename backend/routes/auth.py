@@ -336,7 +336,7 @@ class VerifyResetCodeRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     reset_token: str
-    new_password: str
+    new_password: str = Field(..., min_length=8, max_length=128)
     confirm_password: Optional[str] = None
 
 
@@ -377,8 +377,8 @@ def reset_password_endpoint(payload: ResetPasswordRequest):
     if payload.confirm_password is not None and payload.new_password != payload.confirm_password:
         raise HTTPException(status_code=400, detail="New password and confirmation do not match.")
 
-    if len(payload.new_password.strip()) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters long.")
+    if len(payload.new_password.strip()) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long.")
 
     success, message = reset_password_with_token(payload.reset_token, payload.new_password)
     if not success:

@@ -130,7 +130,7 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
             return False, "No phone number registered for this account.", None
         if not is_phone_verified:
             return False, "SMS password recovery is only available for verified phone numbers. Please use email recovery.", None
-        if not delivery.is_sms_configured():
+        if not (delivery.is_twilio_verify_configured() or delivery.is_sms_configured()):
             return False, "SMS service is currently unavailable. Please use email recovery.", None
         recipient = phone
 
@@ -155,6 +155,11 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
         "user_id": user_id,
         "channel": channel,
         "recipient": recipient,
+        "verification_provider": (
+            "twilio_verify"
+            if channel == "sms" and delivery.is_twilio_verify_configured()
+            else "internal"
+        ),
         "code_hash": code_hash,
         "token_hash": None,
         "attempts": 0,
@@ -263,7 +268,12 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
         print(f"Password reset delivery failed for challenge {challenge_id}: {delivery_error_detail}")
 
     # In automated test suite mode strictly, provide code to test runner; NEVER in normal or production server runs
-    debug_code = code if os.getenv("PYTEST_CURRENT_TEST") else None
+    debug_code = (
+        code
+        if os.getenv("PYTEST_CURRENT_TEST")
+        and challenge_row["verification_provider"] == "internal"
+        else None
+    )
 
     # Anti-enumeration: always return the same generic message regardless of
     # whether the account exists or delivery succeeded.
@@ -281,13 +291,50 @@ def _invalidate_challenge(challenge_id: str, now: datetime) -> None:
         pass
 
 
+def _record_password_reset_failure(challenge: dict) -> tuple[int, bool]:
+    """Increment failed password-reset attempts atomically in production."""
+    challenge_id = str(challenge.get("id"))
+    max_attempts = int(challenge.get("max_attempts") or MAX_ATTEMPTS)
+
+    if os.getenv("DATABASE_MODE", "").strip().lower() == "mock":
+        attempts = int(challenge.get("attempts") or 0) + 1
+        locked = attempts >= max_attempts
+        update = {"attempts": attempts}
+        if locked:
+            update["is_used"] = True
+            update["used_at"] = datetime.now(timezone.utc).isoformat()
+        result = (
+            supabase.table("password_reset_challenges")
+            .update(update)
+            .eq("id", challenge_id)
+            .eq("is_used", False)
+            .execute()
+        )
+        if not result.data:
+            return max_attempts, True
+        return attempts, locked
+
+    result = supabase.rpc(
+        "record_password_reset_failure",
+        {
+            "p_challenge_id": challenge_id,
+            "p_max_attempts": max_attempts,
+        },
+    ).execute()
+    rows = result.data or []
+    if not rows:
+        return max_attempts, True
+    row = rows[0]
+    return int(row.get("attempts") or max_attempts), bool(row.get("is_locked"))
+
+
 def verify_password_reset_code(identifier: str, code: str) -> Tuple[bool, str, Optional[str]]:
     """
-    Verify the 6-digit code for an account.
-    Returns: (is_valid: bool, error_or_success_message: str, reset_token: Optional[str])
+    Verify a locally generated code or Twilio Verify code, then issue a reset token.
+    Failed attempts are counted atomically and a challenge is locked after five guesses.
     """
     ident = identifier.strip()
-    code = code.strip()
+    supplied_code = code.strip()
 
     user = find_user_by_contact(ident)
     if not user:
@@ -296,116 +343,150 @@ def verify_password_reset_code(identifier: str, code: str) -> Tuple[bool, str, O
     user_id = str(user.get("_db_id") or user.get("id"))
     now = datetime.now(timezone.utc)
 
-    # Find latest active challenge
     try:
-        res = supabase.table("password_reset_challenges") \
-            .select("*") \
-            .eq("user_id", user_id) \
-            .eq("is_used", False) \
-            .order("created_at", desc=True) \
-            .limit(1) \
+        result = (
+            supabase.table("password_reset_challenges")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("is_used", False)
+            .order("created_at", desc=True)
+            .limit(1)
             .execute()
-        if not res.data:
+        )
+        if not result.data:
             return False, "Invalid or expired verification code.", None
-        challenge = res.data[0]
-    except Exception as e:
-        return False, "Error verifying code.", None
+        challenge = result.data[0]
+    except Exception as exc:
+        print(f"Password reset challenge lookup failed for user {user_id}: {exc}")
+        return False, "Unable to verify the code right now. Please try again.", None
 
-    # Check expiration
-    expires_str = challenge.get("expires_at", "")
-    try:
-        exp_dt = datetime.fromisoformat(expires_str.replace("Z", "+00:00"))
-        if exp_dt <= now:
-            return False, "Verification code has expired. Please request a new one.", None
-    except Exception:
+    expires_at = _parse_phone_code_timestamp(challenge.get("expires_at"))
+    if not expires_at:
+        _invalidate_challenge(str(challenge["id"]), now)
         return False, "Invalid challenge timestamp.", None
+    if expires_at <= now:
+        _invalidate_challenge(str(challenge["id"]), now)
+        return False, "Verification code has expired. Please request a new one.", None
 
-    # Check attempt limit
-    attempts = challenge.get("attempts", 0)
-    max_attempts = challenge.get("max_attempts", MAX_ATTEMPTS)
-    if attempts >= max_attempts:
-        # Invalidate challenge
-        supabase.table("password_reset_challenges").update({"is_used": True}).eq("id", challenge["id"]).execute()
+    max_attempts = int(challenge.get("max_attempts") or MAX_ATTEMPTS)
+    if int(challenge.get("attempts") or 0) >= max_attempts:
+        _invalidate_challenge(str(challenge["id"]), now)
         return False, "Maximum verification attempts exceeded. Please request a new code.", None
 
-    # Verify code hash
-    expected_hash = challenge.get("code_hash", "")
-    provided_hash = _hash_value(code)
+    verification_provider = str(challenge.get("verification_provider") or "internal")
+    if verification_provider == "twilio_verify":
+        is_valid, provider_message = delivery.check_twilio_verify_otp(
+            str(challenge.get("recipient") or ""),
+            supplied_code,
+        )
+        if not is_valid:
+            provider_message_lower = str(provider_message or "").lower()
+            # Provider configuration/network faults are not a user's bad guess.
+            if "connection error" in provider_message_lower or "not configured" in provider_message_lower:
+                return False, "SMS verification is temporarily unavailable. Please try again.", None
+    elif verification_provider == "internal":
+        expected_hash = str(challenge.get("code_hash") or "")
+        is_valid = _constant_time_compare(expected_hash, _hash_value(supplied_code))
+    else:
+        _invalidate_challenge(str(challenge["id"]), now)
+        return False, "Invalid verification challenge.", None
 
-    if not _constant_time_compare(expected_hash, provided_hash):
-        # Increment attempt counter
-        supabase.table("password_reset_challenges").update({
-            "attempts": attempts + 1
-        }).eq("id", challenge["id"]).execute()
-        remaining = max_attempts - (attempts + 1)
+    if not is_valid:
+        try:
+            attempts, locked = _record_password_reset_failure(challenge)
+        except Exception as exc:
+            print(f"Password reset attempt counter failed for challenge {challenge.get('id')}: {exc}")
+            return False, "Unable to verify the code right now. Please try again.", None
+
+        if locked:
+            return False, "Maximum verification attempts exceeded. Please request a new code.", None
+        remaining = max(0, max_attempts - attempts)
         return False, f"Incorrect verification code. {remaining} attempt(s) remaining.", None
 
-    # Code is valid! Generate single-use reset token
     reset_token = secrets.token_urlsafe(32)
     token_hash = _hash_value(reset_token)
-
-    supabase.table("password_reset_challenges").update({
-        "token_hash": token_hash,
-    }).eq("id", challenge["id"]).execute()
+    try:
+        supabase.table("password_reset_challenges").update({
+            "token_hash": token_hash,
+        }).eq("id", str(challenge["id"])).eq("is_used", False).execute()
+    except Exception as exc:
+        print(f"Unable to issue password reset token for challenge {challenge.get('id')}: {exc}")
+        return False, "Unable to verify the code right now. Please try again.", None
 
     return True, "Verification code confirmed.", reset_token
 
 
 def reset_password_with_token(reset_token: str, new_password: str) -> Tuple[bool, str]:
     """
-    Complete password reset with a verified reset token.
-    Updates password hash, preserves all verification statuses, invalidates token.
+    Complete password reset with a single-use token.
+    Password replacement, challenge consumption and JWT session revocation are atomic in production.
     """
-    if len(new_password) < 6:
-        return False, "Password must be at least 6 characters long."
+    if len(new_password.strip()) < 8:
+        return False, "Password must be at least 8 characters long."
 
     token_hash = _hash_value(reset_token.strip())
     now = datetime.now(timezone.utc)
 
-    # Find challenge matching token
     try:
-        res = supabase.table("password_reset_challenges") \
-            .select("*") \
-            .eq("token_hash", token_hash) \
-            .eq("is_used", False) \
-            .limit(1) \
+        result = (
+            supabase.table("password_reset_challenges")
+            .select("*")
+            .eq("token_hash", token_hash)
+            .eq("is_used", False)
+            .limit(1)
             .execute()
-        if not res.data:
+        )
+        if not result.data:
             return False, "Invalid or expired password reset token."
-        challenge = res.data[0]
-    except Exception:
-        return False, "Database error validating reset token."
+        challenge = result.data[0]
+    except Exception as exc:
+        print(f"Password reset token lookup failed: {exc}")
+        return False, "Unable to validate the reset token right now. Please try again."
 
-    # Check expiration
-    expires_str = challenge.get("expires_at", "")
-    try:
-        exp_dt = datetime.fromisoformat(expires_str.replace("Z", "+00:00"))
-        if exp_dt <= now:
-            return False, "Reset token has expired. Please restart the recovery process."
-    except Exception:
-        return False, "Invalid token timestamp."
+    expires_at = _parse_phone_code_timestamp(challenge.get("expires_at"))
+    if not expires_at or expires_at <= now:
+        return False, "Reset token has expired. Please restart the recovery process."
 
     user_id = str(challenge["user_id"])
+    hashed_password = password_hasher.hash(new_password)
 
-    # Hash new password with Argon2
-    hashed_pwd = password_hasher.hash(new_password)
-
-    # Update the password and increment the token version atomically.
-    # Existing JWTs become unusable as soon as this transaction commits.
     try:
-        update_password_and_revoke_sessions(user_id, hashed_pwd)
+        if os.getenv("DATABASE_MODE", "").strip().lower() == "mock":
+            # The mock store has no SQL transactions; preserve the same single-use
+            # behavior for tests while production uses the transaction below.
+            current = (
+                supabase.table("password_reset_challenges")
+                .select("*")
+                .eq("id", str(challenge["id"]))
+                .eq("token_hash", token_hash)
+                .eq("is_used", False)
+                .limit(1)
+                .execute()
+                .data
+            )
+            if not current:
+                return False, "Invalid or expired password reset token."
+            update_password_and_revoke_sessions(user_id, hashed_password)
+            supabase.table("password_reset_challenges").update({
+                "is_used": True,
+                "used_at": now.isoformat(),
+            }).eq("user_id", user_id).eq("is_used", False).execute()
+        else:
+            rpc_result = supabase.rpc(
+                "reset_password_and_revoke_sessions",
+                {
+                    "p_challenge_id": str(challenge["id"]),
+                    "p_token_hash": token_hash,
+                    "p_password_hash": hashed_password,
+                    "p_now": now.isoformat(),
+                },
+            ).execute()
+            rows = rpc_result.data or []
+            if not rows or rows[0] is None:
+                return False, "Invalid or expired password reset token."
     except Exception as exc:
-        print(f"Password reset update failed for user {user_id}: {exc}")
+        print(f"Atomic password reset failed for user {user_id}: {exc}")
         return False, "Unable to update your password right now. Please try again."
-
-    # Invalidate all challenges for this user
-    try:
-        supabase.table("password_reset_challenges").update({
-            "is_used": True,
-            "used_at": now.isoformat(),
-        }).eq("user_id", user_id).execute()
-    except Exception:
-        pass
 
     return True, "Password reset successfully. You can now log in with your new password."
 
