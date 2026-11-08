@@ -53,27 +53,54 @@ def generate_verification_code() -> str:
 
 
 def find_user_by_contact(identifier: str) -> Optional[dict]:
-    """Find a user by email or phone across users and student profiles."""
-    ident = identifier.strip().lower()
+    """Find a user by email or normalized phone across users and student profiles."""
+    raw_identifier = str(identifier or "").strip()
+    ident = raw_identifier.lower()
 
-    # Try email lookup
+    # Try email lookup first to preserve exact email matching and anti-enumeration behavior.
     user = users_collection.find_one({"email": ident}, include_profiles=True)
     if user:
         return user
 
-    # Try phone lookup in users table
+    digits = re.sub(r"\\D", "", raw_identifier)
+    if not 7 <= len(digits) <= 15:
+        return None
+
+    normalized_phone = delivery.normalize_phone_number(raw_identifier)
+    if not normalized_phone:
+        return None
+
+    # Phone edits and OTP verification store E.164 values. Normalize formatted user
+    # input before matching so a spaced or hyphenated number still finds its owner.
     try:
-        res = supabase.table("users").select("*").eq("phone", ident).limit(1).execute()
+        res = (
+            supabase.table("users")
+            .select("id")
+            .eq("phone", normalized_phone)
+            .limit(1)
+            .execute()
+        )
         if res.data:
-            return users_collection.find_one({"_id": str(res.data[0]["id"])}, include_profiles=True)
+            return users_collection.find_one(
+                {"_id": str(res.data[0]["id"])},
+                include_profiles=True,
+            )
     except Exception:
         pass
 
-    # Try phone lookup in student_profiles
     try:
-        sp_res = supabase.table("student_profiles").select("user_id").eq("phone", ident).limit(1).execute()
-        if sp_res.data:
-            return users_collection.find_one({"_id": str(sp_res.data[0]["user_id"])}, include_profiles=True)
+        profile_res = (
+            supabase.table("student_profiles")
+            .select("user_id")
+            .eq("phone", normalized_phone)
+            .limit(1)
+            .execute()
+        )
+        if profile_res.data:
+            return users_collection.find_one(
+                {"_id": str(profile_res.data[0]["user_id"])},
+                include_profiles=True,
+            )
     except Exception:
         pass
 
