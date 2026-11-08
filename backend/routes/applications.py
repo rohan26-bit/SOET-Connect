@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import io
+import os
 import uuid
 import zipfile
 
@@ -95,7 +96,7 @@ def resolve_resume_url(resume_value: str | None) -> str:
         signed_url = str(signed or "")
         # The storage adapter may return a gallery fallback path when signing fails.
         # Never expose that non-working fallback as if it were an application resume.
-        if signed_url.startswith("/api/gallery/"):
+        if signed_url.startswith("/api/gallery/") and os.getenv("DATABASE_MODE", "supabase").lower() != "mock":
             return ""
         return signed_url
     except Exception as exc:
