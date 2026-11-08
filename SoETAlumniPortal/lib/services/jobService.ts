@@ -361,18 +361,26 @@ export const jobService = {
     cover_letter?: string;
   }) {
 
+    const token = localStorage.getItem('soet_access_token');
+    if (!token) {
+      throw new Error('Please log in again.');
+    }
+
+    const formData = new FormData();
+    formData.append('job_id', applicationData.job_id);
+    formData.append('cover_letter', applicationData.cover_letter || '');
+    if (applicationData.resume_file) {
+      formData.append('resume_file', applicationData.resume_file);
+    }
+
     const response = await fetch(
       `${API_URL}/applications`,
       {
         method: 'POST',
-        headers: getAuthHeaders(),
-
-        body: JSON.stringify({
-          job_id: applicationData.job_id,
-          cover_letter:
-            applicationData.cover_letter || '',
-          resume_url: '',
-        }),
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
       }
     );
 

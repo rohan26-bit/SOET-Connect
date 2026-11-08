@@ -504,13 +504,13 @@ export default function JobsPage() {
               <div className="text-center py-6">
                 <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-2" />
                 <h4 className="font-bold text-slate-900 text-sm">Application Sent!</h4>
-                <p className="text-xs text-slate-500">Your profile and resume were shared with the recruiter.</p>
+                <p className="text-xs text-slate-500">Your application and any selected resume were shared with the job poster.</p>
               </div>
             ) : (
               <form onSubmit={handleApply} className="space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Upload Resume / CV (PDF)
+                    Upload Resume / CV (PDF, DOC, or DOCX)
                   </label>
                   <input
                     type="file"
@@ -518,6 +518,9 @@ export default function JobsPage() {
                     onChange={(e) => setResumeFile(e.target.files?.[0] || null)}
                     className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                   />
+                  <p className="mt-1.5 text-[11px] text-slate-500">
+                    PDF, DOC, or DOCX files up to 5 MB. Your resume is stored privately and shared only with the job poster and administrators.
+                  </p>
                 </div>
 
                 <div>
