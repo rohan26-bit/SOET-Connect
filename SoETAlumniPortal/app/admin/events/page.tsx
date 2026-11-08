@@ -392,7 +392,7 @@ export default function AdminEventsPage() {
                     <span className="ml-2 text-slate-400">• {event.visibility?.replace('_only', ' only').replace(/^./, (value) => value.toUpperCase()) || 'Everyone'}</span>
                   </span>
                   <span className="flex items-center gap-1">
-                    <Users className="w-3 h-3" /> {event.registration_count || 0} registered
+                    <Users className="w-3 h-3" /> {event.registration_count || 0}{event.capacity != null ? ` / ${event.capacity}` : ''} registered
                   </span>
                 </div>
 
