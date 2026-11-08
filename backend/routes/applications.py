@@ -4,6 +4,7 @@ import uuid
 import zipfile
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from typing import Any
 from pydantic import BaseModel
 
 from database import users_collection, supabase
@@ -223,112 +224,123 @@ def get_user_from_token(current_user: dict) -> dict | None:
 
 @router.post("/applications")
 @router.post("/applications/apply")
-def apply_for_job(
-    application: ApplicationCreateRequest,
+async def apply_for_job(
+    request: Request,
     current_user: dict = Depends(get_current_user)
 ):
+    # Accept multipart uploads from the current frontend and JSON from legacy clients.
+    resume_file = None
+    content_type = str(request.headers.get("content-type") or "").lower()
+    try:
+        if "multipart/form-data" in content_type:
+            form = await request.form()
+            application = ApplicationCreateRequest.model_validate({
+                "job_id": str(form.get("job_id") or ""),
+                "cover_letter": str(form.get("cover_letter") or ""),
+                "resume_url": str(form.get("resume_url") or ""),
+            })
+            candidate_file = form.get("resume_file")
+            if candidate_file is not None and getattr(candidate_file, "filename", None):
+                resume_file = candidate_file
+        else:
+            payload = await request.json()
+            application = ApplicationCreateRequest.model_validate(payload)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid application request.")
+
     if current_user.get("role") not in ALLOWED_APPLICATION_ROLES:
-        raise HTTPException(
-            status_code=403,
-            detail="Only students, alumni, and administrators can apply for jobs."
-        )
+        raise HTTPException(status_code=403, detail="Only students, alumni, and administrators can apply for jobs.")
 
     target_job = _find_job(application.job_id)
     if not target_job:
-        raise HTTPException(
-            status_code=404,
-            detail="Job not found."
-        )
-
+        raise HTTPException(status_code=404, detail="Job not found.")
     if target_job.get("status") != "approved":
-        raise HTTPException(
-            status_code=400,
-            detail="Applications can only be submitted for approved jobs."
-        )
-
+        raise HTTPException(status_code=400, detail="Applications can only be submitted for approved jobs.")
     if is_job_expired(target_job):
-        raise HTTPException(
-            status_code=400,
-            detail="The application deadline for this job has passed."
-        )
+        raise HTTPException(status_code=400, detail="The application deadline for this job has passed.")
 
     applicant_id = str(current_user.get("user_id"))
     applications = load_applications()
-
     for existing in applications:
         existing_applicant = str(existing.get("applicant_id") or existing.get("student_id"))
-        if (
-            existing_applicant == applicant_id
-            and str(existing.get("job_id")) == str(application.job_id)
-        ):
-            raise HTTPException(
-                status_code=409,
-                detail="You have already applied for this position."
-            )
+        if existing_applicant == applicant_id and str(existing.get("job_id")) == str(application.job_id):
+            raise HTTPException(status_code=409, detail="You have already applied for this position.")
 
     user = get_user_from_token(current_user)
     if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="User account not found."
-        )
-
+        raise HTTPException(status_code=404, detail="User account not found.")
     if not user.get("is_active", True):
-        raise HTTPException(
-            status_code=403,
-            detail="This account has been deactivated."
-        )
+        raise HTTPException(status_code=403, detail="This account has been deactivated.")
 
     applicant_name = user.get("name") or "Applicant"
-    student_name = applicant_name
     app_id = str(uuid.uuid4())
     now_iso = datetime.now(timezone.utc).isoformat()
+    stored_resume = ""
 
-    db_status = "submitted"
-    supabase.table("job_applications").insert({
-        "id": app_id,
-        "job_id": str(application.job_id),
-        "applicant_id": applicant_id,
-        "status": db_status,
-        "resume_url": application.resume_url or "",
-        "cover_letter": application.cover_letter or "",
-        "applied_at": now_iso,
-        "updated_at": now_iso,
-    }).execute()
+    try:
+        if resume_file is not None:
+            stored_resume = await _store_application_resume(resume_file, applicant_id)
+        else:
+            stored_resume = str(application.resume_url or "").strip()
+            if stored_resume.startswith(RESUME_PATH_PREFIX) and not stored_resume.startswith(
+                f"{RESUME_PATH_PREFIX}{applicant_id}/"
+            ):
+                raise HTTPException(status_code=403, detail="You cannot attach another user's private resume.")
+
+        supabase.table("job_applications").insert({
+            "id": app_id,
+            "job_id": str(application.job_id),
+            "applicant_id": applicant_id,
+            "status": "submitted",
+            "resume_url": stored_resume,
+            "cover_letter": application.cover_letter or "",
+            "applied_at": now_iso,
+            "updated_at": now_iso,
+        }).execute()
+    except HTTPException:
+        _delete_stored_resume(stored_resume)
+        raise
+    except Exception as exc:
+        _delete_stored_resume(stored_resume)
+        error_text = str(exc).lower()
+        if "unique_job_application" in error_text or "duplicate key" in error_text or "23505" in error_text:
+            raise HTTPException(status_code=409, detail="You have already applied for this position.")
+        print(f"Could not save job application: {exc}")
+        raise HTTPException(status_code=503, detail="Your application could not be saved. Please try again.")
 
     app_document = {
         "id": app_id,
         "job_id": str(application.job_id),
         "student_id": applicant_id,
-        "student_name": student_name,
+        "student_name": applicant_name,
         "applicant_id": applicant_id,
         "applicant_name": applicant_name,
-        "resume_url": application.resume_url or "",
+        "resume_url": resolve_resume_url(stored_resume),
         "cover_letter": application.cover_letter or "",
         "status": "applied",
         "created_at": now_iso,
         "updated_at": now_iso,
     }
 
-    poster_id = str(target_job.get("posted_by"))
+    poster_id = str(target_job.get("posted_by") or "")
     job_title = target_job.get("title", "")
-    try:
-        create_notification_once(
-            user_id=poster_id,
-            title="New job application",
-            message=f'{applicant_name} applied for your job "{job_title}".',
-            notification_type=NOTIFICATION_TYPES["job_application"],
-            entity_type="application",
-            entity_id=app_id,
-            dedupe_key=f"job_application:{app_id}",
-        )
-    except Exception:
-        pass
+    if poster_id:
+        try:
+            create_notification_once(
+                user_id=poster_id,
+                title="New job application",
+                message=f'{applicant_name} applied for your job "{job_title}".',
+                notification_type=NOTIFICATION_TYPES["job_application"],
+                entity_type="application",
+                entity_id=app_id,
+                dedupe_key=f"job_application:{app_id}",
+            )
+        except Exception:
+            pass
 
-    return {
-        "message": "Application submitted successfully.",
-        "application": app_document
-    }
+    return {"message": "Application submitted successfully.", "application": app_document}
 
 
 @router.get("/applications/mine")
@@ -359,7 +371,7 @@ def get_my_applications_endpoint(
                 "job_id": app.get("job_id"),
                 "student_id": app_user_id,
                 "applicant_id": app_user_id,
-                "resume_url": app.get("resume_url", ""),
+                "resume_url": resolve_resume_url(app.get("resume_url", "")),
                 "cover_letter": app.get("cover_letter", ""),
                 "status": app.get("status"),
                 "created_at": app.get("created_at"),
