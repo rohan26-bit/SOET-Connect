@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from urllib.parse import urlparse
 from pydantic import BaseModel, Field, field_validator
 
-from database import users_collection
+from database import supabase, users_collection
 from schemas.profile import ProfileUpdateRequest
 from security.dependencies import get_current_user
 from services.delivery import normalize_phone_number
@@ -217,6 +217,32 @@ def update_my_profile(
 
         if any(value is not None for value in fields.values()):
             update_data["alumni_profile"] = current_sub
+
+        if profile.phone is not None:
+            normalized_phone = normalize_phone_number(profile.phone)
+            if not re.fullmatch(r"\+[1-9][0-9]{7,14}", normalized_phone):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Enter a valid phone number with country code.",
+                )
+            previous_phone = normalize_phone_number(existing_user.get("phone") or "")
+            update_data["phone"] = normalized_phone
+            if normalized_phone != previous_phone:
+                update_data["is_phone_verified"] = False
+
+    # A phone edit invalidates every outstanding OTP for the previous contact.
+    if "phone" in update_data and update_data.get("is_phone_verified") is False:
+        database_user_id = str(existing_user.get("_db_id") or existing_user.get("_id"))
+        try:
+            supabase.table("phone_verification_codes").update({
+                "is_used": True,
+            }).eq("user_id", database_user_id).eq("is_used", False).execute()
+        except Exception as exc:
+            print(f"Unable to invalidate stale phone verification challenges for user {database_user_id}: {exc}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Unable to update your phone number right now. Please try again.",
+            ) from exc
 
     if not update_data:
         raise HTTPException(
