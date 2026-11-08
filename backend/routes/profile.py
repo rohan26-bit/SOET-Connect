@@ -232,6 +232,19 @@ def update_my_profile(
                 update_data["is_phone_verified"] = False
                 update_data["phone_version"] = int(existing_user.get("phone_version") or 0) + 1
 
+    if not update_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No profile changes were provided."
+        )
+
+    update_data["updated_at"] = datetime.now(timezone.utc)
+
+    users_collection.update_one(
+        {"_id": existing_user["_id"]},
+        {"$set": update_data}
+    )
+
     # A phone edit invalidates every outstanding OTP for the previous contact.
     if "phone" in update_data and update_data.get("is_phone_verified") is False:
         database_user_id = str(existing_user.get("_db_id") or existing_user.get("_id"))
@@ -245,19 +258,6 @@ def update_my_profile(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Unable to update your phone number right now. Please try again.",
             ) from exc
-
-    if not update_data:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No profile changes were provided."
-        )
-
-    update_data["updated_at"] = datetime.now(timezone.utc)
-
-    users_collection.update_one(
-        {"_id": existing_user["_id"]},
-        {"$set": update_data}
-    )
 
     profile_dict = _build_profile_response(get_user_by_id(current_user["user_id"]))
     return {
