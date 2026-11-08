@@ -591,6 +591,9 @@ def send_phone_verification_code(user_id: str, phone: str) -> Tuple[bool, str, O
     user = users_collection.find_one({"_id": user_id}, include_profiles=False)
     if not user:
         return False, "User account not found.", None
+    # Always store the database UUID, not an optional legacy display identifier,
+    # in phone_verification_codes.user_id.
+    user_id = str(user.get("_db_id") or user.get("_id"))
     if not user.get("is_active", True):
         return False, "This account has been deactivated.", None
 
@@ -757,6 +760,10 @@ def _consume_phone_verification_code(record: dict, user_id: str, now: datetime) 
 def confirm_phone_verification(user_id: str, code: str) -> Tuple[bool, str]:
     """Verify the latest phone code with expiry and a five-attempt lockout."""
     user_id = str(user_id)
+    user = users_collection.find_one({"_id": user_id}, include_profiles=False)
+    if not user or not user.get("is_active", True):
+        return False, "User account is unavailable."
+    user_id = str(user.get("_db_id") or user.get("_id"))
     supplied_code = str(code or "").strip()
     now = datetime.now(timezone.utc)
 
@@ -802,10 +809,6 @@ def confirm_phone_verification(user_id: str, code: str) -> Tuple[bool, str]:
             return False, "Maximum verification attempts exceeded. Please request a new code."
         remaining = max(0, PHONE_CODE_MAX_ATTEMPTS - attempts)
         return False, f"Incorrect verification code. {remaining} attempt(s) remaining."
-
-    user = users_collection.find_one({"_id": user_id}, include_profiles=False)
-    if not user or not user.get("is_active", True):
-        return False, "User account is unavailable."
 
     try:
         if not _consume_phone_verification_code(record, user_id, now):
