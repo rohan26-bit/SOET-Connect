@@ -18,6 +18,49 @@ def test_unauthenticated_protected_endpoint_returns_401(client):
     assert "Authentication credentials were not provided" in response.json().get("detail", "")
 
 
+def test_changing_student_phone_clears_verified_status(client, student_user):
+    """Changing the contact number marks it unverified until the new OTP is confirmed."""
+    from database import users_collection
+
+    users_collection.update_one(
+        {"_id": student_user["id"]},
+        {"$set": {"phone": "+919876543210", "is_phone_verified": True}},
+    )
+
+    response = client.put(
+        "/profile/me",
+        headers=student_user["headers"],
+        json={"phone": "+919999888877"},
+    )
+    assert response.status_code == 200
+
+    updated = users_collection.find_one({"_id": student_user["id"]})
+    assert updated["phone"] == "+919999888877"
+    assert updated["student_profile"]["phone"] == "+919999888877"
+    assert updated["is_phone_verified"] is False
+
+
+def test_saving_same_student_phone_preserves_verified_status(client, student_user):
+    """Saving the same normalized number must not unnecessarily clear verification."""
+    from database import users_collection
+
+    users_collection.update_one(
+        {"_id": student_user["id"]},
+        {"$set": {"phone": "+919876543210", "is_phone_verified": True}},
+    )
+
+    response = client.put(
+        "/profile/me",
+        headers=student_user["headers"],
+        json={"phone": "9876543210"},
+    )
+    assert response.status_code == 200
+
+    updated = users_collection.find_one({"_id": student_user["id"]})
+    assert updated["phone"] == "+919876543210"
+    assert updated["is_phone_verified"] is True
+
+
 def test_invalid_token_returns_401(client):
     """Accessing a protected endpoint with an invalid token must return 401."""
     headers = {"Authorization": "Bearer totally.invalid.token"}
