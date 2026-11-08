@@ -28,9 +28,14 @@ export default function EventsPage() {
     title: '',
     description: '',
     event_date: '',
+    end_date: '',
     start_time: '',
     end_time: '',
+    organizer: '',
     location: '',
+    visibility: 'everyone',
+    capacity: '',
+    tags: '',
     attachment: null as DocumentAttachmentData | null,
   });
 
@@ -93,9 +98,14 @@ export default function EventsPage() {
         title: newEvent.title,
         description: newEvent.description,
         event_date: newEvent.event_date,
+        end_date: newEvent.end_date || undefined,
         start_time: newEvent.start_time || undefined,
         end_time: newEvent.end_time || undefined,
+        organizer: newEvent.organizer,
         location: newEvent.location,
+        visibility: newEvent.visibility as EventItem['visibility'],
+        capacity: newEvent.capacity.trim() ? Number(newEvent.capacity) : null,
+        tags: newEvent.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
         attachment: newEvent.attachment,
       });
 
@@ -104,9 +114,14 @@ export default function EventsPage() {
         title: '',
         description: '',
         event_date: '',
+        end_date: '',
         start_time: '',
         end_time: '',
+        organizer: '',
         location: '',
+        visibility: 'everyone',
+        capacity: '',
+        tags: '',
         attachment: null,
       });
       alert('Event submitted! It will be listed once reviewed by the administrator.');
@@ -224,7 +239,7 @@ export default function EventsPage() {
               <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
                 <div className="flex items-center gap-1 text-xs text-slate-500 font-semibold">
                   <Users className="w-3.5 h-3.5 text-slate-400" />
-                  <span>{event.registration_count} Attendees</span>
+                  <span>{event.registration_count ?? 0}{event.capacity != null ? ` / ${event.capacity}` : ''} Registered</span>
                 </div>
 
                 <div className="flex flex-wrap items-center justify-end gap-2">
@@ -373,7 +388,20 @@ export default function EventsPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  Organizer / Department
+                </label>
+                <input
+                  type="text"
+                  value={newEvent.organizer}
+                  onChange={(e) => setNewEvent({ ...newEvent, organizer: e.target.value })}
+                  placeholder="e.g. SOET, ACM Student Chapter"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                     Event Date *
@@ -383,6 +411,18 @@ export default function EventsPage() {
                     required
                     value={newEvent.event_date}
                     onChange={(e) => setNewEvent({ ...newEvent, event_date: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    End Date (Optional)
+                  </label>
+                  <input
+                    type="date"
+                    min={newEvent.event_date || undefined}
+                    value={newEvent.end_date}
+                    onChange={(e) => setNewEvent({ ...newEvent, end_date: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -422,6 +462,50 @@ export default function EventsPage() {
                   placeholder="e.g. Auditorium Hall A or Online Zoom"
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Audience Visibility
+                  </label>
+                  <select
+                    value={newEvent.visibility}
+                    onChange={(e) => setNewEvent({ ...newEvent, visibility: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="everyone">Everyone</option>
+                    <option value="students_only">Students Only</option>
+                    <option value="alumni_only">Alumni Only</option>
+                    <option value="admin_only">Admin Only</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Capacity (Optional)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={newEvent.capacity}
+                    onChange={(e) => setNewEvent({ ...newEvent, capacity: e.target.value })}
+                    placeholder="Leave blank for unlimited"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Topics / Tags (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={newEvent.tags}
+                    onChange={(e) => setNewEvent({ ...newEvent, tags: e.target.value })}
+                    placeholder="AI, Networking, Career"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
 
               <div>
