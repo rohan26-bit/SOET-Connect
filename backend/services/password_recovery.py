@@ -481,8 +481,20 @@ def reset_password_with_token(reset_token: str, new_password: str) -> Tuple[bool
                     "p_now": now.isoformat(),
                 },
             ).execute()
-            rows = rpc_result.data or []
-            if not rows or rows[0] is None:
+            data = rpc_result.data
+            if data is None:
+                return False, "Invalid or expired password reset token."
+            if isinstance(data, list):
+                if not data:
+                    return False, "Invalid or expired password reset token."
+                value = data[0]
+                if isinstance(value, dict):
+                    value = next(iter(value.values()), None)
+            elif isinstance(data, dict):
+                value = next(iter(data.values()), None)
+            else:
+                value = data
+            if value is None:
                 return False, "Invalid or expired password reset token."
     except Exception as exc:
         print(f"Atomic password reset failed for user {user_id}: {exc}")
@@ -537,6 +549,8 @@ def _record_phone_verification_failure(record: dict) -> tuple[int, bool]:
     if not rows:
         return PHONE_CODE_MAX_ATTEMPTS, True
     row = rows[0]
+    if not isinstance(row, dict):
+        return PHONE_CODE_MAX_ATTEMPTS, True
     return int(row.get("attempts") or PHONE_CODE_MAX_ATTEMPTS), bool(row.get("is_locked"))
 
 
@@ -698,8 +712,19 @@ def _consume_phone_verification_code(record: dict, user_id: str, now: datetime) 
             "p_max_attempts": PHONE_CODE_MAX_ATTEMPTS,
         },
     ).execute()
-    rows = result.data or []
-    return bool(rows and rows[0] is True)
+    data = result.data
+    if isinstance(data, bool):
+        return data
+    if isinstance(data, list):
+        if not data:
+            return False
+        first = data[0]
+        if isinstance(first, dict):
+            first = next(iter(first.values()), False)
+        return bool(first)
+    if isinstance(data, dict):
+        return bool(next(iter(data.values()), False))
+    return bool(data)
 
 
 def confirm_phone_verification(user_id: str, code: str) -> Tuple[bool, str]:
