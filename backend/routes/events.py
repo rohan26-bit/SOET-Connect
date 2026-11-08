@@ -79,8 +79,8 @@ def validate_event_schedule(start_date: str | None, end_date: str | None, start_
 
     if parsed_start and parsed_end == parsed_start and start_time and end_time:
         try:
-            start_value = time_cls.fromisoformat(str(start_time))
-            end_value = time_cls.fromisoformat(str(end_time))
+            start_value = time_cls.fromisoformat(str(start_time)).replace(tzinfo=None)
+            end_value = time_cls.fromisoformat(str(end_time)).replace(tzinfo=None)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail="Enter valid event start and end times.") from exc
         if end_value <= start_value:
@@ -115,7 +115,8 @@ def event_expiration_datetime(event: dict) -> datetime | None:
         return None
     try:
         clean_date = date_str.split("T")[0].split(" ")[0]
-        event_date = datetime.strptime(clean_date, "%Y-%m-%d").date()
+        retention_date = str(event.get("end_date") or date_str).split("T")[0].split(" ")[0]
+        event_date = datetime.strptime(retention_date, "%Y-%m-%d").date()
         expiry_date = event_date + timedelta(days=1)
         return datetime.combine(expiry_date, datetime.min.time(), tzinfo=KOLKATA_TZ).astimezone(timezone.utc)
     except (TypeError, ValueError):
@@ -869,7 +870,7 @@ def register_for_event(
         else:
             current_count = len([
                 item for item in load_registrations(hydrate_users=False, event_id=event_id)
-                if item.get("status", "registered") == "registered"
+                if item.get("status", "registered") in {"registered", "attended"}
             ])
             if event.get("capacity") is not None and current_count >= int(event["capacity"]):
                 registration_result = {"outcome": "full"}
