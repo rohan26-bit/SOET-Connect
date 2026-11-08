@@ -1,6 +1,6 @@
 import os
 import uuid
-from datetime import datetime, timezone, timedelta, date as date_cls, time as time_cls
+from datetime import datetime, timezone, timedelta, date as date_cls
 
 try:
     from zoneinfo import ZoneInfo
@@ -77,10 +77,19 @@ def validate_event_schedule(start_date: str | None, end_date: str | None, start_
     if parsed_start and parsed_end and parsed_end < parsed_start:
         raise HTTPException(status_code=400, detail="Event end date cannot be before its start date.")
 
-    if parsed_start and parsed_end == parsed_start and start_time and end_time:
+    effective_end_date = parsed_end or parsed_start
+    if parsed_start and effective_end_date == parsed_start and start_time and end_time:
+        def parse_event_time(value: str):
+            for time_format in ("%H:%M", "%H:%M:%S", "%I:%M %p", "%I:%M%p"):
+                try:
+                    return datetime.strptime(str(value).strip(), time_format).time()
+                except ValueError:
+                    continue
+            raise ValueError("Invalid event time")
+
         try:
-            start_value = time_cls.fromisoformat(str(start_time)).replace(tzinfo=None)
-            end_value = time_cls.fromisoformat(str(end_time)).replace(tzinfo=None)
+            start_value = parse_event_time(start_time)
+            end_value = parse_event_time(end_time)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail="Enter valid event start and end times.") from exc
         if end_value <= start_value:
