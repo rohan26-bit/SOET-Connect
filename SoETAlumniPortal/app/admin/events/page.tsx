@@ -38,7 +38,6 @@ interface EventFormData {
   end_time: string;
   location: string;
   event_type: string;
-  organizer: string;
   registration_deadline: string;
   visibility: string;
   capacity: string;
@@ -56,7 +55,6 @@ const emptyForm: EventFormData = {
   end_time: '',
   location: '',
   event_type: '',
-  organizer: '',
   registration_deadline: '',
   visibility: 'everyone',
   capacity: '',
