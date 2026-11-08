@@ -462,7 +462,7 @@ def _record_phone_verification_failure(record: dict) -> tuple[int, bool]:
 def send_phone_verification_code(user_id: str, phone: str) -> Tuple[bool, str, Optional[str]]:
     """Send a short-lived phone code, applying delivery checks and server-side rate limits."""
     phone_clean = delivery.normalize_phone_number(str(phone or "").strip())
-    if not re.fullmatch(r"\\+[1-9][0-9]{7,14}", phone_clean):
+    if not re.fullmatch(r"\+[1-9][0-9]{7,14}", phone_clean):
         return False, "Enter a valid phone number with country code.", None
 
     user_id = str(user_id)
