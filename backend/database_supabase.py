@@ -760,6 +760,25 @@ class SupabaseStorageClient:
         return SupabaseStorageBucket(bucket)
 
 
+class SupabaseRpcBuilder:
+    """Minimal PostgREST RPC builder for server-side database functions."""
+
+    def __init__(self, function_name: str, params: dict | None = None, timeout: float = 10.0):
+        cfg = get_supabase_config()
+        self.url = f"{cfg['rest_url']}/rpc/{function_name}"
+        self.params = params or {}
+        self.headers = get_headers()
+        self.timeout = timeout
+
+    def execute(self) -> QueryResult:
+        client = get_http_client(self.timeout)
+        resp = client.post(self.url, headers=self.headers, json=self.params)
+        if not resp.is_success:
+            raise RuntimeError(f"Supabase RPC failed ({resp.status_code}): {resp.text}")
+        payload = resp.json() if resp.content else []
+        return QueryResult(data=payload if isinstance(payload, list) else [payload], status_code=resp.status_code)
+
+
 class SupabaseClient:
     """Primary client instance for accessing Supabase PostgreSQL and Storage."""
 
@@ -770,6 +789,11 @@ class SupabaseClient:
         if os.getenv("DATABASE_MODE", "").lower() == "mock":
             return MockQueryBuilder(table_name)
         return SupabaseQueryBuilder(table_name)
+
+    def rpc(self, function_name: str, params: dict | None = None):
+        if os.getenv("DATABASE_MODE", "").lower() == "mock":
+            raise RuntimeError("RPC calls are not available in mock database mode.")
+        return SupabaseRpcBuilder(function_name, params)
 
     def from_(self, table_name: str):
         return self.table(table_name)
