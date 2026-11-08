@@ -707,3 +707,35 @@ def test_multi_day_event_remains_active_until_its_end_date():
     event = next(item for item in admin_feed.json() if item["id"] == event_id)
     assert event["is_past"] is False
     assert event["is_expired"] is False
+
+
+def test_approved_restricted_event_audience_applies_to_creator_too():
+    """After approval, creators only see their event if their role matches its audience."""
+    headers = setup_test_users()
+    future_date = (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()
+    created = client.post(
+        "/events",
+        json={
+            "title": "Approved Alumni-only Event",
+            "description": "Creator is a student but audience is alumni.",
+            "event_date": future_date,
+            "visibility": "alumni_only",
+        },
+        headers=headers["student"],
+    )
+    event_id = created.json()["event"]["id"]
+    assert created.status_code == 200
+
+    approved = client.patch(
+        f"/events/{event_id}",
+        json={"status": "approved"},
+        headers=headers["admin"],
+    )
+    assert approved.status_code == 200
+
+    creator_feed = client.get("/events", headers=headers["student"])
+    alumni_feed = client.get("/events", headers=headers["alumni_ver"])
+    assert all(event["id"] != event_id for event in creator_feed.json())
+    assert any(event["id"] == event_id for event in alumni_feed.json())
+    assert client.get(f"/events/{event_id}", headers=headers["student"]).status_code == 404
+    assert client.get(f"/events/{event_id}", headers=headers["alumni_ver"]).status_code == 200
