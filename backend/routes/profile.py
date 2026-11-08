@@ -185,6 +185,7 @@ def update_my_profile(
             # A changed number must be re-verified before SMS recovery or SMS notifications.
             if normalized_phone != previous_phone:
                 update_data["is_phone_verified"] = False
+                update_data["phone_version"] = int(existing_user.get("phone_version") or 0) + 1
 
         if any(value is not None for value in fields.values()):
             update_data["student_profile"] = current_sub
@@ -229,6 +230,7 @@ def update_my_profile(
             update_data["phone"] = normalized_phone
             if normalized_phone != previous_phone:
                 update_data["is_phone_verified"] = False
+                update_data["phone_version"] = int(existing_user.get("phone_version") or 0) + 1
 
     # A phone edit invalidates every outstanding OTP for the previous contact.
     if "phone" in update_data and update_data.get("is_phone_verified") is False:
