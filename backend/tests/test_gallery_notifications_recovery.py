@@ -844,6 +844,58 @@ def test_phone_verification_enforces_server_side_cooldown(
     assert len(send_calls) == 1
 
 
+def test_phone_challenge_is_invalidated_after_profile_number_change(
+    client: TestClient,
+    verified_alumni_user: dict,
+    monkeypatch,
+):
+    """An OTP sent before a later profile phone edit cannot restore the old number."""
+    monkeypatch.setattr("services.delivery.is_sms_configured", lambda: True)
+    monkeypatch.setattr(
+        "services.delivery.send_sms_message",
+        lambda to, msg: (True, "twilio_stale_phone_001", None),
+    )
+
+    old_phone = "+919876543210"
+    sent = client.post(
+        "/api/auth/phone/send-code",
+        headers=verified_alumni_user["headers"],
+        json={"phone": old_phone},
+    )
+    assert sent.status_code == 200
+    old_code = sent.json()["_debug_code"]
+
+    updated = client.put(
+        "/profile/me",
+        headers=verified_alumni_user["headers"],
+        json={"phone": "+919999888877"},
+    )
+    assert updated.status_code == 200
+
+    challenges = (
+        supabase.table("phone_verification_codes")
+        .select("*")
+        .eq("phone", old_phone)
+        .execute()
+        .data
+    )
+    assert len(challenges) == 1
+    assert challenges[0]["is_used"] is True
+    assert challenges[0]["phone_version"] == 0
+
+    stale_verify = client.post(
+        "/api/auth/phone/verify-code",
+        headers=verified_alumni_user["headers"],
+        json={"code": old_code},
+    )
+    assert stale_verify.status_code == 400
+
+    saved = users_collection.find_one({"_id": verified_alumni_user["id"]})
+    assert saved["phone"] == "+919999888877"
+    assert saved["is_phone_verified"] is False
+    assert saved["phone_version"] == 1
+
+
 def test_phone_verification_locks_after_five_incorrect_attempts(
     client: TestClient,
     verified_alumni_user: dict,
@@ -899,6 +951,8 @@ def test_migration_015_session_revocation_and_otp_security():
     assert "create_phone_verification_challenge" in sql
     assert "consume_phone_verification_challenge" in sql
     assert "complete_phone_verification" in sql
+    assert "phone_version" in sql
+    assert "p_phone_version INTEGER" in sql
     assert "FOR UPDATE OF u, pvc" in sql
     assert "record_phone_verification_failure" in sql
     assert "record_password_reset_failure" in sql
