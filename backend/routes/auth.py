@@ -407,6 +407,11 @@ def send_phone_verification_endpoint(
     user_id = str(current_user.get("user_id"))
     success, message, debug_code = send_phone_verification_code(user_id, payload.phone)
     if not success:
+        normalized_message = message.lower()
+        if normalized_message.startswith("please wait") or "reached the phone verification send limit" in normalized_message:
+            raise HTTPException(status_code=429, detail=message)
+        if "temporarily unavailable" in normalized_message or "could not deliver" in normalized_message or "right now" in normalized_message:
+            raise HTTPException(status_code=503, detail=message)
         raise HTTPException(status_code=400, detail=message)
 
     resp = {
