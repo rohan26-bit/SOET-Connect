@@ -478,3 +478,207 @@ def test_closed_registration_does_not_expire_future_event():
     assert event["is_expired"] is False
     assert event["is_past"] is False
     assert event["is_registration_closed"] is True
+
+
+def test_event_metadata_is_persisted_and_returned():
+    """Organizer, schedule end, visibility, tags and capacity survive API reloads."""
+    headers = setup_test_users()
+    future_date = (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()
+    end_date = (datetime.now(timezone.utc) + timedelta(days=31)).date().isoformat()
+    response = client.post(
+        "/events",
+        json={
+            "title": "SOET Industry Connect",
+            "description": "Industry event with complete metadata.",
+            "event_date": future_date,
+            "end_date": end_date,
+            "start_time": "09:30",
+            "end_time": "16:00",
+            "organizer": "SOET Placement Cell",
+            "visibility": "students_only",
+            "capacity": 75,
+            "tags": ["Industry", "Career", "Industry"],
+        },
+        headers=headers["admin"],
+    )
+    assert response.status_code == 200
+    event_id = response.json()["event"]["id"]
+
+    saved = events_module._find_event(event_id)
+    assert saved["organizer"] == "SOET Placement Cell"
+    assert saved["end_date"] == end_date
+    assert saved["end_time"] == "16:00"
+    assert saved["visibility"] == "students_only"
+    assert saved["capacity"] == 75
+    assert saved["tags"] == ["Industry", "Career"]
+
+
+def test_event_visibility_is_enforced_for_lists_details_and_registration():
+    """Audience visibility applies to feeds and direct API access, not just frontend filters."""
+    headers = setup_test_users()
+    future_date = (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()
+
+    student_event = client.post(
+        "/events",
+        json={"title": "Students Only Event", "description": "D", "event_date": future_date, "visibility": "students_only"},
+        headers=headers["admin"],
+    ).json()["event"]
+    alumni_event = client.post(
+        "/events",
+        json={"title": "Alumni Only Event", "description": "D", "event_date": future_date, "visibility": "alumni_only"},
+        headers=headers["admin"],
+    ).json()["event"]
+    admin_event = client.post(
+        "/events",
+        json={"title": "Admin Only Event", "description": "D", "event_date": future_date, "visibility": "admin_only"},
+        headers=headers["admin"],
+    ).json()["event"]
+
+    student_feed = client.get("/events", headers=headers["student"])
+    alumni_feed = client.get("/events", headers=headers["alumni_ver"])
+    admin_feed = client.get("/events", headers=headers["admin"])
+
+    assert student_feed.status_code == 200
+    assert {event["title"] for event in student_feed.json()} == {"Students Only Event"}
+    assert alumni_feed.status_code == 200
+    assert {event["title"] for event in alumni_feed.json()} == {"Alumni Only Event"}
+    assert admin_feed.status_code == 200
+    assert {event["title"] for event in admin_feed.json()} >= {
+        "Students Only Event", "Alumni Only Event", "Admin Only Event"
+    }
+
+    assert client.get(f"/events/{alumni_event['id']}", headers=headers["student"]).status_code == 404
+    assert client.get(f"/events/{admin_event['id']}", headers=headers["student"]).status_code == 404
+    assert client.post(f"/events/{alumni_event['id']}/register", headers=headers["student"]).status_code == 404
+    assert client.get(f"/events/{student_event['id']}", headers=headers["student"]).status_code == 200
+
+
+def test_creator_can_still_view_own_pending_event_with_restricted_audience():
+    """A creator retains access to their own pending submission while others cannot see it."""
+    headers = setup_test_users()
+    future_date = (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()
+    created = client.post(
+        "/events",
+        json={
+            "title": "My Pending Alumni Audience Event",
+            "description": "Awaiting review.",
+            "event_date": future_date,
+            "visibility": "alumni_only",
+        },
+        headers=headers["student"],
+    )
+    assert created.status_code == 200
+    event_id = created.json()["event"]["id"]
+
+    own_feed = client.get("/events", headers=headers["student"])
+    other_feed = client.get("/events", headers=headers["student2"])
+    assert any(event["id"] == event_id for event in own_feed.json())
+    assert all(event["id"] != event_id for event in other_feed.json())
+    assert client.get(f"/events/{event_id}", headers=headers["student"]).status_code == 200
+
+
+def test_event_capacity_is_enforced_and_released_after_cancellation():
+    """The final seat cannot be double-booked, and cancelling frees that seat."""
+    headers = setup_test_users()
+    future_date = (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()
+    created = client.post(
+        "/events",
+        json={
+            "title": "Limited Seats Workshop",
+            "description": "Only one seat.",
+            "event_date": future_date,
+            "capacity": 1,
+        },
+        headers=headers["admin"],
+    )
+    assert created.status_code == 200
+    event_id = created.json()["event"]["id"]
+
+    first = client.post(f"/events/{event_id}/register", headers=headers["student"])
+    assert first.status_code == 200
+
+    full = client.post(f"/events/{event_id}/register", headers=headers["student2"])
+    assert full.status_code == 409
+    assert "capacity" in full.json()["detail"].lower()
+
+    cancelled = client.delete(f"/events/{event_id}/register", headers=headers["student"])
+    assert cancelled.status_code == 200
+    second = client.post(f"/events/{event_id}/register", headers=headers["student2"])
+    assert second.status_code == 200
+
+
+def test_event_update_persists_metadata_and_allows_unlimited_capacity():
+    """Editing metadata updates database columns and an explicit blank capacity clears the cap."""
+    headers = setup_test_users()
+    future_date = (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()
+    end_date = (datetime.now(timezone.utc) + timedelta(days=31)).date().isoformat()
+    created = client.post(
+        "/events",
+        json={"title": "Editable Event", "description": "D", "event_date": future_date},
+        headers=headers["admin"],
+    )
+    event_id = created.json()["event"]["id"]
+
+    updated = client.patch(
+        f"/events/{event_id}",
+        json={
+            "organizer": "SOET Research Cell",
+            "end_date": end_date,
+            "end_time": "18:00",
+            "visibility": "alumni_only",
+            "capacity": 120,
+            "tags": ["Research", "AI"],
+        },
+        headers=headers["admin"],
+    )
+    assert updated.status_code == 200
+    saved = events_module._find_event(event_id)
+    assert saved["organizer"] == "SOET Research Cell"
+    assert saved["end_date"] == end_date
+    assert saved["end_time"] == "18:00"
+    assert saved["visibility"] == "alumni_only"
+    assert saved["capacity"] == 120
+    assert saved["tags"] == ["Research", "AI"]
+
+    cleared = client.patch(
+        f"/events/{event_id}",
+        json={"capacity": None},
+        headers=headers["admin"],
+    )
+    assert cleared.status_code == 200
+    assert events_module._find_event(event_id)["capacity"] is None
+
+
+def test_invalid_event_schedule_ranges_are_rejected():
+    """An end date/time earlier than its start is rejected before database writes."""
+    headers = setup_test_users()
+    future_date = (datetime.now(timezone.utc) + timedelta(days=30)).date()
+    earlier_date = (future_date - timedelta(days=1)).isoformat()
+    same_date = future_date.isoformat()
+
+    date_response = client.post(
+        "/events",
+        json={
+            "title": "Bad Date Range",
+            "description": "D",
+            "event_date": same_date,
+            "end_date": earlier_date,
+        },
+        headers=headers["admin"],
+    )
+    assert date_response.status_code == 400
+    assert "end date" in date_response.json()["detail"].lower()
+
+    time_response = client.post(
+        "/events",
+        json={
+            "title": "Bad Time Range",
+            "description": "D",
+            "event_date": same_date,
+            "start_time": "16:00",
+            "end_time": "15:00",
+        },
+        headers=headers["admin"],
+    )
+    assert time_response.status_code == 400
+    assert "end time" in time_response.json()["detail"].lower()
