@@ -461,7 +461,15 @@ def test_change_password_success(client, admin_user):
 
     res = client.post("/auth/change-password", json=payload, headers=admin_user["headers"])
     assert res.status_code == 200
-    assert res.json()["message"] == "Password changed successfully."
+    assert "Password changed successfully." in res.json()["message"]
+    assert res.json()["access_token"]
+
+    # The token used to change the password is revoked immediately.
+    old_session = client.get("/profile/me", headers=admin_user["headers"])
+    assert old_session.status_code == 401
+    replacement_headers = {"Authorization": f"Bearer {res.json()['access_token']}"}
+    replacement_session = client.get("/profile/me", headers=replacement_headers)
+    assert replacement_session.status_code == 200
 
     # Verify old password no longer works
     login_old = client.post("/auth/login", json={
@@ -503,7 +511,13 @@ def test_student_and_alumni_can_change_password(client, request, user_fixture):
         },
     )
     assert response.status_code == 200
-    assert response.json()["message"] == "Password changed successfully."
+    assert "Password changed successfully." in response.json()["message"]
+    assert response.json()["access_token"]
+
+    # Password change revokes the old token and returns a fresh token for this browser.
+    assert client.get("/profile/me", headers=account["headers"]).status_code == 401
+    replacement_headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
+    assert client.get("/profile/me", headers=replacement_headers).status_code == 200
 
     old_login = client.post(
         "/auth/login",
