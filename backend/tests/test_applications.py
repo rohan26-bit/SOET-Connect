@@ -1,5 +1,5 @@
 from bson import ObjectId
-from database import users_collection
+from database import users_collection, supabase
 from security.jwt import create_access_token
 from tests.conftest import _create_mock_user
 
@@ -63,6 +63,57 @@ def test_student_alumni_admin_can_apply(client, admin_user, verified_alumni_user
     adm_app = res_admin.json()["application"]
     assert adm_app["student_id"] == admin_user["id"]
     assert adm_app["status"] == "applied"
+
+
+def test_application_resume_upload_is_saved_to_private_storage_and_signed_for_owner(
+    client, admin_user, student_user
+):
+    """Multipart resume uploads are stored privately and linked to the saved application."""
+    job_id = _create_approved_job(client, admin_user)
+    resume_bytes = b"%PDF-1.7\nSOET Connect test resume\n"
+
+    response = client.post(
+        "/applications",
+        data={"job_id": job_id, "cover_letter": "Please consider my application."},
+        files={"resume_file": ("candidate-resume.pdf", resume_bytes, "application/pdf")},
+        headers=student_user["headers"],
+    )
+
+    assert response.status_code == 200, response.text
+    application = response.json()["application"]
+    application_id = application["id"]
+
+    stored_rows = (
+        supabase.table("job_applications")
+        .select("*")
+        .eq("id", application_id)
+        .execute()
+        .data
+    )
+    assert len(stored_rows) == 1
+    stored_path = stored_rows[0]["resume_url"]
+    expected_prefix = f"application-resumes/{student_user['id']}/"
+    assert stored_path.startswith(expected_prefix)
+
+    object_path = stored_path.removeprefix("application-resumes/")
+    stored_bytes = supabase.storage.from_("application-resumes").download(object_path)
+    assert stored_bytes == resume_bytes
+
+    # Mock storage uses a local signed-download route instead of exposing the object key directly.
+    assert application["resume_url"].startswith("/api/gallery/storage/application-resumes/")
+
+
+def test_application_resume_upload_rejects_mismatched_file_type(client, admin_user, student_user):
+    """A renamed non-PDF must not be accepted as an applicant resume."""
+    job_id = _create_approved_job(client, admin_user)
+    response = client.post(
+        "/applications",
+        data={"job_id": job_id},
+        files={"resume_file": ("fake-resume.pdf", b"this is not a PDF", "application/pdf")},
+        headers=student_user["headers"],
+    )
+    assert response.status_code == 400
+    assert "valid pdf" in response.json().get("detail", "").lower()
 
 
 def test_duplicate_application_rejected_for_all_roles(client, admin_user, verified_alumni_user, student_user):
