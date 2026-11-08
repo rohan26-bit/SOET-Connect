@@ -9,6 +9,7 @@ from typing import Optional, Tuple, Dict, Any
 from database import supabase, users_collection
 from pwdlib import PasswordHash
 from services import delivery
+from services.session_security import update_password_and_revoke_sessions
 
 password_hasher = PasswordHash.recommended()
 
@@ -385,11 +386,13 @@ def reset_password_with_token(reset_token: str, new_password: str) -> Tuple[bool
     # Hash new password with Argon2
     hashed_pwd = password_hasher.hash(new_password)
 
-    # Update password in users table without touching verification or role
-    users_collection.update_one(
-        {"_id": user_id},
-        {"$set": {"password_hash": hashed_pwd}}
-    )
+    # Update the password and increment the token version atomically.
+    # Existing JWTs become unusable as soon as this transaction commits.
+    try:
+        update_password_and_revoke_sessions(user_id, hashed_pwd)
+    except Exception as exc:
+        print(f"Password reset update failed for user {user_id}: {exc}")
+        return False, "Unable to update your password right now. Please try again."
 
     # Invalidate all challenges for this user
     try:
