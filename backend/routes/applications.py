@@ -278,10 +278,12 @@ async def apply_for_job(
     app_id = str(uuid.uuid4())
     now_iso = datetime.now(timezone.utc).isoformat()
     stored_resume = ""
+    resume_uploaded_in_this_request = False
 
     try:
         if resume_file is not None:
             stored_resume = await _store_application_resume(resume_file, applicant_id)
+            resume_uploaded_in_this_request = True
         else:
             stored_resume = str(application.resume_url or "").strip()
             if stored_resume.startswith(RESUME_PATH_PREFIX) and not stored_resume.startswith(
@@ -300,10 +302,12 @@ async def apply_for_job(
             "updated_at": now_iso,
         }).execute()
     except HTTPException:
-        _delete_stored_resume(stored_resume)
+        if resume_uploaded_in_this_request:
+            _delete_stored_resume(stored_resume)
         raise
     except Exception as exc:
-        _delete_stored_resume(stored_resume)
+        if resume_uploaded_in_this_request:
+            _delete_stored_resume(stored_resume)
         error_text = str(exc).lower()
         if "unique_job_application" in error_text or "duplicate key" in error_text or "23505" in error_text:
             raise HTTPException(status_code=409, detail="You have already applied for this position.")
@@ -453,7 +457,7 @@ def get_job_applicants(
                 "student_email": applicant_email,
                 "applicant_email": applicant_email,
                 "department": department,
-                "resume_url": app.get("resume_url", ""),
+                "resume_url": resolve_resume_url(app.get("resume_url", "")),
                 "cover_letter": app.get("cover_letter", ""),
                 "status": app.get("status"),
                 "created_at": app.get("created_at"),
