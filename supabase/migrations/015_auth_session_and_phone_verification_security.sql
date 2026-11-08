@@ -16,6 +16,37 @@ BEGIN
 END;
 $$;
 
+-- Track contact-number changes independently of unrelated profile updates.
+ALTER TABLE public.users
+  ADD COLUMN IF NOT EXISTS phone_version INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE public.phone_verification_codes
+  ADD COLUMN IF NOT EXISTS phone_version INTEGER NOT NULL DEFAULT 0;
+
+DO $
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conname = 'users_phone_version_nonnegative'
+       AND conrelid = 'public.users'::regclass
+  ) THEN
+    ALTER TABLE public.users
+      ADD CONSTRAINT users_phone_version_nonnegative
+      CHECK (phone_version >= 0);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conname = 'phone_verification_codes_phone_version_nonnegative'
+       AND conrelid = 'public.phone_verification_codes'::regclass
+  ) THEN
+    ALTER TABLE public.phone_verification_codes
+      ADD CONSTRAINT phone_verification_codes_phone_version_nonnegative
+      CHECK (phone_version >= 0);
+  END IF;
+END;
+$;
+
 -- Track an account-wide token generation so password changes/reset revoke all old JWTs.
 ALTER TABLE public.users
   ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;
@@ -63,6 +94,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.create_phone_verification_challenge(
   p_user_id UUID,
   p_code_id UUID,
+  p_phone_version INTEGER,
   p_phone TEXT,
   p_code_hash TEXT,
   p_expires_at TIMESTAMPTZ,
@@ -80,15 +112,21 @@ DECLARE
   v_latest_created_at TIMESTAMPTZ;
   v_recent_count INTEGER;
   v_wait_seconds INTEGER;
+  v_current_phone_version INTEGER;
 BEGIN
   PERFORM 1
     FROM public.users AS u
    WHERE u.id = p_user_id
      AND u.is_active = TRUE
-   FOR UPDATE;
+   RETURNING u.phone_version INTO v_current_phone_version;
 
   IF NOT FOUND THEN
     RETURN QUERY SELECT 'not_found'::TEXT, 0;
+    RETURN;
+  END IF;
+
+  IF COALESCE(v_current_phone_version, 0) <> COALESCE(p_phone_version, 0) THEN
+    RETURN QUERY SELECT 'profile_changed'::TEXT, 0;
     RETURN;
   END IF;
 
@@ -119,10 +157,10 @@ BEGIN
      AND pvc.is_used = FALSE;
 
   INSERT INTO public.phone_verification_codes (
-    id, user_id, phone, code_hash, attempts, is_used, expires_at, created_at
+    id, user_id, phone, phone_version, code_hash, attempts, is_used, expires_at, created_at
   )
   VALUES (
-    p_code_id, p_user_id, p_phone, p_code_hash, 0, FALSE, p_expires_at, p_now
+    p_code_id, p_user_id, p_phone, COALESCE(p_phone_version, 0), p_code_hash, 0, FALSE, p_expires_at, p_now
   );
 
   RETURN QUERY SELECT 'created'::TEXT, 0;
@@ -188,6 +226,7 @@ BEGIN
      AND pvc.is_used = FALSE
      AND COALESCE(pvc.attempts, 0) < p_max_attempts
      AND pvc.expires_at > p_now
+     AND COALESCE(pvc.phone_version, 0) = COALESCE(u.phone_version, 0)
    FOR UPDATE OF u, pvc;
 
   IF NOT FOUND THEN
@@ -245,9 +284,9 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.create_phone_verification_challenge(UUID, UUID, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.create_phone_verification_challenge(UUID, UUID, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ) FROM anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.create_phone_verification_challenge(UUID, UUID, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ) TO service_role;
+REVOKE EXECUTE ON FUNCTION public.create_phone_verification_challenge(UUID, UUID, INTEGER, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.create_phone_verification_challenge(UUID, UUID, INTEGER, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.create_phone_verification_challenge(UUID, UUID, INTEGER, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ) TO service_role;
 
 REVOKE EXECUTE ON FUNCTION public.complete_phone_verification(UUID, UUID, TIMESTAMPTZ, INTEGER) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.complete_phone_verification(UUID, UUID, TIMESTAMPTZ, INTEGER) FROM anon, authenticated;
