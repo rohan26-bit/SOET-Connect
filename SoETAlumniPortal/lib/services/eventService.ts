@@ -10,9 +10,9 @@ export interface EventItem {
   title: string;
   description: string;
   event_date: string;
-  end_date?: string;
+  end_date?: string | null;
   start_time?: string;
-  end_time?: string;
+  end_time?: string | null;
   location: string;
   image_url?: string;
   registration_deadline?: string;
