@@ -877,11 +877,17 @@ def test_password_recovery_and_phone_verify_audit_deliveries(monkeypatch, verifi
     assert verify_deliv[0]["status"] == "accepted"
 
 
-def test_resend_and_twilio_webhooks(client: TestClient):
-    """Resend and Twilio delivery webhooks update notification_deliveries status to 'delivered'."""
+def test_resend_and_twilio_webhooks(client: TestClient, monkeypatch):
+    """Unsigned callbacks are rejected; valid Resend/Svix and Twilio signatures update delivery status."""
+    import base64
+    import hashlib
+    import hmac
+    import json
+    import time
+    from twilio.request_validator import RequestValidator
     from services.delivery import record_delivery
 
-    # Record accepted email delivery
+    # Record accepted email delivery first.
     record_delivery(
         user_id="user_webhook_test",
         channel="email",
@@ -890,21 +896,48 @@ def test_resend_and_twilio_webhooks(client: TestClient):
         provider_message_id="resend_hook_123",
     )
 
-    # Webhook updates email to delivered
+    # Sign the exact raw bytes and required Svix headers.
+    resend_secret_bytes = b"soet-resend-test-webhook-secret"
+    resend_secret = "whsec_" + base64.b64encode(resend_secret_bytes).decode("ascii")
+    monkeypatch.setenv("RESEND_WEBHOOK_SECRET", resend_secret)
+    raw_body = json.dumps({
+        "type": "email.delivered",
+        "data": {"email_id": "resend_hook_123"},
+    }, separators=(",", ":")).encode("utf-8")
+    webhook_id = "msg_unit_test_resend_001"
+    timestamp = str(int(time.time()))
+    signed_payload = webhook_id.encode() + b"." + timestamp.encode() + b"." + raw_body
+    signature = base64.b64encode(
+        hmac.new(resend_secret_bytes, signed_payload, hashlib.sha256).digest()
+    ).decode("ascii")
+    resend_headers = {
+        "svix-id": webhook_id,
+        "svix-timestamp": timestamp,
+        "svix-signature": f"v1,{signature}",
+        "content-type": "application/json",
+    }
+
+    unsigned_resend = client.post(
+        "/api/notifications/deliveries/webhook/resend",
+        content=raw_body,
+        headers={"content-type": "application/json"},
+    )
+    assert unsigned_resend.status_code == 403
+
     resend_res = client.post(
         "/api/notifications/deliveries/webhook/resend",
-        json={
-            "type": "email.delivered",
-            "data": {"email_id": "resend_hook_123"},
-        },
+        content=raw_body,
+        headers=resend_headers,
     )
     assert resend_res.status_code == 200
     assert resend_res.json()["status"] == "success"
 
-    email_rec = supabase.table("notification_deliveries").select("*").eq("provider_message_id", "resend_hook_123").execute().data[0]
+    email_rec = supabase.table("notification_deliveries").select("*").eq(
+        "provider_message_id", "resend_hook_123"
+    ).execute().data[0]
     assert email_rec["status"] == "delivered"
 
-    # Record accepted SMS delivery
+    # Record accepted SMS delivery.
     record_delivery(
         user_id="user_webhook_test",
         channel="sms",
@@ -913,19 +946,67 @@ def test_resend_and_twilio_webhooks(client: TestClient):
         provider_message_id="SM_webhook_twilio_456",
     )
 
-    # Webhook updates SMS to delivered
+    # Twilio callback signatures cover the canonical URL and POST form parameters.
+    twilio_auth_token = "soet-unit-test-twilio-auth-token"
+    callback_url = "https://soet-connect.vercel.app/api/notifications/deliveries/webhook/twilio"
+    monkeypatch.setenv("TWILIO_AUTH_TOKEN", twilio_auth_token)
+    monkeypatch.setenv("TWILIO_WEBHOOK_URL", callback_url)
+    callback_data = {
+        "MessageSid": "SM_webhook_twilio_456",
+        "MessageStatus": "delivered",
+    }
+    validator = RequestValidator(twilio_auth_token)
+    twilio_signature = validator.compute_signature(callback_url, callback_data)
+
+    unsigned_twilio = client.post(
+        "/api/notifications/deliveries/webhook/twilio",
+        data=callback_data,
+    )
+    assert unsigned_twilio.status_code == 403
+
     twilio_res = client.post(
         "/api/notifications/deliveries/webhook/twilio",
-        data={
-            "MessageSid": "SM_webhook_twilio_456",
-            "MessageStatus": "delivered",
-        },
+        data=callback_data,
+        headers={"X-Twilio-Signature": twilio_signature},
     )
     assert twilio_res.status_code == 200
     assert twilio_res.json()["status"] == "success"
 
-    sms_rec = supabase.table("notification_deliveries").select("*").eq("provider_message_id", "SM_webhook_twilio_456").execute().data[0]
+    sms_rec = supabase.table("notification_deliveries").select("*").eq(
+        "provider_message_id", "SM_webhook_twilio_456"
+    ).execute().data[0]
     assert sms_rec["status"] == "delivered"
+
+
+def test_resend_webhook_rejects_stale_or_tampered_payload(client: TestClient, monkeypatch):
+    """A valid signature for an altered raw body and a stale timestamp both fail."""
+    import base64
+    import hashlib
+    import hmac
+    import json
+    import time
+
+    secret_bytes = b"soet-resend-test-secret"
+    secret = "whsec_" + base64.b64encode(secret_bytes).decode("ascii")
+    monkeypatch.setenv("RESEND_WEBHOOK_SECRET", secret)
+    webhook_id = "msg_unit_test_resend_stale"
+    raw_body = json.dumps({"type": "email.delivered", "data": {"email_id": "x"}}).encode()
+    stale_timestamp = str(int(time.time()) - 600)
+    signed = webhook_id.encode() + b"." + stale_timestamp.encode() + b"." + raw_body
+    signature = base64.b64encode(
+        hmac.new(secret_bytes, signed, hashlib.sha256).digest()
+    ).decode("ascii")
+    response = client.post(
+        "/api/notifications/deliveries/webhook/resend",
+        content=raw_body,
+        headers={
+            "content-type": "application/json",
+            "svix-id": webhook_id,
+            "svix-timestamp": stale_timestamp,
+            "svix-signature": f"v1,{signature}",
+        },
+    )
+    assert response.status_code == 403
 
 
 def test_provider_failure_does_not_break_notifications_or_recovery(monkeypatch, verified_alumni_user: dict):
