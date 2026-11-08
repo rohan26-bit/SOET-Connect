@@ -898,6 +898,8 @@ def test_migration_015_session_revocation_and_otp_security():
     assert "verification_provider" in sql
     assert "create_phone_verification_challenge" in sql
     assert "consume_phone_verification_challenge" in sql
+    assert "complete_phone_verification" in sql
+    assert "FOR UPDATE OF u, pvc" in sql
     assert "record_phone_verification_failure" in sql
     assert "record_password_reset_failure" in sql
     assert "reset_password_and_revoke_sessions" in sql

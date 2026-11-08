@@ -40,6 +40,27 @@ def test_changing_student_phone_clears_verified_status(client, student_user):
     assert updated["is_phone_verified"] is False
 
 
+def test_changing_alumni_phone_clears_verified_status(client, verified_alumni_user):
+    """Alumni can update their contact number and must re-verify the replacement."""
+    from database import users_collection
+
+    users_collection.update_one(
+        {"_id": verified_alumni_user["id"]},
+        {"$set": {"phone": "+919876543210", "is_phone_verified": True}},
+    )
+
+    response = client.put(
+        "/profile/me",
+        headers=verified_alumni_user["headers"],
+        json={"phone": "+919999888877"},
+    )
+    assert response.status_code == 200
+
+    updated = users_collection.find_one({"_id": verified_alumni_user["id"]})
+    assert updated["phone"] == "+919999888877"
+    assert updated["is_phone_verified"] is False
+
+
 def test_saving_same_student_phone_preserves_verified_status(client, student_user):
     """Saving the same normalized number must not unnecessarily clear verification."""
     from database import users_collection
