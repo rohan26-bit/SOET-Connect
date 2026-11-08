@@ -682,3 +682,28 @@ def test_invalid_event_schedule_ranges_are_rejected():
     )
     assert time_response.status_code == 400
     assert "end time" in time_response.json()["detail"].lower()
+
+
+def test_multi_day_event_remains_active_until_its_end_date():
+    """A multi-day event must not expire on its first day."""
+    headers = setup_test_users()
+    from datetime import date
+    start_date = (date.today() - timedelta(days=1)).isoformat()
+    end_date = (date.today() + timedelta(days=2)).isoformat()
+    created = client.post(
+        "/events",
+        json={
+            "title": "Multi-day Conference",
+            "description": "Runs across multiple days.",
+            "event_date": start_date,
+            "end_date": end_date,
+        },
+        headers=headers["admin"],
+    )
+    assert created.status_code == 200
+    event_id = created.json()["event"]["id"]
+
+    admin_feed = client.get("/events", headers=headers["admin"])
+    event = next(item for item in admin_feed.json() if item["id"] == event_id)
+    assert event["is_past"] is False
+    assert event["is_expired"] is False
