@@ -1,3 +1,5 @@
+from database import supabase
+
 def test_student_cannot_create_job(client, student_user):
     """Students are not allowed to post jobs."""
     payload = {
@@ -25,6 +27,25 @@ def test_alumni_creates_pending_job(client, verified_alumni_user):
     job = res.json()["job"]
     assert job["status"] == "pending"
     assert job["posted_by"] == verified_alumni_user["id"]
+
+
+def test_external_application_url_is_persisted_and_returned(client, admin_user):
+    """External application links survive a database round trip."""
+    application_url = "https://careers.example.com/roles/backend-intern"
+    response = client.post("/jobs", json={
+        "title": "Backend Intern with External Link",
+        "company": "Example Careers",
+        "description": "Apply on the company website.",
+        "location": "Remote",
+        "employment_type": "internship",
+        "application_url": application_url,
+    }, headers=admin_user["headers"])
+
+    assert response.status_code == 200
+    job_id = response.json()["job"]["id"]
+    stored = supabase.table("jobs").select("*").eq("id", job_id).execute().data
+    assert stored and stored[0].get("application_url") == application_url
+    assert response.json()["job"]["application_url"] == application_url
 
 
 def test_admin_creates_approved_job(client, admin_user):
