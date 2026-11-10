@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from database import users_collection, supabase
 from security.dependencies import get_current_user
+from security.external_urls import safe_external_profile_url
 from services.aci import calculate_alumni_aci, get_tier_and_badge
 from services.notifications import NOTIFICATION_TYPES, create_notification_once
 
@@ -400,9 +401,9 @@ def get_alumni_directory(
             "industry": profile.get("industry"),
             "location": profile.get("location"),
             "skills": profile.get("skills", []),
-            "linkedin": profile.get("linkedin"),
-            "github": profile.get("github"),
-            "website": profile.get("website"),
+            "linkedin": safe_external_profile_url(profile.get("linkedin")),
+            "github": safe_external_profile_url(profile.get("github")),
+            "website": safe_external_profile_url(profile.get("website")),
             "bio": profile.get("bio"),
             "aci_score": aci_data["score"],
             "aci_tier": aci_data["tier"],
