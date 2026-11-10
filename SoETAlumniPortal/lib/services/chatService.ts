@@ -95,6 +95,7 @@ export const chatService = {
         Authorization: `Bearer ${getToken()}`,
         'Content-Type': 'application/json',
       },
+      cache: 'no-store',
     });
 
     const data = await parseResponse(response);
@@ -169,6 +170,7 @@ export const chatService = {
           Authorization: `Bearer ${getToken()}`,
           'Content-Type': 'application/json',
         },
+        cache: 'no-store',
       }
     );
 
