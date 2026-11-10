@@ -93,10 +93,14 @@ def test_admin_metrics_report_database_read_failure(client, admin_user, monkeypa
 def test_alumni_aci_reports_database_read_failure(client, verified_alumni_user, monkeypatch, tmp_path):
     # The legacy fixtures in this repository contain sample rows. Use empty
     # compatibility files so this test exercises the Supabase read path.
-    for filename in ("jobs_data.json", "events_data.json", "event_registrations_data.json"):
+    for attribute, filename in (
+        ("JOBS_FILE", "jobs_data.json"),
+        ("EVENTS_FILE", "events_data.json"),
+        ("REGISTRATIONS_FILE", "event_registrations_data.json"),
+    ):
         path = tmp_path / filename
         path.write_text("[]", encoding="utf-8")
-        monkeypatch.setattr(aci_module, filename.replace(".json", "").upper().replace("_DATA", "") + "_FILE", path)
+        monkeypatch.setattr(aci_module, attribute, path)
 
     _fail_table_read(monkeypatch, alumni_module, "jobs")
     response = client.get("/api/alumni/me/aci", headers=verified_alumni_user["headers"])
