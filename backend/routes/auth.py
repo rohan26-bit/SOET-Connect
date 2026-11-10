@@ -56,7 +56,7 @@ def _issue_access_token(existing_user: dict, request: Request, session_version: 
     )
     token_payload = decode_access_token(token)
     create_auth_session(
-        user_id=str(existing_user["_id"]),
+        user_id=str(existing_user.get("_db_id") or existing_user["_id"]),
         session_id=session_id,
         expires_at=token_payload["expires_at"],
         user_agent=request.headers.get("user-agent"),
@@ -428,7 +428,7 @@ def logout(current_user: dict = Depends(get_current_user)):
     try:
         revoke_auth_session(
             current_user["session_id"],
-            current_user["user_id"],
+            current_user["database_user_id"],
         )
     except Exception as exc:
         print(f"Logout session revocation failed: {type(exc).__name__}")
@@ -444,7 +444,7 @@ def get_active_sessions(current_user: dict = Depends(get_current_user)):
     """List the signed-in user's active devices only."""
     try:
         sessions = list_active_auth_sessions(
-            current_user["user_id"],
+            current_user["database_user_id"],
             current_user["session_id"],
         )
     except Exception as exc:
@@ -466,7 +466,7 @@ def sign_out_device(
 ):
     """Revoke a session only when it belongs to the authenticated account."""
     try:
-        revoked = revoke_auth_session(str(session_id), current_user["user_id"])
+        revoked = revoke_auth_session(str(session_id), current_user["database_user_id"])
     except Exception as exc:
         print(f"Device session revocation failed: {type(exc).__name__}")
         raise HTTPException(
@@ -486,7 +486,7 @@ def sign_out_other_devices(current_user: dict = Depends(get_current_user)):
     """Revoke every other active session while preserving this browser."""
     try:
         revoked_count = revoke_other_auth_sessions(
-            current_user["user_id"],
+            current_user["database_user_id"],
             current_user["session_id"],
         )
     except Exception as exc:
