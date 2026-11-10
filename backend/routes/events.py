@@ -9,7 +9,9 @@ except Exception:
     KOLKATA_TZ = timezone(timedelta(hours=5, minutes=30))
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from security.document_attachments import sanitize_document_attachment_text, validate_document_attachment_text
 
 from database import users_collection, supabase
 from security.dependencies import get_current_user
@@ -219,6 +221,12 @@ class EventCreateRequest(BaseModel):
     capacity: int | None = None
     tags: list[str] = Field(default_factory=list)
 
+    @field_validator("description")
+    @classmethod
+    def validate_description_attachment(cls, value: str) -> str:
+        validated = validate_document_attachment_text(value)
+        return validated or ""
+
 
 class EventUpdateRequest(BaseModel):
     title: str | None = None
@@ -237,6 +245,11 @@ class EventUpdateRequest(BaseModel):
     capacity: int | None = None
     tags: list[str] | None = None
     status: str | None = None
+
+    @field_validator("description")
+    @classmethod
+    def validate_description_attachment(cls, value: str | None) -> str | None:
+        return validate_document_attachment_text(value)
 
 
 # ============================================================
@@ -276,6 +289,7 @@ def load_events(status: str | None = None, created_by: str | None = None) -> lis
         events = []
         for row in raw_events:
             e = dict(row)
+            e["description"] = sanitize_document_attachment_text(e.get("description")) or ""
             date_val = str(row.get("date", ""))
             e["event_date"] = date_val
             e["start_date"] = date_val
@@ -320,6 +334,7 @@ def _find_event(event_id: str) -> dict | None:
             return None
         row = res.data[0]
         e = dict(row)
+        e["description"] = sanitize_document_attachment_text(e.get("description")) or ""
         date_val = str(row.get("date", ""))
         e["event_date"] = date_val
         e["start_date"] = date_val
@@ -812,6 +827,7 @@ def update_event(
                 except Exception:
                     pass
 
+    event["description"] = sanitize_document_attachment_text(event.get("description")) or ""
     return {
         "message": "Event updated successfully.",
         "event": event,
