@@ -868,7 +868,6 @@ def delete_event(
     return {
         "message": "Event deleted successfully.",
         "event": target_event,
-        "notified_attendees": len(attendee_ids),
     }
 
 
