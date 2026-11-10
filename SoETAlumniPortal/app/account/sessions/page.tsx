@@ -54,12 +54,16 @@ export default function ActiveSessionsPage() {
       const result = await authService.getActiveSessions();
       setSessions(result.sessions || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load your active sessions.');
+      const message = err instanceof Error ? err.message : 'Unable to load your active sessions.';
+      setError(message);
+      if (/session.*(expired|revoked)|sign in again/i.test(message)) {
+        router.replace('/login?expired=1');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -79,7 +83,11 @@ export default function ActiveSessionsPage() {
       setSuccess(result.message || 'The selected device has been signed out.');
       await loadSessions(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to sign out that device.');
+      const message = err instanceof Error ? err.message : 'Unable to sign out that device.';
+      setError(message);
+      if (/session.*(expired|revoked)|sign in again/i.test(message)) {
+        router.replace('/login?expired=1');
+      }
     } finally {
       setRevokingId(null);
     }
@@ -95,7 +103,11 @@ export default function ActiveSessionsPage() {
       setSuccess(result.message || 'All other active devices have been signed out.');
       await loadSessions(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to sign out other devices.');
+      const message = err instanceof Error ? err.message : 'Unable to sign out other devices.';
+      setError(message);
+      if (/session.*(expired|revoked)|sign in again/i.test(message)) {
+        router.replace('/login?expired=1');
+      }
     } finally {
       setRevokingOthers(false);
     }
