@@ -380,3 +380,39 @@ def test_deleted_user_jwt_rejected_from_applying(client, admin_user, student_use
         headers=unauth_student["headers"],
     )
     assert res_unauth.status_code == 403
+
+
+def test_application_resume_urls_reject_unsafe_schemes(client, admin_user, student_user):
+    """Both application submission routes reject non-HTTP(S) and credential-bearing resume links."""
+    job_id = _create_approved_job(client, admin_user)
+    unsafe_urls = [
+        "javascript:alert(1)",
+        "data:text/html,<script>alert(1)</script>",
+        "ftp://files.example.com/resume.pdf",
+        "https://user:password@example.com/resume.pdf",
+    ]
+
+    for resume_url in unsafe_urls:
+        primary = client.post(
+            "/applications",
+            json={"job_id": job_id, "resume_url": resume_url},
+            headers=student_user["headers"],
+        )
+        assert primary.status_code == 400
+
+        compatibility = client.post(
+            f"/jobs/{job_id}/applications",
+            json={"resume_url": resume_url},
+            headers=student_user["headers"],
+        )
+        assert compatibility.status_code == 422
+
+
+def test_legacy_unsafe_resume_urls_are_not_returned_as_links():
+    """Existing unsafe resume values are suppressed when read from legacy records."""
+    from routes.applications import resolve_resume_url
+
+    assert resolve_resume_url("javascript:alert(1)") == ""
+    assert resolve_resume_url("data:text/html,<script>alert(1)</script>") == ""
+    assert resolve_resume_url("https://user:password@example.com/resume.pdf") == ""
+    assert resolve_resume_url("https://example.com/resume.pdf") == "https://example.com/resume.pdf"
