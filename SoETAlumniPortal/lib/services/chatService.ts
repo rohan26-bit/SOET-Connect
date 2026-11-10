@@ -69,7 +69,8 @@ export const chatService = {
   async sendPresenceHeartbeat(): Promise<void> {
     const response = await fetch(`${API_URL}/chat/presence`, {
       method: 'POST',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
       cache: 'no-store',
@@ -84,7 +85,8 @@ export const chatService = {
   async getConversations(): Promise<ConversationItem[]> {
     const response = await fetch(`${API_URL}/chat/conversations`, {
       method: 'GET',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
       cache: 'no-store',
@@ -101,7 +103,8 @@ export const chatService = {
   async createOrGetConversation(participantId: string): Promise<ConversationDetail> {
     const response = await fetch(`${API_URL}/chat/conversations`, {
       method: 'POST',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ participant_id: participantId }),
@@ -119,7 +122,8 @@ export const chatService = {
       `${API_URL}/chat/conversations/${encodeURIComponent(conversationId)}`,
       {
         method: 'GET',
-        headers: {}`,
+        headers: {
+          ,
           'Content-Type': 'application/json',
         },
       }
@@ -137,7 +141,8 @@ export const chatService = {
       `${API_URL}/chat/conversations/${encodeURIComponent(conversationId)}`,
       {
         method: 'DELETE',
-        headers: {}`,
+        headers: {
+          ,
           'Content-Type': 'application/json',
         },
       }
@@ -155,7 +160,8 @@ export const chatService = {
       `${API_URL}/chat/conversations/${encodeURIComponent(conversationId)}/messages`,
       {
         method: 'GET',
-        headers: {}`,
+        headers: {
+          ,
           'Content-Type': 'application/json',
         },
         cache: 'no-store',
@@ -175,7 +181,8 @@ export const chatService = {
       `${API_URL}/chat/conversations/${encodeURIComponent(conversationId)}/messages`,
       {
         method: 'POST',
-        headers: {}`,
+        headers: {
+          ,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ content }),
@@ -202,7 +209,7 @@ export const chatService = {
       API_URL + '/chat/conversations/' + encodeURIComponent(conversationId) + '/attachments',
       {
         method: 'POST',
-        headers: {},
+        headers: {  },
         body: formData,
       }
     );
@@ -212,7 +219,7 @@ export const chatService = {
   async downloadAttachment(messageId: string, attachmentId: string): Promise<Blob> {
     const response = await fetch(
       API_URL + '/chat/messages/' + encodeURIComponent(messageId) + '/attachments/' + encodeURIComponent(attachmentId),
-      { headers: {} }
+      { headers: {  } }
     );
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
@@ -231,7 +238,8 @@ export const chatService = {
       `${API_URL}/chat/messages/${encodeURIComponent(messageId)}/read`,
       {
         method: 'PATCH',
-        headers: {}`,
+        headers: {
+          ,
           'Content-Type': 'application/json',
         },
       }

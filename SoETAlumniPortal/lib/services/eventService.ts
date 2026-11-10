@@ -55,7 +55,7 @@ export interface EventAttendeeItem {
 
 const API_URL = '/api';
 
-function getAuthHeaders() {
+function getAuthHeaders(): Record<string, string> {
   return { 'Content-Type': 'application/json' };
 }
 

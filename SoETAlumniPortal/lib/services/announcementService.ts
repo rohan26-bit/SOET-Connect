@@ -51,7 +51,8 @@ export const announcementService = {
   async getAnnouncements(): Promise<AnnouncementItem[]> {
     const response = await fetch(`${API_URL}/announcements`, {
       method: 'GET',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
     });
@@ -88,7 +89,8 @@ export const announcementService = {
 
     const response = await fetch(`${API_URL}/announcements`, {
       method: 'POST',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -131,7 +133,8 @@ export const announcementService = {
       `${API_URL}/announcements/${encodeURIComponent(id)}`,
       {
         method: 'PATCH',
-        headers: {}`,
+        headers: {
+          ,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
@@ -150,7 +153,8 @@ export const announcementService = {
       `${API_URL}/announcements/${encodeURIComponent(id)}`,
       {
         method: 'DELETE',
-        headers: {}`,
+        headers: {
+          ,
           'Content-Type': 'application/json',
         },
       }

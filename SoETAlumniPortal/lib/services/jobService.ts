@@ -353,6 +353,7 @@ export const jobService = {
   }) {
 
 
+
     const formData = new FormData();
     formData.append('job_id', applicationData.job_id);
     formData.append('cover_letter', applicationData.cover_letter || '');
@@ -364,7 +365,7 @@ export const jobService = {
       `${API_URL}/applications`,
       {
         method: 'POST',
-        headers: {}`,
+        headers: {
         },
         body: formData,
       }

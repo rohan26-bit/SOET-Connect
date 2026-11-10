@@ -67,7 +67,7 @@ export const placementService = {
 
   async getAdminRecords(): Promise<PlacementCelebration[]> {
     const response = await fetch(`${API_URL}/placements/admin`, {
-      headers: {}` },
+      headers: {  },
       cache: 'no-store',
     });
     const data = await parseResponse(response);
@@ -77,7 +77,8 @@ export const placementService = {
   async create(input: PlacementInput): Promise<PlacementCelebration> {
     const response = await fetch(`${API_URL}/placements`, {
       method: 'POST',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(input),
@@ -88,7 +89,8 @@ export const placementService = {
   async update(id: string, input: Partial<PlacementInput>): Promise<PlacementCelebration> {
     const response = await fetch(`${API_URL}/placements/${encodeURIComponent(id)}`, {
       method: 'PATCH',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(input),
@@ -99,7 +101,7 @@ export const placementService = {
   async remove(id: string): Promise<void> {
     const response = await fetch(`${API_URL}/placements/${encodeURIComponent(id)}`, {
       method: 'DELETE',
-      headers: {}` },
+      headers: {  },
     });
     await parseResponse(response);
   },

@@ -76,7 +76,8 @@ export const notificationService = {
   async getNotifications(_userId?: string): Promise<NotificationItem[]> {
     const response = await fetch(`${API_URL}/notifications`, {
       method: 'GET',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
     });
@@ -94,7 +95,8 @@ export const notificationService = {
       `${API_URL}/notifications/${encodeURIComponent(notificationId)}/read`,
       {
         method: 'PATCH',
-        headers: {}`,
+        headers: {
+          ,
           'Content-Type': 'application/json',
         },
       }
@@ -110,7 +112,8 @@ export const notificationService = {
   async markAllAsRead(_userId?: string) {
     const response = await fetch(`${API_URL}/notifications/read-all`, {
       method: 'PATCH',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
     });
@@ -125,7 +128,8 @@ export const notificationService = {
   async getPreferences(): Promise<NotificationPreferences> {
     const response = await fetch(`${API_URL}/notifications/preferences`, {
       method: 'GET',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
     });
@@ -140,7 +144,8 @@ export const notificationService = {
   async updatePreferences(prefs: Partial<NotificationPreferences>): Promise<NotificationPreferences> {
     const response = await fetch(`${API_URL}/notifications/preferences`, {
       method: 'PUT',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(prefs),
@@ -156,7 +161,8 @@ export const notificationService = {
   async getDeliveries(limit: number = 20): Promise<NotificationDeliveryItem[]> {
     const response = await fetch(`${API_URL}/notifications/deliveries?limit=${limit}`, {
       method: 'GET',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
     });

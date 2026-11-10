@@ -98,7 +98,8 @@ export const galleryService = {
   async getMyPhotos(): Promise<GalleryPhoto[]> {
     const response = await fetch(`${API_URL}/gallery/mine`, {
       method: 'GET',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
     });
@@ -122,7 +123,8 @@ export const galleryService = {
 
     const response = await fetch(`${API_URL}/gallery/upload`, {
       method: 'POST',
-      headers: {}`,
+      headers: {
+        ,
       },
       body: formData,
     });
@@ -137,7 +139,8 @@ export const galleryService = {
   async getAdminPhotos(status: string = 'all'): Promise<GalleryPhoto[]> {
     const response = await fetch(`${API_URL}/gallery/admin?status=${status}`, {
       method: 'GET',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
     });
@@ -157,7 +160,8 @@ export const galleryService = {
   ): Promise<GalleryPhoto> {
     const response = await fetch(`${API_URL}/gallery/${encodeURIComponent(photoId)}/status`, {
       method: 'PATCH',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -176,7 +180,8 @@ export const galleryService = {
   async deletePhoto(photoId: string): Promise<{ message: string }> {
     const response = await fetch(`${API_URL}/gallery/${encodeURIComponent(photoId)}`, {
       method: 'DELETE',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
     });

@@ -208,7 +208,8 @@ export const adminService = {
       `${API_URL}/alumni/pending`,
       {
         method: 'GET',
-        headers: {}`,
+        headers: {
+          ,
           'Content-Type': 'application/json',
         },
       }
@@ -230,7 +231,8 @@ export const adminService = {
       `${API_URL}/alumni/verify/${encodeURIComponent(userId)}?status=${encodeURIComponent(status)}`,
       {
         method: 'PATCH',
-        headers: {}`,
+        headers: {
+          ,
           'Content-Type': 'application/json',
         },
       }
@@ -248,7 +250,8 @@ export const adminService = {
     `${API_URL}/admin/metrics`,
     {
       method: 'GET',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
     }
@@ -264,7 +267,8 @@ export const adminService = {
   async getAllStudents(): Promise<UserManagementItem[]> {
     const response = await fetch(`${API_URL}/admin/students`, {
       method: 'GET',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
     });
@@ -297,7 +301,8 @@ export const adminService = {
   async getPendingStudents(): Promise<UserManagementItem[]> {
     const response = await fetch(`${API_URL}/admin/students/pending`, {
       method: 'GET',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
     });
@@ -334,7 +339,8 @@ export const adminService = {
       `${API_URL}/admin/students/${encodeURIComponent(userId)}/verification?status=${encodeURIComponent(status)}`,
       {
         method: 'PATCH',
-        headers: {}`,
+        headers: {
+          ,
           'Content-Type': 'application/json',
         },
       }
@@ -346,7 +352,8 @@ export const adminService = {
   async getAllAlumni(): Promise<UserManagementItem[]> {
     const response = await fetch(`${API_URL}/admin/alumni`, {
       method: 'GET',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
     });
@@ -390,7 +397,8 @@ export const adminService = {
       `${API_URL}/admin/users/${encodeURIComponent(userId)}/active`,
       {
         method: 'PATCH',
-        headers: {}`,
+        headers: {
+          ,
           'Content-Type': 'application/json',
         },
       }
@@ -404,7 +412,8 @@ export const adminService = {
       `${API_URL}/admin/users/${encodeURIComponent(userId)}`,
       {
         method: 'DELETE',
-        headers: {}`,
+        headers: {
+          ,
           'Content-Type': 'application/json',
         },
       }
@@ -427,7 +436,8 @@ export const adminService = {
 
     const query = params.toString() ? `?${params.toString()}` : '';
     const response = await fetch(`${API_URL}/admin/participation/events${query}`, {
-      headers: {}`,
+      headers: {
+        ,
       },
     });
 
@@ -453,7 +463,8 @@ export const adminService = {
     const response = await fetch(
       `${API_URL}/admin/participation/events/${encodeURIComponent(eventId)}/participants${query}`,
       {
-        headers: {}`,
+        headers: {
+          ,
         },
       }
     );
@@ -471,7 +482,8 @@ export const adminService = {
 
     const query = params.toString() ? `?${params.toString()}` : '';
     const response = await fetch(`${API_URL}/admin/participation/jobs${query}`, {
-      headers: {}`,
+      headers: {
+        ,
       },
     });
 
@@ -497,7 +509,8 @@ export const adminService = {
     const response = await fetch(
       `${API_URL}/admin/participation/jobs/${encodeURIComponent(jobId)}/applicants${query}`,
       {
-        headers: {}`,
+        headers: {
+          ,
         },
       }
     );

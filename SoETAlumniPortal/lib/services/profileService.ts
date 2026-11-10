@@ -45,7 +45,8 @@ export const profileService = {
   async getMyProfile() {
     const response = await fetch(`${API_URL}/profile/me`, {
       method: 'GET',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
     });
@@ -73,7 +74,8 @@ export const profileService = {
   ) {
     const response = await fetch(`${API_URL}/profile/me`, {
       method: 'PUT',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -109,7 +111,8 @@ export const profileService = {
   ) {
     const response = await fetch(`${API_URL}/profile/me`, {
       method: 'PUT',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -143,7 +146,8 @@ export const profileService = {
 
     const response = await fetch(`${API_URL}/profile/avatar`, {
       method: 'POST',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ avatar_url: base64Url }),
@@ -161,7 +165,8 @@ export const profileService = {
   async updateAdminProfile(data: { fullName?: string }) {
     const response = await fetch(`${API_URL}/profile/me`, {
       method: 'PUT',
-      headers: {}`,
+      headers: {
+        ,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
