@@ -140,3 +140,31 @@ def test_alumni_directory_suppresses_unsafe_legacy_social_links(
     assert alumni["linkedin"] == ""
     assert alumni["github"] == ""
     assert alumni["website"] == "https://safe.example.com/profile"
+
+
+def test_pending_alumni_directory_suppresses_unsafe_legacy_social_links(
+    client, admin_user, unverified_alumni_user
+):
+    from database import users_collection
+
+    existing_user = users_collection.find_one({"_id": unverified_alumni_user["id"]})
+    legacy_profile = dict(existing_user.get("alumni_profile") or {})
+    legacy_profile.update({
+        "linkedin": "javascript:alert(1)",
+        "github": "https://user:password@example.com/profile",
+        "website": "https://safe.example.com/profile",
+    })
+    users_collection.update_one(
+        {"_id": unverified_alumni_user["id"]},
+        {"$set": {"alumni_profile": legacy_profile}},
+    )
+
+    response = client.get("/alumni/pending", headers=admin_user["headers"])
+    assert response.status_code == 200
+    alumni = next(
+        item for item in response.json()
+        if item["id"] == unverified_alumni_user["id"]
+    )
+    assert alumni["linkedin"] == ""
+    assert alumni["github"] == ""
+    assert alumni["website"] == "https://safe.example.com/profile"
