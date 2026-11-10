@@ -1,12 +1,6 @@
 const API_URL = '/api';
 
-function getToken(): string {
-  const token = localStorage.getItem('soet_access_token');
-  if (!token) {
-    throw new Error('Your session has expired. Please log in again.');
-  }
-  return token;
-}
+
 
 async function parseResponse(response: Response) {
   const data = await response.json().catch(() => ({}));
@@ -83,7 +77,7 @@ export const notificationService = {
     const response = await fetch(`${API_URL}/notifications`, {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${getToken()}`,
+
         'Content-Type': 'application/json',
       },
     });
@@ -102,7 +96,7 @@ export const notificationService = {
       {
         method: 'PATCH',
         headers: {
-          Authorization: `Bearer ${getToken()}`,
+
           'Content-Type': 'application/json',
         },
       }
@@ -119,7 +113,7 @@ export const notificationService = {
     const response = await fetch(`${API_URL}/notifications/read-all`, {
       method: 'PATCH',
       headers: {
-        Authorization: `Bearer ${getToken()}`,
+
         'Content-Type': 'application/json',
       },
     });
@@ -135,7 +129,7 @@ export const notificationService = {
     const response = await fetch(`${API_URL}/notifications/preferences`, {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${getToken()}`,
+
         'Content-Type': 'application/json',
       },
     });
@@ -151,7 +145,7 @@ export const notificationService = {
     const response = await fetch(`${API_URL}/notifications/preferences`, {
       method: 'PUT',
       headers: {
-        Authorization: `Bearer ${getToken()}`,
+
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(prefs),
@@ -168,7 +162,7 @@ export const notificationService = {
     const response = await fetch(`${API_URL}/notifications/deliveries?limit=${limit}`, {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${getToken()}`,
+
         'Content-Type': 'application/json',
       },
     });

@@ -55,17 +55,8 @@ export interface EventAttendeeItem {
 
 const API_URL = '/api';
 
-function getAuthHeaders() {
-  const token = localStorage.getItem('soet_access_token');
-
-  if (!token) {
-    throw new Error('Please log in again.');
-  }
-
-  return {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  };
+function getAuthHeaders(): Record<string, string> {
+  return { 'Content-Type': 'application/json' };
 }
 
 function normalizeEvent(e: any): EventItem {

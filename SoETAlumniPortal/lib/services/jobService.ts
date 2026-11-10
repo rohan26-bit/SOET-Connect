@@ -58,16 +58,7 @@ export interface JobApplicationItem {
 const API_URL = '/api';
 
 function getAuthHeaders() {
-  const token = localStorage.getItem('soet_access_token');
-
-  if (!token) {
-    throw new Error('Please log in again.');
-  }
-
-  return {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  };
+  return { 'Content-Type': 'application/json' };
 }
 
 function normalizeJob(job: any): JobItem {
@@ -361,10 +352,7 @@ export const jobService = {
     cover_letter?: string;
   }) {
 
-    const token = localStorage.getItem('soet_access_token');
-    if (!token) {
-      throw new Error('Please log in again.');
-    }
+
 
     const formData = new FormData();
     formData.append('job_id', applicationData.job_id);
@@ -378,7 +366,6 @@ export const jobService = {
       {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
         },
         body: formData,
       }

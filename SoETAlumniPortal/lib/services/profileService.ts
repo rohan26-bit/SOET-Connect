@@ -1,12 +1,6 @@
 const API_URL = '/api';
 
-function getToken(): string {
-  const token = localStorage.getItem('soet_access_token');
-  if (!token) {
-    throw new Error('Your session has expired. Please log in again.');
-  }
-  return token;
-}
+
 
 async function parseResponse(response: Response) {
   const data = await response.json().catch(() => ({}));
@@ -52,7 +46,7 @@ export const profileService = {
     const response = await fetch(`${API_URL}/profile/me`, {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${getToken()}`,
+
         'Content-Type': 'application/json',
       },
     });
@@ -81,7 +75,7 @@ export const profileService = {
     const response = await fetch(`${API_URL}/profile/me`, {
       method: 'PUT',
       headers: {
-        Authorization: `Bearer ${getToken()}`,
+
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -118,7 +112,7 @@ export const profileService = {
     const response = await fetch(`${API_URL}/profile/me`, {
       method: 'PUT',
       headers: {
-        Authorization: `Bearer ${getToken()}`,
+
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -153,7 +147,7 @@ export const profileService = {
     const response = await fetch(`${API_URL}/profile/avatar`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${getToken()}`,
+
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ avatar_url: base64Url }),
@@ -172,7 +166,7 @@ export const profileService = {
     const response = await fetch(`${API_URL}/profile/me`, {
       method: 'PUT',
       headers: {
-        Authorization: `Bearer ${getToken()}`,
+
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),

@@ -85,21 +85,14 @@ export const authService = {
       );
     }
 
-    if (!data.access_token || !data.user) {
-      throw new Error(
-        'Invalid response from authentication server.'
-      );
+    if (!data.user) {
+      throw new Error('Invalid response from authentication server.');
     }
 
-    localStorage.setItem(
-      'soet_access_token',
-      data.access_token
-    );
-
-    localStorage.setItem(
-      'soet_user',
-      JSON.stringify(data.user)
-    );
+    // The JWT is stored only in the server-set HttpOnly cookie. Keep only
+    // non-sensitive display data in localStorage for the dashboard shell.
+    localStorage.removeItem('soet_access_token');
+    localStorage.setItem('soet_user', JSON.stringify(data.user));
 
     const profile: UserProfile = {
       id: data.user.id,
@@ -113,8 +106,17 @@ export const authService = {
     };
 
     if (profile.role !== selectedRole) {
-      localStorage.removeItem('soet_access_token');
-      localStorage.removeItem('soet_user');
+      try {
+        await fetch(`${API_URL}/auth/logout`, {
+          method: 'POST',
+          credentials: 'same-origin',
+        });
+      } catch {
+        // Still clear local profile state when the network is unavailable.
+      } finally {
+        localStorage.removeItem('soet_access_token');
+        localStorage.removeItem('soet_user');
+      }
 
       throw new Error(
         `Access denied. Your account is registered as "${profile.role.toUpperCase()}", not "${selectedRole.toUpperCase()}". Please select the correct role.`
@@ -124,7 +126,6 @@ export const authService = {
     return {
       user: data.user,
       profile,
-      access_token: data.access_token,
     };
   },
 
@@ -303,20 +304,17 @@ export const authService = {
   // ============================================================
 
   async signOut() {
-    const token = localStorage.getItem('soet_access_token');
     try {
-      if (token) {
-        // Revoke this browser's session server-side before clearing local credentials.
-        await fetch(`${API_URL}/auth/logout`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      }
+      // The browser attaches the HttpOnly cookie automatically to this same-origin request.
+      await fetch(`${API_URL}/auth/logout`, {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
     } catch (error) {
       // Local sign-out must still complete during a temporary network outage.
       console.warn('Server-side sign out could not be confirmed:', error);
     } finally {
-      localStorage.removeItem('soet_access_token');
+      localStorage.removeItem('soet_access_token'); // Clear tokens left by older releases.
       localStorage.removeItem('soet_user');
     }
   },
@@ -336,12 +334,9 @@ export const authService = {
     }>;
     current_session_id: string;
   }> {
-    const token = localStorage.getItem('soet_access_token');
-    if (!token) throw new Error('Your session has expired. Please log in again.');
-
     const response = await fetch(`${API_URL}/auth/sessions`, {
       method: 'GET',
-      headers: { Authorization: `Bearer ${token}` },
+      credentials: 'same-origin',
       cache: 'no-store',
     });
     const result = await safeJsonParse(response);
@@ -357,12 +352,9 @@ export const authService = {
   },
 
   async revokeSession(sessionId: string): Promise<{ message: string }> {
-    const token = localStorage.getItem('soet_access_token');
-    if (!token) throw new Error('Your session has expired. Please log in again.');
-
     const response = await fetch(`${API_URL}/auth/sessions/${encodeURIComponent(sessionId)}`, {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
+      credentials: 'same-origin',
     });
     const result = await safeJsonParse(response);
     if (response.status === 401) {
@@ -375,12 +367,9 @@ export const authService = {
   },
 
   async revokeOtherSessions(): Promise<{ message: string; revoked_count: number }> {
-    const token = localStorage.getItem('soet_access_token');
-    if (!token) throw new Error('Your session has expired. Please log in again.');
-
     const response = await fetch(`${API_URL}/auth/sessions/revoke-others`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
+      credentials: 'same-origin',
     });
     const result = await safeJsonParse(response);
     if (response.status === 401) {
@@ -397,40 +386,38 @@ export const authService = {
   // ============================================================
 
   async getCurrentUserProfile(): Promise<UserProfile | null> {
-    const storedUser =
-      localStorage.getItem('soet_user');
+    // Remove any raw JWT persisted by a previous frontend release.
+    localStorage.removeItem('soet_access_token');
 
-    if (!storedUser) {
+    const response = await fetch(`${API_URL}/profile/me`, {
+      method: 'GET',
+      credentials: 'same-origin',
+      cache: 'no-store',
+    });
+
+    if (response.status === 401) {
+      localStorage.removeItem('soet_user');
       return null;
     }
 
-    try {
-      const user = JSON.parse(storedUser);
-
-      return {
-        id: user.id || user._id,
-        email: user.email,
-        role: user.role,
-        full_name: user.full_name || user.name || '',
-        avatar_url: user.avatar_url,
-        is_verified: user.is_verified,
-        is_active: user.is_active ?? true,
-        student_profile:
-          user.student_profile,
-        alumni_profile:
-          user.alumni_profile,
-      };
-    } catch {
-      localStorage.removeItem(
-        'soet_user'
-      );
-
-      localStorage.removeItem(
-        'soet_access_token'
-      );
-
-      return null;
+    const user = await safeJsonParse(response);
+    if (!response.ok) {
+      throw new Error(user.detail || 'Unable to verify your current session.');
     }
+
+    localStorage.setItem('soet_user', JSON.stringify(user));
+    return {
+      id: user.id || user._id,
+      email: user.email,
+      role: user.role,
+      full_name: user.full_name || user.name || '',
+      avatar_url: user.avatar_url,
+      is_verified: user.is_verified,
+      is_active: user.is_active ?? true,
+      student_profile: user.student_profile,
+      alumni_profile: user.alumni_profile,
+    };
+
   },
 
   // ============================================================
@@ -493,15 +480,10 @@ export const authService = {
   // ============================================================
 
   async sendPhoneVerification(phone: string): Promise<{ message: string }> {
-    const token = localStorage.getItem('soet_access_token');
-    if (!token) {
-      throw new Error('Your session has expired. Please log in again.');
-    }
-
     const response = await fetch(`${API_URL}/auth/phone/send-code`, {
       method: 'POST',
+      credentials: 'same-origin',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ phone }),
@@ -515,15 +497,10 @@ export const authService = {
   },
 
   async verifyPhoneVerification(phone: string, code: string): Promise<{ message: string }> {
-    const token = localStorage.getItem('soet_access_token');
-    if (!token) {
-      throw new Error('Your session has expired. Please log in again.');
-    }
-
     const response = await fetch(`${API_URL}/auth/phone/verify-code`, {
       method: 'POST',
+      credentials: 'same-origin',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ phone, code }),
@@ -544,16 +521,11 @@ export const authService = {
     current_password: string;
     new_password: string;
     confirm_new_password: string;
-  }): Promise<{ message: string; access_token: string; token_type: string }> {
-    const token = localStorage.getItem('soet_access_token');
-    if (!token) {
-      throw new Error('Your session has expired. Please log in again.');
-    }
-
+  }): Promise<{ message: string }> {
     const response = await fetch(`${API_URL}/auth/change-password`, {
       method: 'POST',
+      credentials: 'same-origin',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -563,11 +535,7 @@ export const authService = {
     if (!response.ok) {
       throw new Error(result.detail || 'Failed to change password.');
     }
-    if (!result.access_token) {
-      throw new Error('Password changed, but a replacement session token was not returned. Please sign in again.');
-    }
-    // The server has revoked the previous token version; store the rotated one.
-    localStorage.setItem('soet_access_token', result.access_token);
+    // The backend rotates the HttpOnly cookie after revoking other devices.
     return result;
   },
 };

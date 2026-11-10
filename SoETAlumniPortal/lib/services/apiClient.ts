@@ -1,9 +1,9 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+const API_URL = '/api';
 
 export { API_URL };
 
 /**
- * Completely clears the stored authentication session and notifies listeners.
+ * Clears non-secret cached user details and removes tokens left by older releases.
  */
 export function clearAuthSession(): void {
   if (typeof window !== 'undefined') {
@@ -21,49 +21,22 @@ export function redirectToLogin(reason: 'expired' | 'unauthorized' = 'expired'):
 
   if (typeof window !== 'undefined') {
     const currentPath = window.location.pathname;
-
-    // Avoid infinite redirect loops if already navigating/viewing login or registration pages
-    if (currentPath.startsWith('/login') || currentPath.startsWith('/register')) {
-      return;
-    }
-
+    if (currentPath.startsWith('/login') || currentPath.startsWith('/register')) return;
     const query = reason === 'expired' ? '?expired=1' : '';
     window.location.href = `/login${query}`;
   }
 }
 
 /**
- * Retrieves the current access token. If missing, triggers a session reset and throws.
- */
-export function getAuthToken(): string {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('soet_access_token') : null;
-
-  if (!token) {
-    redirectToLogin('expired');
-    throw new Error('Your session has expired. Please log in again.');
-  }
-
-  return token;
-}
-
-/**
- * Produces standard headers for authenticated JSON requests.
+ * Standard headers for cookie-authenticated JSON requests.
+ * The access token is intentionally unreadable to client JavaScript.
  */
 export function getAuthHeaders(): Record<string, string> {
-  const token = getAuthToken();
-
-  return {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  };
+  return { 'Content-Type': 'application/json' };
 }
 
 /**
- * Centralized response handler for API requests:
- * - 401 Unauthorized: Clears credentials, redirects to /login?expired=1, throws clean session error.
- * - 403 Forbidden: Preserves credentials and surfaces the backend permission error without logging out.
- * - Other !ok statuses: Surfaces the backend error detail.
- * - 2xx Success: Returns parsed JSON data.
+ * Centralized response handler for authenticated API requests.
  */
 export async function handleApiResponse<T = any>(response: Response): Promise<T> {
   if (response.status === 401) {
@@ -72,13 +45,11 @@ export async function handleApiResponse<T = any>(response: Response): Promise<T>
   }
 
   const data = await response.json().catch(() => ({}));
-
   if (!response.ok) {
     const detail =
       typeof data.detail === 'string'
         ? data.detail
         : JSON.stringify(data.detail || 'Request failed.');
-
     throw new Error(detail);
   }
 

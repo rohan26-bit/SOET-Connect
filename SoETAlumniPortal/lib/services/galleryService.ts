@@ -1,12 +1,6 @@
 const API_URL = '/api';
 
-function getToken(): string {
-  const token = localStorage.getItem('soet_access_token');
-  if (!token) {
-    throw new Error('Your session has expired. Please log in again.');
-  }
-  return token;
-}
+
 
 async function parseResponse(response: Response) {
   const data = await response.json().catch(() => ({}));
@@ -80,13 +74,10 @@ export const galleryService = {
       query.set('offset', String(params.offset));
     }
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('soet_access_token') : null;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
+
 
     const response = await fetch(`${API_URL}/gallery?${query.toString()}`, {
       method: 'GET',
@@ -108,7 +99,7 @@ export const galleryService = {
     const response = await fetch(`${API_URL}/gallery/mine`, {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${getToken()}`,
+
         'Content-Type': 'application/json',
       },
     });
@@ -133,7 +124,7 @@ export const galleryService = {
     const response = await fetch(`${API_URL}/gallery/upload`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${getToken()}`,
+
       },
       body: formData,
     });
@@ -149,7 +140,7 @@ export const galleryService = {
     const response = await fetch(`${API_URL}/gallery/admin?status=${status}`, {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${getToken()}`,
+
         'Content-Type': 'application/json',
       },
     });
@@ -170,7 +161,7 @@ export const galleryService = {
     const response = await fetch(`${API_URL}/gallery/${encodeURIComponent(photoId)}/status`, {
       method: 'PATCH',
       headers: {
-        Authorization: `Bearer ${getToken()}`,
+
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -190,7 +181,7 @@ export const galleryService = {
     const response = await fetch(`${API_URL}/gallery/${encodeURIComponent(photoId)}`, {
       method: 'DELETE',
       headers: {
-        Authorization: `Bearer ${getToken()}`,
+
         'Content-Type': 'application/json',
       },
     });

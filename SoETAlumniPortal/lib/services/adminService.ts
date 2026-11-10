@@ -180,15 +180,7 @@ function sortNewestFirst<T extends { created_at?: string }>(items: T[]): T[] {
   });
 }
 
-function getToken(): string {
-  const token = localStorage.getItem('soet_access_token');
 
-  if (!token) {
-    throw new Error('Your session has expired. Please log in again.');
-  }
-
-  return token;
-}
 
 async function parseResponse(response: Response) {
   const data = await response.json().catch(() => ({}));
@@ -217,7 +209,7 @@ export const adminService = {
       {
         method: 'GET',
         headers: {
-          Authorization: `Bearer ${getToken()}`,
+
           'Content-Type': 'application/json',
         },
       }
@@ -240,7 +232,7 @@ export const adminService = {
       {
         method: 'PATCH',
         headers: {
-          Authorization: `Bearer ${getToken()}`,
+
           'Content-Type': 'application/json',
         },
       }
@@ -259,7 +251,7 @@ export const adminService = {
     {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${getToken()}`,
+
         'Content-Type': 'application/json',
       },
     }
@@ -276,7 +268,7 @@ export const adminService = {
     const response = await fetch(`${API_URL}/admin/students`, {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${getToken()}`,
+
         'Content-Type': 'application/json',
       },
     });
@@ -310,7 +302,7 @@ export const adminService = {
     const response = await fetch(`${API_URL}/admin/students/pending`, {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${getToken()}`,
+
         'Content-Type': 'application/json',
       },
     });
@@ -348,7 +340,7 @@ export const adminService = {
       {
         method: 'PATCH',
         headers: {
-          Authorization: `Bearer ${getToken()}`,
+
           'Content-Type': 'application/json',
         },
       }
@@ -361,7 +353,7 @@ export const adminService = {
     const response = await fetch(`${API_URL}/admin/alumni`, {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${getToken()}`,
+
         'Content-Type': 'application/json',
       },
     });
@@ -406,7 +398,7 @@ export const adminService = {
       {
         method: 'PATCH',
         headers: {
-          Authorization: `Bearer ${getToken()}`,
+
           'Content-Type': 'application/json',
         },
       }
@@ -421,7 +413,7 @@ export const adminService = {
       {
         method: 'DELETE',
         headers: {
-          Authorization: `Bearer ${getToken()}`,
+
           'Content-Type': 'application/json',
         },
       }
@@ -445,7 +437,7 @@ export const adminService = {
     const query = params.toString() ? `?${params.toString()}` : '';
     const response = await fetch(`${API_URL}/admin/participation/events${query}`, {
       headers: {
-        Authorization: `Bearer ${getToken()}`,
+
       },
     });
 
@@ -472,7 +464,7 @@ export const adminService = {
       `${API_URL}/admin/participation/events/${encodeURIComponent(eventId)}/participants${query}`,
       {
         headers: {
-          Authorization: `Bearer ${getToken()}`,
+
         },
       }
     );
@@ -491,7 +483,7 @@ export const adminService = {
     const query = params.toString() ? `?${params.toString()}` : '';
     const response = await fetch(`${API_URL}/admin/participation/jobs${query}`, {
       headers: {
-        Authorization: `Bearer ${getToken()}`,
+
       },
     });
 
@@ -518,7 +510,7 @@ export const adminService = {
       `${API_URL}/admin/participation/jobs/${encodeURIComponent(jobId)}/applicants${query}`,
       {
         headers: {
-          Authorization: `Bearer ${getToken()}`,
+
         },
       }
     );

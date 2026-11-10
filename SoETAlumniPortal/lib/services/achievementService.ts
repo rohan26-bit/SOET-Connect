@@ -8,18 +8,7 @@
 const API_URL = '/api';
 
 function getAuthHeaders(): Record<string, string> {
-  const token = typeof window !== 'undefined'
-    ? localStorage.getItem('soet_access_token')
-    : null;
-
-  if (!token) {
-    throw new Error('Please sign in again to manage achievements.');
-  }
-
-  return {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  };
+  return { 'Content-Type': 'application/json' };
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
