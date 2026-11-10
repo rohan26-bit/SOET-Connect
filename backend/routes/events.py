@@ -896,6 +896,7 @@ def delete_event(
 
     supabase.table("event_registrations").delete().eq("event_id", str(event_id)).execute()
 
+    target_event["description"] = sanitize_document_attachment_text(target_event.get("description")) or ""
     return {
         "message": "Event deleted successfully.",
         "event": target_event,
