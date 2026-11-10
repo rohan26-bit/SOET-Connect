@@ -1599,7 +1599,7 @@ def test_sms_trial_error_invalidates_challenge(monkeypatch, verified_alumni_user
 
 
 def test_forgot_password_endpoint_cooldown_and_validity_metadata(client: TestClient, verified_alumni_user: dict):
-    """Forgot password endpoint returns 20s cooldown and 10min (600s) validity metadata."""
+    """Forgot password endpoint returns 60s cooldown and 10min (600s) validity metadata."""
     email = verified_alumni_user["email"]
     resp = client.post(
         "/api/auth/forgot-password",
@@ -1627,7 +1627,7 @@ def test_forgot_password_endpoint_nonexistent_user_anti_enumeration(client: Test
 
 def test_password_reset_send_limits_are_server_enforced(monkeypatch, verified_alumni_user: dict):
     """Password reset sends use a 60s cooldown and a three-per-hour account quota."""
-    from datetime import datetime, timezone
+    from datetime import datetime, timedelta, timezone
     import services.password_recovery as recovery
 
     current_time = [datetime.now(timezone.utc)]
