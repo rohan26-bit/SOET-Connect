@@ -545,6 +545,47 @@ def test_admin_can_toggle_student_active():
     assert data["is_active"] is True
 
 
+def test_deactivation_invalidates_existing_jwt_even_after_reactivation():
+    """Suspending an account revokes old JWTs permanently, not just while inactive."""
+    headers = setup_test_users()
+
+    # Give the target a known token version, then issue a token before suspension.
+    users_collection.update_one(
+        {"_id": "demo-student-id"},
+        {"$set": {"is_active": True, "session_version": 0}},
+    )
+    student_token = create_access_token(
+        "demo-student-id", "student", session_version=0,
+    )
+    student_headers = {"Authorization": f"Bearer {student_token}"}
+
+    # Confirm the token works and is lazily registered before deactivation.
+    before = client.get("/auth/sessions", headers=student_headers)
+    assert before.status_code == 200
+
+    suspended = client.patch(
+        "/admin/users/demo-student-id/active",
+        headers=headers["admin"],
+    )
+    assert suspended.status_code == 200
+    assert suspended.json()["is_active"] is False
+
+    blocked_while_suspended = client.get("/auth/sessions", headers=student_headers)
+    assert blocked_while_suspended.status_code == 403
+
+    reactivated = client.patch(
+        "/admin/users/demo-student-id/active",
+        headers=headers["admin"],
+    )
+    assert reactivated.status_code == 200
+    assert reactivated.json()["is_active"] is True
+
+    # The account is active again, but the old token's version remains stale.
+    blocked_after_reactivation = client.get("/auth/sessions", headers=student_headers)
+    assert blocked_after_reactivation.status_code == 401
+    assert "revoked" in blocked_after_reactivation.json()["detail"].lower()
+
+
 def test_admin_cannot_toggle_own_status():
     """Admin cannot change their own account status."""
     headers = setup_test_users()

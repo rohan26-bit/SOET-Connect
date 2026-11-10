@@ -726,10 +726,22 @@ def toggle_user_active(
 
     new_active = not target_user.get("is_active", True)
 
-    users_collection.update_one(
+    # Invalidate every previously issued JWT when an account is suspended.
+    # Incrementing the version also covers tokens that have not yet been
+    # lazily registered in auth_sessions. Reactivation must never revive them.
+    account_updates = {"is_active": new_active}
+    if not new_active:
+        account_updates["session_version"] = int(target_user.get("session_version") or 0) + 1
+
+    update_result = users_collection.update_one(
         {"_id": target_user["_id"]},
-        {"$set": {"is_active": new_active}}
+        {"$set": account_updates}
     )
+    if not update_result.modified_count:
+        raise HTTPException(
+            status_code=503,
+            detail="The account status could not be updated. Please try again.",
+        )
 
     return {
         "message": (
