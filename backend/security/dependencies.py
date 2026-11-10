@@ -68,8 +68,9 @@ def get_current_user(
     # signed token, so current users are not forcibly logged out at deployment.
     session_id = payload.get("session_id")
     try:
+        database_user_id = str(user.get("_db_id") or user["_id"])
         if session_id:
-            session_active = is_auth_session_active(session_id, str(user["_id"]))
+            session_active = is_auth_session_active(session_id, database_user_id)
         else:
             token_fingerprint = hashlib.sha256(token.encode("utf-8")).hexdigest()
             session_id = str(uuid.uuid5(
@@ -77,7 +78,7 @@ def get_current_user(
                 f"soet-connect-legacy-session:{token_fingerprint}",
             ))
             session_active = ensure_legacy_auth_session(
-                str(user["_id"]),
+                database_user_id,
                 session_id,
                 payload["expires_at"],
                 request.headers.get("user-agent"),
@@ -96,6 +97,7 @@ def get_current_user(
 
     return {
         "user_id": str(user["_id"]),
+        "database_user_id": database_user_id,
         "role": user.get("role", payload.get("role")),
         "session_id": str(session_id),
     }
