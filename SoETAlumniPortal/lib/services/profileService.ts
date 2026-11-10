@@ -46,7 +46,7 @@ export const profileService = {
     const response = await fetch(`${API_URL}/profile/me`, {
       method: 'GET',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
     });
@@ -75,7 +75,7 @@ export const profileService = {
     const response = await fetch(`${API_URL}/profile/me`, {
       method: 'PUT',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -112,7 +112,7 @@ export const profileService = {
     const response = await fetch(`${API_URL}/profile/me`, {
       method: 'PUT',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -147,7 +147,7 @@ export const profileService = {
     const response = await fetch(`${API_URL}/profile/avatar`, {
       method: 'POST',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ avatar_url: base64Url }),
@@ -166,7 +166,7 @@ export const profileService = {
     const response = await fetch(`${API_URL}/profile/me`, {
       method: 'PUT',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
