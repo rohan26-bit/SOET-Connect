@@ -12,7 +12,7 @@
 | Styles | The app stylesheet is emitted as a same-origin Next.js CSS chunk. Tailwind is compiled at build time. | Start with same-origin styles; inspect inline style attributes and framework-generated style blocks in a report-only rollout before enforcing. |
 | Fonts | The root layout imports `Geist` and `Geist_Mono` via `next/font/google`. Production HTML preloads WOFF2 files from `/_next/static/media/`. | Fonts are self-hosted by Next.js at runtime; no Google Fonts runtime origin is needed in `font-src`. |
 | Images | Brand/campus images are local public assets. Gallery image responses are served through same-origin `/api/gallery/{id}/image`. The current public placement record also uses a same-origin gallery image path. | `img-src 'self'` is the expected baseline. Add `data:` or `blob:` only if runtime inspection proves the UI needs them. |
-| Browser API connections | The location autocomplete component directly requests `https://photon.komoot.io/api/`. It also has a same-origin fallback at `/api/location-suggestions`. Other frontend API calls use same-origin `/api` routes. | A CSP preserving the current direct geocoding call needs `https://photon.komoot.io` in `connect-src`. Alternatively, route all autocomplete requests through the existing same-origin endpoint and remove the third-party browser connection. |
+| Browser API connections | The location autocomplete component uses the same-origin Next.js route `/location-suggestions`, which performs the Photon request server-side. The original `/api/location-suggestions` path was shadowed by Vercel's `/api/*` backend rewrite and returned a FastAPI 404. Other frontend API calls use same-origin `/api` routes. | The browser does not need Photon in `connect-src`; the same-origin `/location-suggestions` route performs geocoding server-side. |
 | Backend / database | The frontend uses same-origin `/api` paths; Next.js rewrites these to the configured backend URL. Supabase database and Storage operations are performed by the backend. | Do not add Supabase or the backend origin to browser `connect-src` unless a future frontend feature starts calling them directly. |
 
 ## Production observations
@@ -21,9 +21,11 @@ The production homepage and `/api/health` both returned HTTP 200 after PR #95. B
 
 The public `/api/placements` response was inspected: the current placement image URL is a relative `/api/gallery/{id}/image` path, not an external image host.
 
+The preview route `/location-suggestions?type=city&q=Aurangabad` returned HTTP 200 with suggestions. Both `/register/student` and `/register/alumni` returned HTTP 200. The old `/api/location-suggestions` path returned the FastAPI 404 as expected after moving the handler outside the reserved backend prefix.
+
 ## Recommended CSP rollout
 
-1. Prefer removing the direct Photon browser request and use the existing same-origin `/api/location-suggestions` endpoint for autocomplete. This reduces the browser allowlist and avoids exposing user-entered location queries directly to a third-party browser request.
+1. Keep autocomplete on the same-origin `/location-suggestions` endpoint. The Next.js handler must stay outside `/api` because Vercel reserves `/api/*` for the FastAPI service.
 2. Implement nonce-based CSP support for Next.js App Router inline scripts. Do not ship an enforced policy that breaks hydration, login, registration, dashboards, chat, or gallery pages.
 3. Add a report-only phase and exercise every role and major route. Record actual violations before moving to enforcement.
 4. Start from restrictive directives such as `default-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `frame-ancestors 'none'`, and `form-action 'self'`; finalize script/style/image/connect directives only after report-only validation.
