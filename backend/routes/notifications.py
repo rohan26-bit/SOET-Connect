@@ -71,7 +71,7 @@ def mark_notification_read(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user.get("user_id"))
-    notifications = load_notifications()
+    notifications = _load_notifications_or_503()
 
     for n in notifications:
         if str(n.get("id")) == str(notification_id):
@@ -110,7 +110,7 @@ def mark_all_notifications_read(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user.get("user_id"))
-    notifications = load_notifications()
+    notifications = _load_notifications_or_503()
 
     user_notifs = [n for n in notifications if str(n.get("user_id")) == user_id and not n.get("is_read")]
     now_iso = datetime.now(timezone.utc).isoformat()
