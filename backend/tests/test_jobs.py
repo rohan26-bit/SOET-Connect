@@ -264,3 +264,84 @@ def test_expired_job_details_are_hidden_from_owner_but_visible_to_admin(
     assert admin_view.status_code == 200
     assert admin_view.json()["is_expired"] is True
     assert admin_view.json()["auto_delete_at"]
+
+
+def test_job_external_application_url_rejects_unsafe_schemes(client, admin_user):
+    """Job postings must not store script/data/file URLs as external application links."""
+    unsafe_urls = [
+        "javascript:alert(1)",
+        "data:text/html,<script>alert(1)</script>",
+        "ftp://careers.example.com/apply",
+        "https://user:password@careers.example.com/apply",
+        "https:///missing-host",
+        "https://careers.example.com:invalid/apply",
+        "https://careers.example.com/apply with spaces",
+    ]
+
+    for application_url in unsafe_urls:
+        response = client.post(
+            "/jobs",
+            json={
+                "title": "Unsafe Link Test",
+                "company": "Example",
+                "description": "A job posting with an invalid application link.",
+                "location": "Remote",
+                "employment_type": "full-time",
+                "application_url": application_url,
+            },
+            headers=admin_user["headers"],
+        )
+        assert response.status_code == 422
+
+
+def test_job_external_application_url_accepts_http_and_https(client, admin_user):
+    """Valid absolute HTTP(S) application links continue to work."""
+    for application_url in (
+        "https://careers.example.com/roles/backend-intern",
+        "http://careers.example.com/roles/backend-intern",
+    ):
+        response = client.post(
+            "/jobs",
+            json={
+                "title": "External Link Test",
+                "company": "Example",
+                "description": "Apply on the employer website.",
+                "location": "Remote",
+                "employment_type": "internship",
+                "application_url": application_url,
+            },
+            headers=admin_user["headers"],
+        )
+        assert response.status_code == 200
+        assert response.json()["job"]["application_url"] == application_url
+
+
+def test_legacy_unsafe_job_application_links_are_sanitized(client, admin_user):
+    """Unsafe application links already stored in jobs must not be returned to clients."""
+    response = client.post(
+        "/jobs",
+        json={
+            "title": "Legacy Link Test",
+            "company": "Example",
+            "description": "A job posting for legacy URL sanitization.",
+            "location": "Remote",
+            "employment_type": "full-time",
+            "application_url": "https://careers.example.com/apply",
+        },
+        headers=admin_user["headers"],
+    )
+    assert response.status_code == 200
+    job_id = response.json()["job"]["id"]
+
+    supabase.table("jobs").update({
+        "application_url": "javascript:alert(1)",
+    }).eq("id", job_id).execute()
+
+    listed = client.get("/jobs", headers=admin_user["headers"])
+    assert listed.status_code == 200
+    listed_job = next(item for item in listed.json() if item["id"] == job_id)
+    assert listed_job["application_url"] == ""
+
+    details = client.get(f"/jobs/{job_id}", headers=admin_user["headers"])
+    assert details.status_code == 200
+    assert details.json()["application_url"] == ""
