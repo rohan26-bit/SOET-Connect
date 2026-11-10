@@ -58,7 +58,10 @@ def _load_aci_source_data() -> tuple[list[dict], list[dict], list[dict]]:
             return supabase.table(table_name).select(columns).execute().data or []
         except Exception as exc:
             print(f"Unable to load {table_name} for ACI: {exc}")
-            return []
+            raise HTTPException(
+                status_code=503,
+                detail="Alumni contribution data is temporarily unavailable. Please try again.",
+            ) from exc
 
     return (
         _load("jobs", JOBS_FILE, "id,posted_by,status"),
@@ -331,8 +334,12 @@ def get_alumni_directory(
         if not data:
             try:
                 data = supabase.table(table_name).select(columns).execute().data or []
-            except Exception:
-                data = []
+            except Exception as exc:
+                print(f"Unable to load {table_name} for alumni directory: {exc}")
+                raise HTTPException(
+                    status_code=503,
+                    detail="Alumni contribution data is temporarily unavailable. Please try again.",
+                ) from exc
         return data
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
