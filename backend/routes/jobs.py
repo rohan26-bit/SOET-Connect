@@ -578,7 +578,7 @@ def update_job_status(
 
     return {
         "message": f"Job {request.status} successfully.",
-        "job": job
+        "job": sanitize_job_document(job)
     }
 
 
