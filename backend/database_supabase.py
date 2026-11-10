@@ -146,6 +146,7 @@ _mock_store: Dict[str, List[dict]] = {
     "notification_deliveries": [],
     "password_reset_challenges": [],
     "phone_verification_codes": [],
+    "auth_sessions": [],
 }
 
 
