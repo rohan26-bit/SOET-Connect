@@ -365,6 +365,11 @@ export const authService = {
       headers: { Authorization: `Bearer ${token}` },
     });
     const result = await safeJsonParse(response);
+    if (response.status === 401) {
+      localStorage.removeItem('soet_access_token');
+      localStorage.removeItem('soet_user');
+      throw new Error('Your session has expired or has been revoked. Please sign in again.');
+    }
     if (!response.ok) throw new Error(result.detail || 'Unable to sign out that device.');
     return result;
   },
@@ -378,6 +383,11 @@ export const authService = {
       headers: { Authorization: `Bearer ${token}` },
     });
     const result = await safeJsonParse(response);
+    if (response.status === 401) {
+      localStorage.removeItem('soet_access_token');
+      localStorage.removeItem('soet_user');
+      throw new Error('Your session has expired or has been revoked. Please sign in again.');
+    }
     if (!response.ok) throw new Error(result.detail || 'Unable to sign out other devices.');
     return result;
   },
