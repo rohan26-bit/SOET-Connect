@@ -1298,7 +1298,7 @@ def test_unfamiliar_sign_in_sends_one_privacy_safe_email_per_six_hours(client, m
     assert alert["recipient"] == payload["email"]
     assert "new sign-in" in alert["subject"].lower()
     assert "Chrome on Windows" in alert["message"]
-    assert "new network" in alert["message"].lower()
+    assert "network not seen in your recent sign-in history" in alert["message"].lower()
     assert "203.0.113.11" not in alert["message"]
     assert "203.0.113.10" not in alert["message"]
     assert "/account/sessions" in alert["message"]
