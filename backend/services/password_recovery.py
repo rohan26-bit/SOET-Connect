@@ -11,6 +11,7 @@ from database import supabase, users_collection
 from pwdlib import PasswordHash
 from services import delivery
 from services.session_security import update_password_and_revoke_sessions
+from services.auth_security_events import device_label_from_user_agent, record_auth_event
 
 password_hasher = PasswordHash.recommended()
 
@@ -263,6 +264,7 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
         ),
         "code_hash": code_hash,
         "token_hash": None,
+        "code_verified_at": None,
         "attempts": 0,
         "max_attempts": MAX_ATTEMPTS,
         "is_used": False,
@@ -486,6 +488,12 @@ def verify_password_reset_code(identifier: str, code: str) -> Tuple[bool, str, O
         _invalidate_challenge(str(challenge["id"]), now)
         return False, "Verification code has expired. Please request a new one.", None
 
+    # A successful code check consumes the OTP even before the reset itself.
+    # The short-lived reset token is then the only credential accepted by the
+    # password-change step; replaying the six-digit code cannot mint new tokens.
+    if challenge.get("token_hash") or challenge.get("code_verified_at"):
+        return False, "This verification code has already been used. Please restart password recovery.", None
+
     max_attempts = int(challenge.get("max_attempts") or MAX_ATTEMPTS)
     if int(challenge.get("attempts") or 0) >= max_attempts:
         _invalidate_challenge(str(challenge["id"]), now)
@@ -523,18 +531,54 @@ def verify_password_reset_code(identifier: str, code: str) -> Tuple[bool, str, O
 
     reset_token = secrets.token_urlsafe(32)
     token_hash = _hash_value(reset_token)
+    verified_at = datetime.now(timezone.utc).isoformat()
     try:
-        supabase.table("password_reset_challenges").update({
-            "token_hash": token_hash,
-        }).eq("id", str(challenge["id"])).eq("is_used", False).execute()
+        if os.getenv("DATABASE_MODE", "").strip().lower() == "mock":
+            # Match the production compare-and-set operation: only one request can
+            # move an unused challenge into its verified-token state.
+            updated = (
+                supabase.table("password_reset_challenges")
+                .update({
+                    "token_hash": token_hash,
+                    "code_verified_at": verified_at,
+                })
+                .eq("id", str(challenge["id"]))
+                .eq("is_used", False)
+                .is_("token_hash", "null")
+                .is_("code_verified_at", "null")
+                .execute()
+            )
+            if not updated.data:
+                return False, "This verification code has already been used. Please restart password recovery.", None
+        else:
+            consumed = supabase.rpc(
+                "consume_password_reset_code",
+                {
+                    "p_challenge_id": str(challenge["id"]),
+                    "p_token_hash": token_hash,
+                    "p_now": verified_at,
+                },
+            ).execute().data
+            if not consumed:
+                return False, "This verification code has already been used. Please restart password recovery.", None
+            if isinstance(consumed, list):
+                first = consumed[0] if consumed else False
+                consumed = next(iter(first.values()), False) if isinstance(first, dict) else first
+            if not consumed:
+                return False, "This verification code has already been used. Please restart password recovery.", None
     except Exception as exc:
-        print(f"Unable to issue password reset token for challenge {challenge.get('id')}: {exc}")
+        print(f"Unable to issue password reset token for challenge {challenge.get('id')}: {type(exc).__name__}")
         return False, "Unable to verify the code right now. Please try again.", None
 
     return True, "Verification code confirmed.", reset_token
 
 
-def reset_password_with_token(reset_token: str, new_password: str) -> Tuple[bool, str]:
+def reset_password_with_token(
+    reset_token: str,
+    new_password: str,
+    user_agent: str | None = None,
+    client_ip: str | None = None,
+) -> Tuple[bool, str]:
     """
     Complete password reset with a single-use token.
     Password replacement, challenge consumption and JWT session revocation are atomic in production.
@@ -564,6 +608,8 @@ def reset_password_with_token(reset_token: str, new_password: str) -> Tuple[bool
     expires_at = _parse_phone_code_timestamp(challenge.get("expires_at"))
     if not expires_at or expires_at <= now:
         return False, "Reset token has expired. Please restart the recovery process."
+    if not challenge.get("code_verified_at"):
+        return False, "Invalid or expired password reset token."
 
     user_id = str(challenge["user_id"])
     hashed_password = password_hasher.hash(new_password)
@@ -617,6 +663,18 @@ def reset_password_with_token(reset_token: str, new_password: str) -> Tuple[bool
     except Exception as exc:
         print(f"Atomic password reset failed for user {user_id}: {exc}")
         return False, "Unable to update your password right now. Please try again."
+
+    try:
+        record_auth_event(
+            user_id=user_id,
+            event_type="password_reset",
+            device_label=device_label_from_user_agent(user_agent),
+            client_ip=client_ip,
+        )
+    except Exception as exc:
+        # Password replacement must remain successful even if the audit store is
+        # temporarily unavailable; never log the reset token or contact details.
+        print(f"Unable to record password reset security event: {type(exc).__name__}")
 
     return True, "Password reset successfully. You can now log in with your new password."
 

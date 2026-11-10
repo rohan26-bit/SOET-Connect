@@ -27,6 +27,12 @@ from services.login_rate_limit import (
     get_client_ip,
     record_login_failure,
 )
+from services.auth_security_events import (
+    list_auth_events,
+    record_auth_event,
+    record_sign_in_event,
+)
+from services.auth_sessions import device_label_from_user_agent
 
 
 load_dotenv()
@@ -324,6 +330,18 @@ def login_user(user: LoginRequest, request: Request, response: Response):
             detail="Sign-in is temporarily unavailable. Please try again.",
         ) from exc
 
+    # Ignore the just-created session when checking whether this browser/platform is new.
+    try:
+        token_payload = decode_access_token(access_token)
+        record_sign_in_event(
+            user_id=str(existing_user.get("_db_id") or existing_user["_id"]),
+            user_agent=request.headers.get("user-agent"),
+            client_ip=client_ip,
+            current_session_id=token_payload.get("session_id"),
+        )
+    except Exception as exc:
+        print(f"Unable to record successful sign-in security event: {type(exc).__name__}")
+
     set_auth_cookie(response, access_token)
     result = {
         "message": "Login successful.",
@@ -428,6 +446,16 @@ def change_password(
         ) from exc
 
     set_auth_cookie(response, replacement_token)
+    try:
+        record_auth_event(
+            user_id=str(existing_user.get("_db_id") or existing_user["_id"]),
+            event_type="password_changed",
+            device_label=device_label_from_user_agent(request.headers.get("user-agent")),
+            client_ip=get_client_ip(request),
+        )
+    except Exception as exc:
+        print(f"Unable to record password change security event: {type(exc).__name__}")
+
     result = {
         "message": "Password changed successfully. Other active sessions have been signed out.",
     }
@@ -442,7 +470,7 @@ def change_password(
 # ============================================================
 
 @router.post("/logout")
-def logout(response: Response, current_user: dict = Depends(get_current_user)):
+def logout(request: Request, response: Response, current_user: dict = Depends(get_current_user)):
     """Revoke this browser/device session on the server."""
     try:
         revoke_auth_session(
@@ -456,6 +484,15 @@ def logout(response: Response, current_user: dict = Depends(get_current_user)):
             detail="Unable to complete secure sign out right now. Please try again.",
         ) from exc
     clear_auth_cookie(response)
+    try:
+        record_auth_event(
+            user_id=current_user["database_user_id"],
+            event_type="signed_out",
+            device_label=device_label_from_user_agent(request.headers.get("user-agent")),
+            client_ip=get_client_ip(request),
+        )
+    except Exception as exc:
+        print(f"Unable to record sign-out security event: {type(exc).__name__}")
     return {"message": "You have been signed out successfully."}
 
 
@@ -498,6 +535,14 @@ def sign_out_device(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="That active session was not found.",
         )
+    try:
+        record_auth_event(
+            user_id=current_user["database_user_id"],
+            event_type="sessions_revoked",
+            device_label="Another signed-in device",
+        )
+    except Exception as exc:
+        print(f"Unable to record device revocation security event: {type(exc).__name__}")
     return {"message": "The selected device has been signed out."}
 
 
@@ -515,10 +560,32 @@ def sign_out_other_devices(current_user: dict = Depends(get_current_user)):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Unable to sign out other devices right now. Please try again.",
         ) from exc
+    try:
+        if revoked_count:
+            record_auth_event(
+                user_id=current_user["database_user_id"],
+                event_type="sessions_revoked",
+                device_label="All other devices",
+            )
+    except Exception as exc:
+        print(f"Unable to record bulk session revocation security event: {type(exc).__name__}")
     return {
         "message": "All other active devices have been signed out.",
         "revoked_count": revoked_count,
     }
+
+
+@router.get("/security-events")
+def get_security_events(current_user: dict = Depends(get_current_user)):
+    """Return recent sign-in and password/session security activity for this account."""
+    try:
+        return {"events": list_auth_events(current_user["database_user_id"], limit=25)}
+    except Exception as exc:
+        print(f"Security activity lookup failed: {type(exc).__name__}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to load recent security activity right now. Please try again.",
+        ) from exc
 
 
 # ============================================================
@@ -585,7 +652,7 @@ def verify_reset_code_endpoint(payload: VerifyResetCodeRequest):
 
 
 @router.post("/reset-password")
-def reset_password_endpoint(payload: ResetPasswordRequest):
+def reset_password_endpoint(payload: ResetPasswordRequest, request: Request):
     """Reset password with verified reset token."""
     if payload.confirm_password is not None and payload.new_password != payload.confirm_password:
         raise HTTPException(status_code=400, detail="New password and confirmation do not match.")
@@ -593,7 +660,12 @@ def reset_password_endpoint(payload: ResetPasswordRequest):
     if len(payload.new_password.strip()) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters long.")
 
-    success, message = reset_password_with_token(payload.reset_token, payload.new_password)
+    success, message = reset_password_with_token(
+        payload.reset_token,
+        payload.new_password,
+        user_agent=request.headers.get("user-agent"),
+        client_ip=get_client_ip(request),
+    )
     if not success:
         raise HTTPException(status_code=400, detail=message)
 

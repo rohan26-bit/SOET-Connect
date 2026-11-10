@@ -147,6 +147,7 @@ _mock_store: Dict[str, List[dict]] = {
     "password_reset_challenges": [],
     "phone_verification_codes": [],
     "auth_sessions": [],
+    "auth_security_events": [],
 }
 
 
@@ -211,6 +212,10 @@ class MockUpdateBuilder:
         self.builder.eq(column, value)
         return self
 
+    def is_(self, column: str, value: str) -> 'MockUpdateBuilder':
+        self.builder.is_(column, value)
+        return self
+
     def execute(self) -> QueryResult:
         table_rows = _mock_store.setdefault(self.builder.table_name, [])
         updated = []
@@ -273,6 +278,10 @@ class MockQueryBuilder:
         self.filters.append((column, "neq", value))
         return self
 
+    def is_(self, column: str, value: str):
+        self.filters.append((column, "is", value))
+        return self
+
     def in_(self, column: str, values: list):
         self.filters.append((column, "in", values))
         return self
@@ -317,6 +326,11 @@ class MockQueryBuilder:
                     return False
             elif op == "neq":
                 if str(row_val if row_val is not None else "").strip().lower() == str(val if val is not None else "").strip().lower():
+                    return False
+            elif op == "is":
+                if str(val).lower() == "null" and row_val is not None:
+                    return False
+                if str(val).lower() == "not_null" and row_val is None:
                     return False
             elif op == "in":
                 vals = [str(v).strip().lower() for v in val]
