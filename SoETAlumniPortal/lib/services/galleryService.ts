@@ -99,7 +99,7 @@ export const galleryService = {
     const response = await fetch(`${API_URL}/gallery/mine`, {
       method: 'GET',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
     });
@@ -124,7 +124,7 @@ export const galleryService = {
     const response = await fetch(`${API_URL}/gallery/upload`, {
       method: 'POST',
       headers: {
-        ,
+
       },
       body: formData,
     });
@@ -140,7 +140,7 @@ export const galleryService = {
     const response = await fetch(`${API_URL}/gallery/admin?status=${status}`, {
       method: 'GET',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
     });
@@ -161,7 +161,7 @@ export const galleryService = {
     const response = await fetch(`${API_URL}/gallery/${encodeURIComponent(photoId)}/status`, {
       method: 'PATCH',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -181,7 +181,7 @@ export const galleryService = {
     const response = await fetch(`${API_URL}/gallery/${encodeURIComponent(photoId)}`, {
       method: 'DELETE',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
     });

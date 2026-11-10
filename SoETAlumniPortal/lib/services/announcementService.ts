@@ -52,7 +52,7 @@ export const announcementService = {
     const response = await fetch(`${API_URL}/announcements`, {
       method: 'GET',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
     });
@@ -90,7 +90,7 @@ export const announcementService = {
     const response = await fetch(`${API_URL}/announcements`, {
       method: 'POST',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -134,7 +134,7 @@ export const announcementService = {
       {
         method: 'PATCH',
         headers: {
-          ,
+
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
@@ -154,7 +154,7 @@ export const announcementService = {
       {
         method: 'DELETE',
         headers: {
-          ,
+
           'Content-Type': 'application/json',
         },
       }

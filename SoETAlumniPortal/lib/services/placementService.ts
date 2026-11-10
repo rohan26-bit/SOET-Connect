@@ -78,7 +78,7 @@ export const placementService = {
     const response = await fetch(`${API_URL}/placements`, {
       method: 'POST',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(input),
@@ -90,7 +90,7 @@ export const placementService = {
     const response = await fetch(`${API_URL}/placements/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(input),

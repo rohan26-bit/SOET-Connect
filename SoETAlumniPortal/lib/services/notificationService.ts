@@ -77,7 +77,7 @@ export const notificationService = {
     const response = await fetch(`${API_URL}/notifications`, {
       method: 'GET',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
     });
@@ -96,7 +96,7 @@ export const notificationService = {
       {
         method: 'PATCH',
         headers: {
-          ,
+
           'Content-Type': 'application/json',
         },
       }
@@ -113,7 +113,7 @@ export const notificationService = {
     const response = await fetch(`${API_URL}/notifications/read-all`, {
       method: 'PATCH',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
     });
@@ -129,7 +129,7 @@ export const notificationService = {
     const response = await fetch(`${API_URL}/notifications/preferences`, {
       method: 'GET',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
     });
@@ -145,7 +145,7 @@ export const notificationService = {
     const response = await fetch(`${API_URL}/notifications/preferences`, {
       method: 'PUT',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(prefs),
@@ -162,7 +162,7 @@ export const notificationService = {
     const response = await fetch(`${API_URL}/notifications/deliveries?limit=${limit}`, {
       method: 'GET',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
     });

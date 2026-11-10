@@ -70,7 +70,7 @@ export const chatService = {
     const response = await fetch(`${API_URL}/chat/presence`, {
       method: 'POST',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
       cache: 'no-store',
@@ -86,7 +86,7 @@ export const chatService = {
     const response = await fetch(`${API_URL}/chat/conversations`, {
       method: 'GET',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
       cache: 'no-store',
@@ -104,7 +104,7 @@ export const chatService = {
     const response = await fetch(`${API_URL}/chat/conversations`, {
       method: 'POST',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ participant_id: participantId }),
@@ -123,7 +123,7 @@ export const chatService = {
       {
         method: 'GET',
         headers: {
-          ,
+
           'Content-Type': 'application/json',
         },
       }
@@ -142,7 +142,7 @@ export const chatService = {
       {
         method: 'DELETE',
         headers: {
-          ,
+
           'Content-Type': 'application/json',
         },
       }
@@ -161,7 +161,7 @@ export const chatService = {
       {
         method: 'GET',
         headers: {
-          ,
+
           'Content-Type': 'application/json',
         },
         cache: 'no-store',
@@ -182,7 +182,7 @@ export const chatService = {
       {
         method: 'POST',
         headers: {
-          ,
+
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ content }),
@@ -239,7 +239,7 @@ export const chatService = {
       {
         method: 'PATCH',
         headers: {
-          ,
+
           'Content-Type': 'application/json',
         },
       }

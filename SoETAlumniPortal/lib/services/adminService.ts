@@ -209,7 +209,7 @@ export const adminService = {
       {
         method: 'GET',
         headers: {
-          ,
+
           'Content-Type': 'application/json',
         },
       }
@@ -232,7 +232,7 @@ export const adminService = {
       {
         method: 'PATCH',
         headers: {
-          ,
+
           'Content-Type': 'application/json',
         },
       }
@@ -251,7 +251,7 @@ export const adminService = {
     {
       method: 'GET',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
     }
@@ -268,7 +268,7 @@ export const adminService = {
     const response = await fetch(`${API_URL}/admin/students`, {
       method: 'GET',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
     });
@@ -302,7 +302,7 @@ export const adminService = {
     const response = await fetch(`${API_URL}/admin/students/pending`, {
       method: 'GET',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
     });
@@ -340,7 +340,7 @@ export const adminService = {
       {
         method: 'PATCH',
         headers: {
-          ,
+
           'Content-Type': 'application/json',
         },
       }
@@ -353,7 +353,7 @@ export const adminService = {
     const response = await fetch(`${API_URL}/admin/alumni`, {
       method: 'GET',
       headers: {
-        ,
+
         'Content-Type': 'application/json',
       },
     });
@@ -398,7 +398,7 @@ export const adminService = {
       {
         method: 'PATCH',
         headers: {
-          ,
+
           'Content-Type': 'application/json',
         },
       }
@@ -413,7 +413,7 @@ export const adminService = {
       {
         method: 'DELETE',
         headers: {
-          ,
+
           'Content-Type': 'application/json',
         },
       }
@@ -437,7 +437,7 @@ export const adminService = {
     const query = params.toString() ? `?${params.toString()}` : '';
     const response = await fetch(`${API_URL}/admin/participation/events${query}`, {
       headers: {
-        ,
+
       },
     });
 
@@ -464,7 +464,7 @@ export const adminService = {
       `${API_URL}/admin/participation/events/${encodeURIComponent(eventId)}/participants${query}`,
       {
         headers: {
-          ,
+
         },
       }
     );
@@ -483,7 +483,7 @@ export const adminService = {
     const query = params.toString() ? `?${params.toString()}` : '';
     const response = await fetch(`${API_URL}/admin/participation/jobs${query}`, {
       headers: {
-        ,
+
       },
     });
 
@@ -510,7 +510,7 @@ export const adminService = {
       `${API_URL}/admin/participation/jobs/${encodeURIComponent(jobId)}/applicants${query}`,
       {
         headers: {
-          ,
+
         },
       }
     );
