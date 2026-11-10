@@ -4,7 +4,7 @@ import io
 import re
 from urllib.parse import urlparse
 
-from PIL import Image, UnidentifiedImageError
+from PIL import Image
 
 
 MAX_AVATAR_BYTES = 2 * 1024 * 1024
