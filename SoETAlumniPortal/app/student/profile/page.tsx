@@ -208,7 +208,7 @@ export default function ProfilePage() {
                 <Camera className="w-4 h-4" />
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp"
                   onChange={handlePhotoUpload}
                   className="hidden"
                 />
