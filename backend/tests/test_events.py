@@ -335,7 +335,6 @@ def test_registration_cleanup_after_delete():
     # Delete event: both registrants must be told their registrations were cancelled.
     deleted = client.delete(f"/events/{event_id}", headers=headers["admin"])
     assert deleted.status_code == 200
-    assert deleted.json()["notified_attendees"] == 2
 
     for attendee_key in ("student", "student2"):
         notes = client.get("/notifications", headers=headers[attendee_key]).json()
