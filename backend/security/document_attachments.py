@@ -45,15 +45,13 @@ def _validate_document_file(name: object, kind: object, size: object, data_url: 
     if isinstance(size, bool) or not isinstance(size, int) or size <= 0 or size > MAX_DOCUMENT_BYTES:
         raise ValueError("Attached document must be between 1 byte and 10 MB.")
 
-    if not isinstance(data_url, str):
+    if not isinstance(data_url, str) or "," not in data_url:
         raise ValueError("Attached document data is invalid.")
-    match = _DATA_URI_RE.fullmatch(data_url)
-    if not match or match.group(1).lower() != expected_mime:
+    header, encoded = data_url.split(",", 1)
+    if header.lower() != f"data:{expected_mime};base64":
         raise ValueError("Attached document data type does not match its filename.")
-
-    encoded = match.group(2)
     max_encoded_length = ((MAX_DOCUMENT_BYTES + 2) // 3) * 4
-    if len(encoded) > max_encoded_length:
+    if not encoded or len(encoded) > max_encoded_length:
         raise ValueError("Attached document exceeds the 10 MB size limit.")
 
     try:
@@ -85,8 +83,8 @@ def _validate_document_file(name: object, kind: object, size: object, data_url: 
 
             total_uncompressed = 0
             for entry in entries:
-                path = PurePosixPath(entry.filename)
-                if path.is_absolute() or ".." in path.parts or entry.flag_bits & 0x1:
+                entry_path = PurePosixPath(entry.filename)
+                if entry_path.is_absolute() or ".." in entry_path.parts or entry.flag_bits & 0x1:
                     raise ValueError("Attached DOCX contains an unsafe archive entry.")
                 total_uncompressed += entry.file_size
                 if total_uncompressed > MAX_DOCX_UNCOMPRESSED_BYTES:
@@ -99,7 +97,6 @@ def _validate_document_file(name: object, kind: object, size: object, data_url: 
         raise
     except (OSError, zipfile.BadZipFile, RuntimeError) as exc:
         raise ValueError("Attached file is not a valid DOCX document.") from exc
-
 
 def validate_document_attachment_text(value: str | None) -> str | None:
     """Validate the shared PDF/DOC/DOCX attachment metadata embedded in text."""
