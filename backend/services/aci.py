@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 from database import users_collection, supabase
@@ -107,7 +108,11 @@ def calculate_alumni_aci(
     # Load data from Supabase if not passed in (scoped specifically to this alumnus)
     if jobs is None:
         # Check if monkeypatched file exists (for tests)
-        if JOBS_FILE.exists() and JOBS_FILE.read_text(encoding="utf-8").strip() not in ("", "[]"):
+        if (
+            os.getenv("DATABASE_MODE", "").strip().lower() == "mock"
+            and JOBS_FILE.exists()
+            and JOBS_FILE.read_text(encoding="utf-8").strip() not in ("", "[]")
+        ):
             jobs = load_json_data(JOBS_FILE)
         else:
             try:
@@ -117,7 +122,11 @@ def calculate_alumni_aci(
                 raise RuntimeError("Alumni contribution job data is temporarily unavailable.") from exc
 
     if events is None:
-        if EVENTS_FILE.exists() and EVENTS_FILE.read_text(encoding="utf-8").strip() not in ("", "[]"):
+        if (
+            os.getenv("DATABASE_MODE", "").strip().lower() == "mock"
+            and EVENTS_FILE.exists()
+            and EVENTS_FILE.read_text(encoding="utf-8").strip() not in ("", "[]")
+        ):
             events = load_json_data(EVENTS_FILE)
         else:
             try:
@@ -127,7 +136,11 @@ def calculate_alumni_aci(
                 raise RuntimeError("Alumni contribution event data is temporarily unavailable.") from exc
 
     if registrations is None:
-        if REGISTRATIONS_FILE.exists() and REGISTRATIONS_FILE.read_text(encoding="utf-8").strip() not in ("", "[]"):
+        if (
+            os.getenv("DATABASE_MODE", "").strip().lower() == "mock"
+            and REGISTRATIONS_FILE.exists()
+            and REGISTRATIONS_FILE.read_text(encoding="utf-8").strip() not in ("", "[]")
+        ):
             registrations = load_json_data(REGISTRATIONS_FILE)
         else:
             try:
