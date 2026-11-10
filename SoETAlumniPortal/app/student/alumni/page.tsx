@@ -27,7 +27,7 @@ function getAciRecognition(score: number) {
 
 function safeExternalProfileUrl(value?: string): string | null {
   const raw = value?.trim();
-  if (!raw || raw.length > 2048 || /[\\s\\u0000-\\u001f\\u007f\\\\]/.test(raw)) {
+  if (!raw || raw.length > 2048 || /[\s\u0000-\u001f\u007f\\]/.test(raw)) {
     return null;
   }
 
@@ -506,7 +506,7 @@ export default function AlumniDirectoryPage() {
                     <a
                       href={safeExternalProfileUrl(alum.github) ?? undefined}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       title="GitHub Profile"
                       className="p-1.5 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-900 rounded-lg transition"
                     >
