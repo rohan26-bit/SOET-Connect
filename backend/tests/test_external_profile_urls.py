@@ -23,6 +23,7 @@ INVALID_PROFILE_URLS = [
     "//example.com/profile",
     "https:///missing-host",
     "https://user:password@example.com/profile",
+    "https://@example.com/profile",
     "https://example.com:99999/profile",
     "https://example.com/profile with spaces",
     "https://example.com/\\\\@evil.example",
@@ -80,6 +81,15 @@ def test_legacy_profile_link_sanitizer_suppresses_unsafe_values(value):
 def test_legacy_profile_link_sanitizer_preserves_safe_urls_and_cleans_whitespace():
     assert safe_external_profile_url(" https://github.com/jane-doe ") == "https://github.com/jane-doe"
     assert safe_external_profile_url("javascript:alert(1)") == ""
+    assert safe_external_profile_url("https://@example.com/profile") == ""
+
+
+def test_profile_link_fields_reject_urls_longer_than_2048_characters():
+    oversized = "https://example.com/" + ("a" * 2048)
+    with pytest.raises(ValidationError):
+        RegisterRequest(**_valid_alumni_registration(linkedin=oversized))
+    with pytest.raises(ValidationError):
+        ProfileUpdateRequest(website=oversized)
 
 
 def test_registration_api_rejects_unsafe_social_profile_links(client):
