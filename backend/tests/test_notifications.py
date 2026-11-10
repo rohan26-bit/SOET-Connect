@@ -348,6 +348,12 @@ def test_event_triggers_and_cancellation(client, admin_user, student_user, other
     other_notes3 = client.get("/notifications", headers=other_student_user["headers"]).json()
     assert len(other_notes3) == 2
 
+    # Deleting an already-cancelled event must not send a second cancellation notice.
+    delete_res = client.delete(f"/events/{event_id}", headers=admin_user["headers"])
+    assert delete_res.status_code == 200
+    other_notes_after_delete = client.get("/notifications", headers=other_student_user["headers"]).json()
+    assert len(other_notes_after_delete) == 2
+
 
 # ============================================================
 # ANNOUNCEMENT TRIGGERS
