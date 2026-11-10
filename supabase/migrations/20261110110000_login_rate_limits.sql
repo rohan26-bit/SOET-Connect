@@ -57,7 +57,17 @@ begin
         blocked_until,
         updated_at
     )
-    values (p_key_hash, 1, p_now, null, p_now)
+    values (
+        p_key_hash,
+        1,
+        p_now,
+        case
+            when 1 >= p_max_attempts
+                then p_now + (p_lock_seconds * interval '1 second')
+            else null
+        end,
+        p_now
+    )
     on conflict (key_hash) do update
     set
         attempts = case
