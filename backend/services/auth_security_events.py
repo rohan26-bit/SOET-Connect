@@ -63,7 +63,12 @@ def record_auth_event(
     return rows[0]
 
 
-def record_sign_in_event(user_id: str, user_agent: str | None, client_ip: str | None) -> dict:
+def record_sign_in_event(
+    user_id: str,
+    user_agent: str | None,
+    client_ip: str | None,
+    current_session_id: str | None = None,
+) -> dict:
     """Record a successful sign-in and flag a new browser/platform type or network fingerprint."""
     user_id = str(user_id)
     now = datetime.now(timezone.utc)
@@ -82,11 +87,16 @@ def record_sign_in_event(user_id: str, user_agent: str | None, client_ip: str | 
         .execute()
         .data or []
     )
-    prior_sessions = (
+    session_query = (
         supabase.table("auth_sessions")
-        .select("device_label")
+        .select("id,device_label")
         .eq("user_id", user_id)
         .gte("created_at", cutoff)
+    )
+    if current_session_id:
+        session_query = session_query.neq("id", str(current_session_id))
+    prior_sessions = (
+        session_query
         .order("created_at", desc=True)
         .limit(100)
         .execute()

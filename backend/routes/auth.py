@@ -321,17 +321,6 @@ def login_user(user: LoginRequest, request: Request, response: Response):
                 detail="Your account is not approved for login."
             )
 
-    # Record an account-scoped sign-in signal before creating the new session so
-    # the comparison uses only previously known browsers/platforms and networks.
-    try:
-        record_sign_in_event(
-            user_id=str(existing_user.get("_db_id") or existing_user["_id"]),
-            user_agent=request.headers.get("user-agent"),
-            client_ip=client_ip,
-        )
-    except Exception as exc:
-        print(f"Unable to record successful sign-in security event: {type(exc).__name__}")
-
     try:
         access_token = _issue_access_token(existing_user, request)
     except Exception as exc:
@@ -340,6 +329,18 @@ def login_user(user: LoginRequest, request: Request, response: Response):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Sign-in is temporarily unavailable. Please try again.",
         ) from exc
+
+    # Ignore the just-created session when checking whether this browser/platform is new.
+    try:
+        token_payload = decode_access_token(access_token)
+        record_sign_in_event(
+            user_id=str(existing_user.get("_db_id") or existing_user["_id"]),
+            user_agent=request.headers.get("user-agent"),
+            client_ip=client_ip,
+            current_session_id=token_payload.get("session_id"),
+        )
+    except Exception as exc:
+        print(f"Unable to record successful sign-in security event: {type(exc).__name__}")
 
     set_auth_cookie(response, access_token)
     result = {
