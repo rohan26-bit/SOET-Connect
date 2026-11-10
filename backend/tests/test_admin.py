@@ -586,6 +586,40 @@ def test_deactivation_invalidates_existing_jwt_even_after_reactivation():
     assert "revoked" in blocked_after_reactivation.json()["detail"].lower()
 
 
+def test_deactivation_invalidates_unregistered_legacy_jwt_after_reactivation():
+    """A legacy JWT must be revoked before lazy session registration can revive it."""
+    headers = setup_test_users()
+
+    # The helper creates a legacy student JWT without a session ID. Reset the
+    # account version to the value embedded in that token, but do not use the
+    # student token before the admin deactivates the account.
+    users_collection.update_one(
+        {"_id": "demo-student-id"},
+        {"$set": {"is_active": True, "session_version": 0}},
+    )
+
+    suspended = client.patch(
+        "/admin/users/demo-student-id/active",
+        headers=headers["admin"],
+    )
+    assert suspended.status_code == 200
+    assert suspended.json()["is_active"] is False
+
+    reactivated = client.patch(
+        "/admin/users/demo-student-id/active",
+        headers=headers["admin"],
+    )
+    assert reactivated.status_code == 200
+    assert reactivated.json()["is_active"] is True
+
+    # This is the first request made with the old student JWT. It has never
+    # been lazily registered in auth_sessions, so rejection proves the
+    # session_version check runs before legacy-session registration.
+    blocked = client.get("/auth/sessions", headers=headers["student"])
+    assert blocked.status_code == 401
+    assert "revoked" in blocked.json()["detail"].lower()
+
+
 def test_admin_cannot_toggle_own_status():
     """Admin cannot change their own account status."""
     headers = setup_test_users()
