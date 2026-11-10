@@ -33,9 +33,11 @@ function safeExternalProfileUrl(value?: string): string | null {
 
   try {
     const parsed = new URL(raw);
+    const authority = raw.split('://', 2)[1]?.split(/[/?#]/, 1)[0] ?? '';
     if (
       (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') ||
       !parsed.hostname ||
+      authority.includes('@') ||
       parsed.username ||
       parsed.password
     ) {
