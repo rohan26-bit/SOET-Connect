@@ -91,39 +91,13 @@ function getPhotonSuggestions(
   return Array.from(suggestions.values());
 }
 
-async function fetchDirectPhotonSuggestions(
-  kind: LocationKind,
-  query: string,
-  signal: AbortSignal,
-): Promise<LocationSuggestion[]> {
-  const url = new URL('https://photon.komoot.io/api/');
-  url.searchParams.set('q', query);
-  url.searchParams.set('limit', '20');
-  url.searchParams.set('lang', 'en');
-  url.searchParams.set('layer', kind);
-
-  const response = await fetch(url.toString(), {
-    method: 'GET',
-    mode: 'cors',
-    signal,
-    headers: { Accept: 'application/json' },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Photon returned HTTP ${response.status}.`);
-  }
-
-  const data = (await response.json()) as PhotonResponse;
-  return getPhotonSuggestions(data, kind, query);
-}
-
-async function fetchServerFallback(
+async function fetchLocationSuggestions(
   kind: LocationKind,
   query: string,
   signal: AbortSignal,
 ): Promise<LocationSuggestion[]> {
   const params = new URLSearchParams({ type: kind, q: query });
-  const response = await fetch(`/api/location-suggestions?${params.toString()}`, {
+  const response = await fetch(`/location-suggestions?${params.toString()}`, {
     method: 'GET',
     signal,
     headers: { Accept: 'application/json' },
@@ -178,23 +152,13 @@ export default function LocationAutocomplete({
     }
 
     const controller = new AbortController();
-    const externalController = new AbortController();
     setSuggestions([]);
     setLoading(true);
     setLookupFailed(false);
 
-    // If the public provider is slow or unreachable, fall back to the same-origin API.
-    const externalTimeoutId = window.setTimeout(() => externalController.abort(), 6500);
     const debounceId = window.setTimeout(async () => {
       try {
-        let results: LocationSuggestion[];
-
-        try {
-          results = await fetchDirectPhotonSuggestions(kind, query, externalController.signal);
-        } catch {
-          if (controller.signal.aborted) return;
-          results = await fetchServerFallback(kind, query, controller.signal);
-        }
+        const results = await fetchLocationSuggestions(kind, query, controller.signal);
 
         if (controller.signal.aborted) return;
         setSuggestions(results);
@@ -206,15 +170,12 @@ export default function LocationAutocomplete({
         setLookupFailed(true);
         setOpen(true);
       } finally {
-        window.clearTimeout(externalTimeoutId);
         if (!controller.signal.aborted) setLoading(false);
       }
     }, 500);
 
     return () => {
       window.clearTimeout(debounceId);
-      window.clearTimeout(externalTimeoutId);
-      externalController.abort();
       controller.abort();
     };
   }, [kind, value]);
