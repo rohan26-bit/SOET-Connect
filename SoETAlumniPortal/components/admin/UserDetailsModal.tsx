@@ -52,9 +52,11 @@ function safeExternalUrl(value?: string): string | null {
   const candidate = /^https?:\/\//i.test(raw) ? raw : \`https://\${raw}\`;
   try {
     const parsed = new URL(candidate);
+    const authority = candidate.split('://', 2)[1]?.split(/[/?#]/, 1)[0] ?? '';
     if (
       (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
       !parsed.hostname ||
+      authority.includes('@') ||
       parsed.username ||
       parsed.password
     ) {
