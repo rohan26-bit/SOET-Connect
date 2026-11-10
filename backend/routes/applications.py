@@ -161,6 +161,13 @@ def resolve_resume_url(resume_value: str | None) -> str:
         return ""
 
 
+def _safe_application_record(application: dict) -> dict:
+    """Copy an application record and expose only a safe/resolved resume link."""
+    result = dict(application)
+    result["resume_url"] = resolve_resume_url(application.get("resume_url", ""))
+    return result
+
+
 def _delete_stored_resume(resume_value: str | None) -> None:
     """Delete a private application resume object, leaving legacy URLs untouched."""
     value = str(resume_value or "").strip()
@@ -610,11 +617,9 @@ def update_application_status(
                 except Exception:
                     pass
 
-            application_response = dict(app)
-            application_response["resume_url"] = resolve_resume_url(app.get("resume_url", ""))
             return {
                 "message": f"Application status updated to {request.status}.",
-                "application": application_response
+                "application": _safe_application_record(app)
             }
 
     raise HTTPException(
@@ -648,11 +653,9 @@ def withdraw_application(
 
             supabase.table("job_applications").delete().eq("id", str(application_id)).execute()
 
-            application_response = dict(app)
-            application_response["resume_url"] = resolve_resume_url(app.get("resume_url", ""))
             return {
                 "message": "Application withdrawn successfully.",
-                "application": application_response
+                "application": _safe_application_record(app)
             }
 
     raise HTTPException(
@@ -795,7 +798,8 @@ def get_my_applications_jobs_compatibility(
     applications = load_applications()
 
     return [
-        app for app in applications
+        _safe_application_record(app)
+        for app in applications
         if str(app.get("applicant_id") or app.get("student_id")) == applicant_id
     ]
 
@@ -824,7 +828,8 @@ def get_job_applications_compatibility(
     applications = load_applications()
 
     return [
-        app for app in applications
+        _safe_application_record(app)
+        for app in applications
         if str(app.get("job_id")) == str(job_id)
     ]
 
@@ -894,7 +899,7 @@ def update_application_status_compatibility(
 
             return {
                 "message": f"Application status updated to '{body.status}'.",
-                "application": app,
+                "application": _safe_application_record(app),
             }
 
     raise HTTPException(
