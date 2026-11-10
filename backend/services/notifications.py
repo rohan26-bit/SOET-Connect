@@ -35,7 +35,7 @@ def load_notifications() -> list[dict]:
         return res.data or []
     except Exception as e:
         print("Error loading notifications from Supabase:", e)
-        return []
+        raise RuntimeError("Notification data is temporarily unavailable.") from e
 
 
 def create_notification(
