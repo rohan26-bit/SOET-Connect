@@ -1,5 +1,7 @@
 """API regression tests: data-store outages must not masquerade as empty feeds."""
 
+from types import SimpleNamespace
+
 import routes.admin as admin_module
 import routes.alumni as alumni_module
 import routes.announcements as announcements_module
@@ -8,6 +10,7 @@ import routes.events as events_module
 import routes.gallery as gallery_module
 import routes.jobs as jobs_module
 import routes.notifications as notifications_module
+import services.aci as aci_module
 
 
 def _fail_table_read(monkeypatch, module, table_name: str):
@@ -87,10 +90,75 @@ def test_admin_metrics_report_database_read_failure(client, admin_user, monkeypa
     _assert_service_unavailable(response)
 
 
-def test_alumni_aci_reports_database_read_failure(client, verified_alumni_user, monkeypatch):
+def test_alumni_aci_reports_database_read_failure(client, verified_alumni_user, monkeypatch, tmp_path):
+    # The legacy fixtures in this repository contain sample rows. Use empty
+    # compatibility files so this test exercises the Supabase read path.
+    for filename in ("jobs_data.json", "events_data.json", "event_registrations_data.json"):
+        path = tmp_path / filename
+        path.write_text("[]", encoding="utf-8")
+        monkeypatch.setattr(aci_module, filename.replace(".json", "").upper().replace("_DATA", "") + "_FILE", path)
+
     _fail_table_read(monkeypatch, alumni_module, "jobs")
     response = client.get("/api/alumni/me/aci", headers=verified_alumni_user["headers"])
     _assert_service_unavailable(response)
+
+
+def test_personal_aci_uses_supabase_in_production_even_with_legacy_json(monkeypatch, tmp_path):
+    """Production ACI must ignore populated legacy JSON files and read Supabase."""
+    monkeypatch.setenv("DATABASE_MODE", "supabase")
+    stale_job = [{
+        "id": "legacy-job",
+        "posted_by": "aci-user",
+        "status": "approved",
+    }]
+    jobs_file = tmp_path / "jobs_data.json"
+    jobs_file.write_text(__import__("json").dumps(stale_job), encoding="utf-8")
+    events_file = tmp_path / "events_data.json"
+    events_file.write_text("[]", encoding="utf-8")
+    registrations_file = tmp_path / "event_registrations_data.json"
+    registrations_file.write_text("[]", encoding="utf-8")
+    monkeypatch.setattr(aci_module, "JOBS_FILE", jobs_file)
+    monkeypatch.setattr(aci_module, "EVENTS_FILE", events_file)
+    monkeypatch.setattr(aci_module, "REGISTRATIONS_FILE", registrations_file)
+
+    queried_tables = []
+
+    class StubQuery:
+        def __init__(self, table_name):
+            self.table_name = table_name
+
+        def select(self, *_args, **_kwargs):
+            return self
+
+        def eq(self, *_args, **_kwargs):
+            return self
+
+        def in_(self, *_args, **_kwargs):
+            return self
+
+        def execute(self):
+            queried_tables.append(self.table_name)
+            return SimpleNamespace(data=[])
+
+    monkeypatch.setattr(
+        aci_module.supabase,
+        "table",
+        lambda table_name: StubQuery(table_name),
+    )
+
+    result = aci_module.calculate_alumni_aci(
+        "aci-user",
+        user_doc={
+            "_id": "aci-user",
+            "is_active": True,
+            "is_verified": True,
+            "verification_status": "approved",
+        },
+    )
+
+    assert result["breakdown"]["jobs"] == 0
+    assert result["score"] == 25
+    assert {"jobs", "events", "event_registrations"}.issubset(set(queried_tables))
 
 def test_mark_notification_read_reports_database_read_failure(client, student_user, monkeypatch):
     _fail_table_read(monkeypatch, notifications_module, "notifications")
