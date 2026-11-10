@@ -2,7 +2,6 @@ import base64
 import binascii
 import io
 import json
-import re
 import zipfile
 from pathlib import PurePosixPath
 
@@ -21,11 +20,6 @@ _ALLOWED_DOCUMENTS = {
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ),
 }
-_DATA_URI_RE = re.compile(
-    r"^data:(application/pdf|application/msword|application/vnd\.openxmlformats-officedocument\\.wordprocessingml\\.document);base64,([A-Za-z0-9+/]+={0,2})$",
-    re.IGNORECASE,
-)
-
 
 def _validate_document_file(name: object, kind: object, size: object, data_url: object) -> None:
     if not isinstance(name, str) or not name or len(name) > 255:
@@ -68,7 +62,7 @@ def _validate_document_file(name: object, kind: object, size: object, data_url: 
         return
 
     if extension == ".doc":
-        if not payload.startswith(b"\\xd0\\xcf\\x11\\xe0\\xa1\\xb1\\x1a\\xe1"):
+        if not payload.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"):
             raise ValueError("Attached file is not a valid DOC document.")
         return
 
