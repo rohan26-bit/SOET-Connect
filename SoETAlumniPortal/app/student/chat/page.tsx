@@ -250,6 +250,7 @@ function ChatContent() {
     let intervalId: number | undefined;
     const knownMessageIds = new Set<string>();
     const readReceiptRequests = new Set<string>();
+    const completedReadReceipts = new Set<string>();
 
     setLoadingMessages(true);
     setError(null);
@@ -260,6 +261,7 @@ function ChatContent() {
           message.sender_id !== currentUserId
           && !message.read_by?.includes(currentUserId)
           && !readReceiptRequests.has(message.id)
+          && !completedReadReceipts.has(message.id)
       );
 
       if (!unreadIncoming.length) return;
@@ -278,6 +280,7 @@ function ChatContent() {
         readReceiptRequests.add(message.id);
         void chatService.markMessageAsRead(message.id)
           .then((result) => {
+            completedReadReceipts.add(message.id);
             if (!isMounted) return;
             const readBy = Array.isArray(result.read_by)
               ? result.read_by
@@ -324,7 +327,15 @@ function ChatContent() {
           window.setTimeout(scrollToBottom, 50);
           try {
             const updatedConversations = await chatService.getConversations();
-            if (isMounted) setConversations(updatedConversations);
+            if (isMounted) {
+              setConversations(
+                updatedConversations.map((conversation) =>
+                  conversation.id === selectedConversationId
+                    ? { ...conversation, unread_count: 0 }
+                    : conversation
+                )
+              );
+            }
           } catch (conversationError) {
             console.warn('Unable to refresh chat previews after a new message:', conversationError);
           }
