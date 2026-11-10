@@ -3,10 +3,11 @@ import io
 import os
 import uuid
 import zipfile
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from typing import Any
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from database import users_collection, supabase
 from security.dependencies import get_current_user
@@ -49,16 +50,62 @@ VALID_STATUSES = VALID_APPLICATION_STATUSES
 # REQUEST MODELS
 # ============================================================
 
+def validate_resume_url_value(value: str | None) -> str:
+    """Accept only safe HTTP(S) links or validated private-storage object paths."""
+    cleaned = str(value or "").strip()
+    if not cleaned:
+        return ""
+
+    if any(ord(char) < 32 for char in cleaned):
+        raise ValueError("Resume URL contains invalid control characters.")
+
+    if cleaned.startswith(RESUME_PATH_PREFIX):
+        storage_path = cleaned[len(RESUME_PATH_PREFIX):]
+        if (
+            not storage_path
+            or storage_path.startswith("/")
+            or "\\" in storage_path
+            or any(part in {"", ".", ".."} for part in storage_path.split("/"))
+        ):
+            raise ValueError("Resume storage path is invalid.")
+        return cleaned
+
+    parsed = urlparse(cleaned)
+    if (
+        parsed.scheme.lower() in {"http", "https"}
+        and parsed.hostname
+        and not parsed.username
+        and not parsed.password
+    ):
+        try:
+            parsed.port
+        except ValueError as exc:
+            raise ValueError("Resume URL contains an invalid port.") from exc
+        return cleaned
+
+    raise ValueError("Resume URL must be a valid HTTP or HTTPS URL.")
+
+
 class ApplicationCreateRequest(BaseModel):
     job_id: str
     cover_letter: str = ""
     resume_url: str = ""
+
+    @field_validator("resume_url")
+    @classmethod
+    def validate_resume_url(cls, value: str) -> str:
+        return validate_resume_url_value(value)
 
 
 class JobApplicationCreateRequest(BaseModel):
     cover_letter: str = ""
     resume_url: str = ""
     skills: list[str] | None = None
+
+    @field_validator("resume_url")
+    @classmethod
+    def validate_resume_url(cls, value: str) -> str:
+        return validate_resume_url_value(value)
 
 
 class ApplicationStatusRequest(BaseModel):
@@ -80,7 +127,17 @@ def resolve_resume_url(resume_value: str | None) -> str:
     """
     value = str(resume_value or "").strip()
     if not value.startswith(RESUME_PATH_PREFIX):
-        return value
+        try:
+            return validate_resume_url_value(value)
+        except ValueError:
+            # Legacy records may contain unsafe values written before validation
+            # was added. Never return those values as clickable browser links.
+            return ""
+
+    try:
+        validate_resume_url_value(value)
+    except ValueError:
+        return ""
 
     storage_path = value[len(RESUME_PATH_PREFIX):]
     if not storage_path:
@@ -553,9 +610,11 @@ def update_application_status(
                 except Exception:
                     pass
 
+            application_response = dict(app)
+            application_response["resume_url"] = resolve_resume_url(app.get("resume_url", ""))
             return {
                 "message": f"Application status updated to {request.status}.",
-                "application": app
+                "application": application_response
             }
 
     raise HTTPException(
@@ -589,9 +648,11 @@ def withdraw_application(
 
             supabase.table("job_applications").delete().eq("id", str(application_id)).execute()
 
+            application_response = dict(app)
+            application_response["resume_url"] = resolve_resume_url(app.get("resume_url", ""))
             return {
                 "message": "Application withdrawn successfully.",
-                "application": app
+                "application": application_response
             }
 
     raise HTTPException(
@@ -666,13 +727,18 @@ def apply_to_job_compatibility(
     student_name = applicant_name
     app_id = str(uuid.uuid4())
     now_iso = datetime.now(timezone.utc).isoformat()
+    stored_resume = validate_resume_url_value(body.resume_url)
+    if stored_resume.startswith(RESUME_PATH_PREFIX) and not stored_resume.startswith(
+        f"{RESUME_PATH_PREFIX}{applicant_id}/"
+    ):
+        raise HTTPException(status_code=403, detail="You cannot attach another user's private resume.")
 
     supabase.table("job_applications").insert({
         "id": app_id,
         "job_id": str(job_id),
         "applicant_id": applicant_id,
         "status": "submitted",
-        "resume_url": body.resume_url or "",
+        "resume_url": stored_resume,
         "cover_letter": body.cover_letter or "",
         "applied_at": now_iso,
         "updated_at": now_iso,
@@ -688,7 +754,7 @@ def apply_to_job_compatibility(
         "applicant_id": applicant_id,
         "applicant_name": applicant_name,
         "cover_letter": body.cover_letter or "",
-        "resume_url": body.resume_url or "",
+        "resume_url": resolve_resume_url(stored_resume),
         "status": "applied",
         "created_at": now_iso,
         "updated_at": now_iso,
