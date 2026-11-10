@@ -7,6 +7,7 @@ import PostedAt from '@/components/PostedAt';
 import PlacementDetailsModal from '@/components/PlacementDetailsModal';
 import { useAuth } from '@/components/AuthProvider';
 import { placementService, PlacementCelebration } from '@/lib/services/placementService';
+import { getSafePlacementPhotoUrl } from '@/lib/utils/placementPhotoUrl';
 import { Award, ArrowLeft, ArrowRight, Search, Sparkles } from 'lucide-react';
 
 const PAGE_SIZE = 12;
@@ -147,10 +148,10 @@ export default function PlacementCelebrationsPage() {
                   className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[#E7DED6] bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                 >
                   <div className="relative aspect-[16/10] overflow-hidden bg-gradient-to-br from-[#F7E8D9] to-[#EBD3BD]">
-                    {placement.photo_url ? (
+                    {getSafePlacementPhotoUrl(placement.photo_url) ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={placement.photo_url}
+                        src={getSafePlacementPhotoUrl(placement.photo_url) ?? undefined}
                         alt={placement.alumni_name}
                         loading="lazy"
                         className="h-full w-full object-cover"
