@@ -4,22 +4,12 @@ import { useEffect } from 'react';
 import { Award, CalendarDays, GraduationCap, Building2, X } from 'lucide-react';
 import { PlacementCelebration } from '@/lib/services/placementService';
 import PostedAt from '@/components/PostedAt';
+import { getSafePlacementPhotoUrl } from '@/lib/utils/placementPhotoUrl';
 
 interface PlacementDetailsModalProps {
   placement: PlacementCelebration | null;
   onClose: () => void;
   showPublishingStatus?: boolean;
-}
-
-function getSafeImageUrl(value?: string | null): string | null {
-  if (!value) return null;
-  if (value.startsWith('/') && !value.startsWith('//')) return value;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null;
-  } catch {
-    return null;
-  }
 }
 
 export default function PlacementDetailsModal({
@@ -38,7 +28,7 @@ export default function PlacementDetailsModal({
 
   if (!placement) return null;
 
-  const photoUrl = getSafeImageUrl(placement.photo_url);
+  const photoUrl = getSafePlacementPhotoUrl(placement.photo_url);
 
   return (
     <div
