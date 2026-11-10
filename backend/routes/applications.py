@@ -197,7 +197,10 @@ def load_applications() -> list[dict]:
         return apps
     except Exception as e:
         print("Error loading applications from Supabase:", e)
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Applications are temporarily unavailable. Please try again.",
+        ) from e
 
 
 def _find_job(job_id: str) -> dict | None:
