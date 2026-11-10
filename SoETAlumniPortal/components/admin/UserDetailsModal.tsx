@@ -39,17 +39,28 @@ function displayValue(value?: string | number | null): string {
 
 function safeExternalUrl(value?: string): string | null {
   const raw = value?.trim();
-  if (!raw) return null;
+  if (!raw || raw.length > 2048 || /[\s\u0000-\u001f\u007f\\]/.test(raw) || raw.startsWith('//')) {
+    return null;
+  }
 
-  // Do not allow javascript:, data:, or other non-web URL schemes.
+  // Bare hostnames remain supported for legacy profiles, but explicit schemes
+  // must be HTTP(S), and credentials are never allowed in a profile link.
   if (/^[a-z][a-z0-9+.-]*:/i.test(raw) && !/^https?:\/\//i.test(raw)) {
     return null;
   }
 
-  const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  const candidate = /^https?:\/\//i.test(raw) ? raw : \`https://\${raw}\`;
   try {
     const parsed = new URL(candidate);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.toString() : null;
+    if (
+      (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
+      !parsed.hostname ||
+      parsed.username ||
+      parsed.password
+    ) {
+      return null;
+    }
+    return parsed.toString();
   } catch {
     return null;
   }
