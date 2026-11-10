@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 from database import supabase, users_collection
 from schemas.profile import ProfileUpdateRequest
 from security.dependencies import get_current_user
+from security.avatar_validation import validate_avatar_url
 from services.delivery import normalize_phone_number
 
 
@@ -28,15 +29,10 @@ class AvatarUploadRequest(BaseModel):
     @field_validator("avatar_url")
     @classmethod
     def validate_avatar_url(cls, v: str) -> str:
-        trimmed = v.strip()
-        if not trimmed:
+        validated = validate_avatar_url(v)
+        if validated is None:
             raise ValueError("Avatar URL cannot be empty.")
-        if trimmed.startswith("data:image/"):
-            return trimmed
-        parsed = urlparse(trimmed)
-        if parsed.scheme.lower() in {"http", "https"} and parsed.netloc:
-            return trimmed
-        raise ValueError("Avatar URL must be a valid http/https URL or an image data URI.")
+        return validated
 
 
 # ============================================================
