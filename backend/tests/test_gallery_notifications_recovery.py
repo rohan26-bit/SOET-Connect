@@ -155,6 +155,25 @@ def test_gallery_upload_rejects_oversized_file(client: TestClient, verified_alum
     assert "8 MB" in response.json().get("detail", "")
 
 
+def test_gallery_upload_rejects_excessive_decoded_image_pixels(
+    client: TestClient, verified_alumni_user: dict, monkeypatch
+):
+    """Images that expand beyond the processing pixel budget are rejected."""
+    import services.gallery as gallery_service
+
+    monkeypatch.setattr(gallery_service, "MAX_IMAGE_PIXELS", 1_000)
+    img_bytes = _create_test_image_bytes(width=200, height=150)
+    response = client.post(
+        "/api/gallery/upload",
+        headers=verified_alumni_user["headers"],
+        data={"title": "Excessive Resolution"},
+        files={"file": ("large.jpg", img_bytes, "image/jpeg")},
+    )
+
+    assert response.status_code == 400
+    assert "40 megapixels" in response.json().get("detail", "")
+
+
 
 def test_public_gallery_shows_only_approved_photos(
     client: TestClient, verified_alumni_user: dict, admin_user: dict
