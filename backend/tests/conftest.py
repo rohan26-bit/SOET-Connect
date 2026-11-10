@@ -44,6 +44,7 @@ from main import app
 from database import users_collection
 from database_supabase import reset_mock_db
 from security.jwt import create_access_token
+from services.login_rate_limit import reset_mock_login_rate_limits
 
 import routes.jobs
 import routes.applications
@@ -57,6 +58,7 @@ import routes.admin
 def isolate_environment(tmp_path, monkeypatch):
     """Reset in-memory Supabase tables between test cases."""
     reset_mock_db()
+    reset_mock_login_rate_limits()
 
     # Legacy file isolation if any test touches file paths directly
     jobs_file = tmp_path / "jobs_data.json"
