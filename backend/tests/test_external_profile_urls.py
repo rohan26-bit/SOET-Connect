@@ -80,3 +80,50 @@ def test_legacy_profile_link_sanitizer_suppresses_unsafe_values(value):
 def test_legacy_profile_link_sanitizer_preserves_safe_urls_and_cleans_whitespace():
     assert safe_external_profile_url(" https://github.com/jane-doe ") == "https://github.com/jane-doe"
     assert safe_external_profile_url("javascript:alert(1)") == ""
+
+
+def test_registration_api_rejects_unsafe_social_profile_links(client):
+    for field in ("linkedin", "github", "website"):
+        payload = _valid_alumni_registration(
+            name="Jane Alumni",
+            email=f"jane-{field}@example.com",
+            alumni_id="123456",
+            **{field: "javascript:alert(1)"},
+        )
+        response = client.post("/auth/register", json=payload)
+        assert response.status_code == 422
+
+
+def test_profile_update_api_rejects_unsafe_social_profile_links(client, verified_alumni_user):
+    for field in ("linkedin", "github", "website"):
+        response = client.patch(
+            "/profile/me",
+            headers=verified_alumni_user["headers"],
+            json={field: "https://user:password@example.com/profile"},
+        )
+        assert response.status_code == 422
+
+
+def test_alumni_directory_suppresses_unsafe_legacy_social_links(
+    client, student_user, verified_alumni_user
+):
+    from database import users_collection
+
+    users_collection.update_one(
+        {"_id": verified_alumni_user["id"]},
+        {"$set": {
+            "alumni_profile.linkedin": "javascript:alert(1)",
+            "alumni_profile.github": "https://user:password@example.com/profile",
+            "alumni_profile.website": "https://safe.example.com/profile",
+        }},
+    )
+
+    response = client.get("/alumni/directory", headers=student_user["headers"])
+    assert response.status_code == 200
+    alumni = next(
+        item for item in response.json()
+        if item["id"] == verified_alumni_user["id"]
+    )
+    assert alumni["linkedin"] == ""
+    assert alumni["github"] == ""
+    assert alumni["website"] == "https://safe.example.com/profile"
