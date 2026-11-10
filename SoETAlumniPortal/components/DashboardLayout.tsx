@@ -11,7 +11,7 @@ import {
   Bell, User, Settings, Info, 
   LogOut, Megaphone, ChevronDown,
   Menu, X, GraduationCap, UserCheck,
-  Image as ImageIcon, MessageSquare, Award
+  Image as ImageIcon, MessageSquare, Award, MonitorSmartphone
 } from 'lucide-react';
 
 type NavItem =
@@ -46,6 +46,7 @@ const mainNavItems: NavItem[] = [
 
 const studentMoreNavItems = [
   { name: 'Settings', icon: Settings, href: '/student/settings' },
+  { name: 'Active Sessions', icon: MonitorSmartphone, href: '/account/sessions' },
   { name: 'About SOET', icon: Info, href: '/student/about' },
 ];
 
@@ -73,6 +74,7 @@ const alumniNavItems: NavItem[] = [
 
 const alumniMoreNavItems = [
   { name: 'Settings', icon: Settings, href: '/student/settings' },
+  { name: 'Active Sessions', icon: MonitorSmartphone, href: '/account/sessions' },
   { name: 'About SOET', icon: Info, href: '/student/about' },
 ];
 
@@ -118,6 +120,7 @@ const adminNavItems: NavItem[] = [
 
 const adminMoreNavItems = [
   { name: 'Settings', icon: Settings, href: '/admin/settings' },
+  { name: 'Active Sessions', icon: MonitorSmartphone, href: '/account/sessions' },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
