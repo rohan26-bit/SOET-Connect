@@ -86,7 +86,10 @@ def load_announcements() -> list[dict]:
         return announcements
     except Exception as e:
         print("Error loading announcements from Supabase:", e)
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Announcements are temporarily unavailable. Please try again.",
+        ) from e
 
 
 def _audience_visible_to_role(target_audience: str, role: str) -> bool:

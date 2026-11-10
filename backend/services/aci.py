@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 from database import users_collection, supabase
@@ -107,27 +108,39 @@ def calculate_alumni_aci(
     # Load data from Supabase if not passed in (scoped specifically to this alumnus)
     if jobs is None:
         # Check if monkeypatched file exists (for tests)
-        if JOBS_FILE.exists() and JOBS_FILE.read_text(encoding="utf-8").strip() not in ("", "[]"):
+        if (
+            os.getenv("DATABASE_MODE", "").strip().lower() == "mock"
+            and JOBS_FILE.exists()
+            and JOBS_FILE.read_text(encoding="utf-8").strip() not in ("", "[]")
+        ):
             jobs = load_json_data(JOBS_FILE)
         else:
             try:
                 res = supabase.table("jobs").select("id,posted_by,status").eq("posted_by", user_id_str).eq("status", "approved").execute()
                 jobs = res.data or []
-            except Exception:
-                jobs = []
+            except Exception as exc:
+                raise RuntimeError("Alumni contribution job data is temporarily unavailable.") from exc
 
     if events is None:
-        if EVENTS_FILE.exists() and EVENTS_FILE.read_text(encoding="utf-8").strip() not in ("", "[]"):
+        if (
+            os.getenv("DATABASE_MODE", "").strip().lower() == "mock"
+            and EVENTS_FILE.exists()
+            and EVENTS_FILE.read_text(encoding="utf-8").strip() not in ("", "[]")
+        ):
             events = load_json_data(EVENTS_FILE)
         else:
             try:
                 res = supabase.table("events").select("id,created_by,status").eq("created_by", user_id_str).eq("status", "approved").execute()
                 events = res.data or []
-            except Exception:
-                events = []
+            except Exception as exc:
+                raise RuntimeError("Alumni contribution event data is temporarily unavailable.") from exc
 
     if registrations is None:
-        if REGISTRATIONS_FILE.exists() and REGISTRATIONS_FILE.read_text(encoding="utf-8").strip() not in ("", "[]"):
+        if (
+            os.getenv("DATABASE_MODE", "").strip().lower() == "mock"
+            and REGISTRATIONS_FILE.exists()
+            and REGISTRATIONS_FILE.read_text(encoding="utf-8").strip() not in ("", "[]")
+        ):
             registrations = load_json_data(REGISTRATIONS_FILE)
         else:
             try:
@@ -137,8 +150,8 @@ def calculate_alumni_aci(
                 if reg_event_ids:
                     ev_res = supabase.table("events").select("id,created_by,status").in_("id", reg_event_ids).execute()
                     events = (events or []) + (ev_res.data or [])
-            except Exception:
-                registrations = []
+            except Exception as exc:
+                raise RuntimeError("Alumni contribution registration data is temporarily unavailable.") from exc
 
     # 1. Approved Jobs Posted by this alumnus
     approved_jobs_count = 0

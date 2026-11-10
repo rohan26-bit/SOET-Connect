@@ -1,6 +1,7 @@
 import concurrent.futures
 from pathlib import Path
 import json
+import os
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -45,7 +46,7 @@ def _created_at_sort_key(value) -> float:
 def _load_aci_source_data() -> tuple[list[dict], list[dict], list[dict]]:
     """Load shared ACI inputs once so directory and leaderboard scores stay consistent."""
     def _load(table_name: str, file_path: str | None, columns: str) -> list[dict]:
-        if file_path and Path(file_path).exists():
+        if os.getenv("DATABASE_MODE", "").strip().lower() == "mock" and file_path and Path(file_path).exists():
             try:
                 raw = Path(file_path).read_text(encoding="utf-8").strip()
                 if raw and raw != "[]":
@@ -58,7 +59,10 @@ def _load_aci_source_data() -> tuple[list[dict], list[dict], list[dict]]:
             return supabase.table(table_name).select(columns).execute().data or []
         except Exception as exc:
             print(f"Unable to load {table_name} for ACI: {exc}")
-            return []
+            raise HTTPException(
+                status_code=503,
+                detail="Alumni contribution data is temporarily unavailable. Please try again.",
+            ) from exc
 
     return (
         _load("jobs", JOBS_FILE, "id,posted_by,status"),
@@ -114,7 +118,14 @@ def get_my_aci(
             detail="Your alumni account must be verified by an administrator before accessing ACI."
         )
 
-    return calculate_alumni_aci(str(user["_id"]), user_doc=user)
+    try:
+        return calculate_alumni_aci(str(user["_id"]), user_doc=user)
+    except RuntimeError as exc:
+        print(f"Unable to calculate alumni contribution index: {exc}")
+        raise HTTPException(
+            status_code=503,
+            detail="Alumni contribution data is temporarily unavailable. Please try again.",
+        ) from exc
 
 
 # ============================================================
@@ -321,7 +332,7 @@ def get_alumni_directory(
 
     def _fetch_table(table_name: str, file_path: str | None, columns: str) -> list:
         data = []
-        if file_path and Path(file_path).exists():
+        if os.getenv("DATABASE_MODE", "").strip().lower() == "mock" and file_path and Path(file_path).exists():
             try:
                 content = Path(file_path).read_text(encoding="utf-8").strip()
                 if content and content != "[]":
@@ -331,8 +342,12 @@ def get_alumni_directory(
         if not data:
             try:
                 data = supabase.table(table_name).select(columns).execute().data or []
-            except Exception:
-                data = []
+            except Exception as exc:
+                print(f"Unable to load {table_name} for alumni directory: {exc}")
+                raise HTTPException(
+                    status_code=503,
+                    detail="Alumni contribution data is temporarily unavailable. Please try again.",
+                ) from exc
         return data
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:

@@ -130,8 +130,12 @@ def _read_data(table_name: str, file_path=None, columns: str = "*") -> list[dict
             pass
     try:
         return supabase.table(table_name).select(columns).execute().data or []
-    except Exception:
-        return []
+    except Exception as exc:
+        print(f"Error loading {table_name} for admin dashboard: {exc}")
+        raise HTTPException(
+            status_code=503,
+            detail="Dashboard data is temporarily unavailable. Please try again.",
+        ) from exc
 
 
 def _gather_stats() -> dict:
@@ -142,8 +146,8 @@ def _gather_stats() -> dict:
         fut_apps = executor.submit(_read_data, "job_applications", APPLICATIONS_FILE, "id,status")
         fut_events = executor.submit(_read_data, "events", EVENTS_FILE, "id,status")
         fut_regs = executor.submit(_read_data, "event_registrations", REGISTRATIONS_FILE or EVENT_REGISTRATIONS_FILE, "id")
-        fut_ann = executor.submit(lambda: supabase.table("announcements").select("id").execute().data or [])
-        fut_notif = executor.submit(lambda: supabase.table("notifications").select("id").execute().data or [])
+        fut_ann = executor.submit(_read_data, "announcements", None, "id")
+        fut_notif = executor.submit(_read_data, "notifications", None, "id")
 
         all_users = list(fut_users.result())
         jobs = fut_jobs.result()
