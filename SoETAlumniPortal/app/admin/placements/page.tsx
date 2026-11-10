@@ -8,6 +8,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { useRouter } from 'next/navigation';
 import { placementService, PlacementCelebration } from '@/lib/services/placementService';
 import { galleryService } from '@/lib/services/galleryService';
+import { getSafePlacementPhotoUrl } from '@/lib/utils/placementPhotoUrl';
 import { Award, Plus, Trash2, Eye, EyeOff, ImagePlus, AlertCircle, RefreshCw } from 'lucide-react';
 
 export default function AdminPlacementsPage() {
@@ -183,7 +184,7 @@ export default function AdminPlacementsPage() {
               {records.map((record) => (
                 <article key={record.id} className="bg-white rounded-2xl border border-[#E5DDD5] p-4 flex gap-4">
                   <div className="w-20 h-20 shrink-0 rounded-xl bg-[#F3E6DA] overflow-hidden">
-                    {record.photo_url ? <img src={record.photo_url} alt={record.alumni_name} className="w-full h-full object-cover" /> : <Award className="w-8 h-8 m-6 text-[#B77A4C]" />}
+                    {getSafePlacementPhotoUrl(record.photo_url) ? <img src={getSafePlacementPhotoUrl(record.photo_url) ?? undefined} alt={record.alumni_name} className="w-full h-full object-cover" /> : <Award className="w-8 h-8 m-6 text-[#B77A4C]" />}
                   </div>
                   <div className="min-w-0 flex-1">
                     <h3 className="font-bold text-[#4A3832] truncate">{record.alumni_name}</h3>
