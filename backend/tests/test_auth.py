@@ -835,3 +835,180 @@ def test_login_fails_cleanly_when_account_database_lookup_is_unavailable(client,
 
     assert response.status_code == 503
     assert "temporarily unavailable" in response.json().get("detail", "").lower()
+
+
+# ============================================================
+# PER-DEVICE SESSION MANAGEMENT
+# ============================================================
+
+def test_login_creates_a_registered_device_session(client):
+    """A successful sign-in must persist a distinct server-side session."""
+    payload = {
+        "name": "Session Login User",
+        "email": "session.login@example.com",
+        "password": "SecurePassword123!",
+        "role": "student",
+        **VALID_STUDENT_FIELDS,
+    }
+    registered = client.post("/auth/register", json=payload)
+    assert registered.status_code == 201
+
+    from database import users_collection, supabase
+    from security.jwt import decode_access_token
+
+    users_collection.update_one(
+        {"email": "session.login@example.com"},
+        {"$set": {"is_verified": True, "verification_status": "approved"}},
+    )
+    response = client.post(
+        "/auth/login",
+        headers={"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"},
+        json={"email": payload["email"], "password": payload["password"]},
+    )
+
+    assert response.status_code == 200
+    token_payload = decode_access_token(response.json()["access_token"])
+    assert token_payload["session_id"]
+
+    rows = (
+        supabase.table("auth_sessions")
+        .select("*")
+        .eq("id", token_payload["session_id"])
+        .eq("user_id", response.json()["user"]["id"])
+        .execute()
+        .data
+    )
+    assert len(rows) == 1
+    assert rows[0]["device_label"] == "Chrome on Windows"
+    assert rows[0]["revoked_at"] is None
+
+
+def test_user_can_revoke_one_device_without_signing_out_current_device(client, admin_user):
+    """Revoking one device invalidates only that JWT and leaves the current device active."""
+    import uuid
+    from datetime import datetime, timedelta, timezone
+
+    from database import supabase
+    from security.jwt import create_access_token, decode_access_token
+    from services.auth_sessions import create_auth_session
+
+    # First authenticated request lazily registers this pre-rollout token.
+    current_list = client.get("/auth/sessions", headers=admin_user["headers"])
+    assert current_list.status_code == 200
+    current_session_id = current_list.json()["current_session_id"]
+
+    other_session_id = str(uuid.uuid4())
+    other_token = create_access_token(
+        user_id=admin_user["id"],
+        role="admin",
+        session_id=other_session_id,
+    )
+    other_expiry = decode_access_token(other_token)["expires_at"]
+    create_auth_session(
+        admin_user["id"],
+        other_session_id,
+        other_expiry,
+        "Mozilla/5.0 (Linux; Android 14) Chrome/120.0",
+    )
+
+    listed = client.get("/auth/sessions", headers=admin_user["headers"])
+    assert listed.status_code == 200
+    assert len(listed.json()["sessions"]) == 2
+    assert any(item["is_current"] for item in listed.json()["sessions"])
+
+    revoked = client.delete(
+        f"/auth/sessions/{other_session_id}",
+        headers=admin_user["headers"],
+    )
+    assert revoked.status_code == 200
+
+    other_response = client.get(
+        "/auth/sessions",
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+    assert other_response.status_code == 401
+
+    current_response = client.get("/auth/sessions", headers=admin_user["headers"])
+    assert current_response.status_code == 200
+    assert len(current_response.json()["sessions"]) == 1
+    assert current_response.json()["sessions"][0]["id"] == current_session_id
+
+
+def test_sign_out_all_other_devices_preserves_current_session(client, admin_user):
+    """The bulk action revokes every other active device but keeps the requester signed in."""
+    import uuid
+
+    from security.jwt import create_access_token, decode_access_token
+    from services.auth_sessions import create_auth_session
+
+    current = client.get("/auth/sessions", headers=admin_user["headers"])
+    assert current.status_code == 200
+
+    other_ids = []
+    for _ in range(2):
+        session_id = str(uuid.uuid4())
+        token = create_access_token(
+            user_id=admin_user["id"],
+            role="admin",
+            session_id=session_id,
+        )
+        create_auth_session(
+            admin_user["id"],
+            session_id,
+            decode_access_token(token)["expires_at"],
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/17.0",
+        )
+        other_ids.append((session_id, token))
+
+    response = client.post(
+        "/auth/sessions/revoke-others",
+        headers=admin_user["headers"],
+    )
+    assert response.status_code == 200
+    assert response.json()["revoked_count"] == 2
+
+    remaining = client.get("/auth/sessions", headers=admin_user["headers"])
+    assert remaining.status_code == 200
+    assert len(remaining.json()["sessions"]) == 1
+    assert remaining.json()["sessions"][0]["is_current"] is True
+
+    for _session_id, token in other_ids:
+        revoked = client.get(
+            "/auth/sessions",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert revoked.status_code == 401
+
+
+def test_server_side_logout_revokes_current_device(client, admin_user):
+    """Logging out invalidates the bearer token at the backend, not just in local storage."""
+    logout_response = client.post("/auth/logout", headers=admin_user["headers"])
+    assert logout_response.status_code == 200
+
+    follow_up = client.get("/auth/sessions", headers=admin_user["headers"])
+    assert follow_up.status_code == 401
+
+
+def test_password_change_revokes_registered_device_sessions_in_mock_mode(admin_user):
+    """The in-memory test adapter mirrors the production password/session transaction."""
+    from database import users_collection
+    from services.auth_sessions import create_auth_session, list_active_auth_sessions
+    from services.session_security import update_password_and_revoke_sessions
+    from security.jwt import decode_access_token
+
+    from security.dependencies import get_user_by_id
+    from security.jwt import create_access_token
+
+    session_id = str(uuid.uuid4())
+    token = create_access_token(
+        user_id=admin_user["id"],
+        role="admin",
+        session_id=session_id,
+    )
+    from datetime import datetime, timedelta, timezone
+    expiry = decode_access_token(token)["expires_at"]
+    create_auth_session(admin_user["id"], session_id, expiry, "Chrome on Windows")
+
+    next_version = update_password_and_revoke_sessions(admin_user["id"], "new-argon2-hash")
+    assert next_version == 1
+    assert list_active_auth_sessions(admin_user["id"], session_id) == []
