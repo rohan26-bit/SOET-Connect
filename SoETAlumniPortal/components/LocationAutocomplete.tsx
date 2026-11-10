@@ -91,13 +91,13 @@ function getPhotonSuggestions(
   return Array.from(suggestions.values());
 }
 
-async function fetchServerFallback(
+async function fetchLocationSuggestions(
   kind: LocationKind,
   query: string,
   signal: AbortSignal,
 ): Promise<LocationSuggestion[]> {
   const params = new URLSearchParams({ type: kind, q: query });
-  const response = await fetch(`/api/location-suggestions?${params.toString()}`, {
+  const response = await fetch(`/location-suggestions?${params.toString()}`, {
     method: 'GET',
     signal,
     headers: { Accept: 'application/json' },
@@ -158,7 +158,7 @@ export default function LocationAutocomplete({
 
     const debounceId = window.setTimeout(async () => {
       try {
-        const results = await fetchServerFallback(kind, query, controller.signal);
+        const results = await fetchLocationSuggestions(kind, query, controller.signal);
 
         if (controller.signal.aborted) return;
         setSuggestions(results);
