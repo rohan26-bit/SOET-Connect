@@ -829,12 +829,46 @@ def delete_event(
             detail="You can only delete your own events."
         )
 
+    # Capture active attendees before deleting the event/registration rows.
+    # A failed lookup must stop deletion rather than silently losing the audience.
+    registration_res = (
+        supabase.table("event_registrations")
+        .select("user_id,status")
+        .eq("event_id", str(event_id))
+        .execute()
+    )
+    attendee_ids = sorted({
+        str(registration.get("user_id"))
+        for registration in (registration_res.data or [])
+        if registration.get("user_id")
+        and (registration.get("status") or "registered") in {"registered", "attended"}
+    })
+
     supabase.table("events").delete().eq("id", str(event_id)).execute()
+
+    event_title = target_event.get("title") or "the event"
+    for attendee_id in attendee_ids:
+        try:
+            create_notification_once(
+                user_id=attendee_id,
+                title="Event deleted",
+                message=f'The event "{event_title}" has been deleted. Your registration has been cancelled.',
+                notification_type=NOTIFICATION_TYPES["event_cancellation"],
+                entity_type="event",
+                entity_id=str(event_id),
+                dedupe_key=f"event_deletion:{event_id}:{attendee_id}",
+            )
+        except Exception as exc:
+            # Notification delivery is best-effort; deleting the event must not
+            # be rolled back because one attendee's notification could not be written.
+            print(f"Unable to notify attendee {attendee_id} about deleted event {event_id}: {exc}")
+
     supabase.table("event_registrations").delete().eq("event_id", str(event_id)).execute()
 
     return {
         "message": "Event deleted successfully.",
         "event": target_event,
+        "notified_attendees": len(attendee_ids),
     }
 
 
