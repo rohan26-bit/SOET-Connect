@@ -302,9 +302,14 @@ def load_events(status: str | None = None, created_by: str | None = None) -> lis
                 e["organizer"] = e.get("creator_name") or "SOET Connect"
             events.append(e)
         return events
+    except HTTPException:
+        raise
     except Exception as e:
         print("Error loading events from Supabase:", e)
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Events are temporarily unavailable. Please try again.",
+        ) from e
 
 
 def _find_event(event_id: str) -> dict | None:
@@ -336,9 +341,14 @@ def _find_event(event_id: str) -> dict | None:
         if not e.get("organizer"):
             e["organizer"] = e.get("creator_name") or "SOET Connect"
         return e
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error fetching event {event_id}:", e)
-        return None
+        raise HTTPException(
+            status_code=503,
+            detail="Event details are temporarily unavailable. Please try again.",
+        ) from e
 
 
 # ============================================================
@@ -393,9 +403,14 @@ def load_registrations(hydrate_users: bool = True, event_id: str | None = None, 
             regs.append(r)
         regs.sort(key=lambda registration: str(registration.get("created_at") or registration.get("registered_at") or ""), reverse=True)
         return regs
+    except HTTPException:
+        raise
     except Exception as e:
         print("Error loading registrations from Supabase:", e)
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Event registration data is temporarily unavailable. Please try again.",
+        ) from e
 
 
 def get_user_from_token(current_user: dict):
