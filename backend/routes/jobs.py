@@ -157,9 +157,14 @@ def load_jobs(status: str | None = None, posted_by: str | None = None) -> list[d
                         j["poster_name"] = u.get("name", "Alumni")
             jobs.append(j)
         return jobs
+    except HTTPException:
+        raise
     except Exception as e:
         print("Error loading jobs from Supabase:", e)
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Job postings are temporarily unavailable. Please try again.",
+        ) from e
 
 
 
