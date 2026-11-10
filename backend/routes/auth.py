@@ -4,7 +4,7 @@ import secrets
 from datetime import datetime, timezone
 from typing import Optional
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from database import DuplicatePrnError, users_collection
 from models.user import create_user_document
@@ -13,6 +13,12 @@ from pwdlib import PasswordHash
 from security.jwt import create_access_token
 from security.dependencies import get_current_user
 from services.session_security import update_password_and_revoke_sessions
+from services.login_rate_limit import (
+    check_login_rate_limit,
+    clear_login_account_failures,
+    get_client_ip,
+    record_login_failure,
+)
 
 
 load_dotenv()
@@ -155,29 +161,89 @@ def register_user(user: RegisterRequest):
 # LOGIN
 # =========================
 
+# A pre-generated Argon2 hash keeps the unknown-account path close to the
+# password-verification cost of a known account, reducing account enumeration
+# through response timing.
+_DUMMY_PASSWORD_HASH = password_hash.hash(secrets.token_urlsafe(32))
+
+
+def _login_rate_limit_response(retry_after_seconds: int) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail="Too many sign-in attempts. Please try again later.",
+        headers={"Retry-After": str(max(1, int(retry_after_seconds or 1)))},
+    )
+
+
 @router.post("/login")
-def login_user(user: LoginRequest):
+def login_user(user: LoginRequest, request: Request):
+    email = user.email.lower().strip()
+    client_ip = get_client_ip(request)
 
-    existing_user = users_collection.find_one(
-        {"email": user.email.lower().strip()}
+    # Fail closed if the shared rate-limit service is unavailable. Never fall
+    # back to an unthrottled login path during a database or configuration fault.
+    try:
+        limit_state = check_login_rate_limit(email, client_ip)
+    except Exception as exc:
+        print(f"Login rate-limit check failed: {type(exc).__name__}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Sign-in is temporarily unavailable. Please try again.",
+        ) from exc
+
+    if limit_state.get("blocked"):
+        raise _login_rate_limit_response(limit_state.get("retry_after_seconds", 1))
+
+    try:
+        existing_user = users_collection.find_one({"email": email})
+    except Exception as exc:
+        print(f"Login account lookup failed: {type(exc).__name__}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Sign-in is temporarily unavailable. Please try again.",
+        ) from exc
+
+    password_record = (
+        existing_user.get("password_hash") or _DUMMY_PASSWORD_HASH
+        if existing_user
+        else _DUMMY_PASSWORD_HASH
     )
 
-    if not existing_user:
+    try:
+        password_is_correct = password_hash.verify(user.password, password_record)
+    except Exception:
+        # A malformed legacy password hash must not crash login or bypass limits.
+        password_is_correct = False
+
+    if not existing_user or not password_is_correct:
+        try:
+            failure_state = record_login_failure(email, client_ip)
+        except Exception as exc:
+            print(f"Login failure could not be recorded: {type(exc).__name__}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Sign-in is temporarily unavailable. Please try again.",
+            ) from exc
+
+        if failure_state.get("blocked"):
+            raise _login_rate_limit_response(failure_state.get("retry_after_seconds", 1))
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password."
         )
 
-    password_is_correct = password_hash.verify(
-        user.password,
-        existing_user["password_hash"]
-    )
-
-    if not password_is_correct:
+    # Correct credentials reset account-specific history. The IP-wide bucket
+    # deliberately remains, so one successful login cannot erase a source's
+    # failed attempts against other accounts.
+    try:
+        clear_login_account_failures(email, client_ip)
+    except Exception as exc:
+        print(f"Successful login history could not be cleared: {type(exc).__name__}")
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password."
-        )
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Sign-in is temporarily unavailable. Please try again.",
+        ) from exc
 
     if not existing_user.get("is_active", True):
         raise HTTPException(
