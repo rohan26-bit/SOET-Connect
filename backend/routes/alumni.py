@@ -1,6 +1,7 @@
 import concurrent.futures
 from pathlib import Path
 import json
+import os
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -45,7 +46,7 @@ def _created_at_sort_key(value) -> float:
 def _load_aci_source_data() -> tuple[list[dict], list[dict], list[dict]]:
     """Load shared ACI inputs once so directory and leaderboard scores stay consistent."""
     def _load(table_name: str, file_path: str | None, columns: str) -> list[dict]:
-        if file_path and Path(file_path).exists():
+        if os.getenv("DATABASE_MODE", "").strip().lower() == "mock" and file_path and Path(file_path).exists():
             try:
                 raw = Path(file_path).read_text(encoding="utf-8").strip()
                 if raw and raw != "[]":
@@ -331,7 +332,7 @@ def get_alumni_directory(
 
     def _fetch_table(table_name: str, file_path: str | None, columns: str) -> list:
         data = []
-        if file_path and Path(file_path).exists():
+        if os.getenv("DATABASE_MODE", "").strip().lower() == "mock" and file_path and Path(file_path).exists():
             try:
                 content = Path(file_path).read_text(encoding="utf-8").strip()
                 if content and content != "[]":
