@@ -63,9 +63,9 @@ def test_public_gallery_reports_database_read_failure(client, monkeypatch):
     _assert_service_unavailable(response)
 
 
-def test_own_gallery_reports_database_read_failure(client, alumni_user, monkeypatch):
+def test_own_gallery_reports_database_read_failure(client, verified_alumni_user, monkeypatch):
     _fail_table_read(monkeypatch, gallery_module, "gallery_photos")
-    response = client.get("/api/gallery/mine", headers=alumni_user["headers"])
+    response = client.get("/api/gallery/mine", headers=verified_alumni_user["headers"])
     _assert_service_unavailable(response)
 
 
