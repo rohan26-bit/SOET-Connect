@@ -1,5 +1,6 @@
 import os
 import secrets
+import uuid
 
 from datetime import datetime, timezone
 from typing import Optional
@@ -10,9 +11,15 @@ from database import DuplicatePrnError, users_collection
 from models.user import create_user_document
 from schemas.auth import RegisterRequest, LoginRequest, ChangePasswordRequest
 from pwdlib import PasswordHash
-from security.jwt import create_access_token
+from security.jwt import create_access_token, decode_access_token
 from security.dependencies import get_current_user
 from services.session_security import update_password_and_revoke_sessions
+from services.auth_sessions import (
+    create_auth_session,
+    list_active_auth_sessions,
+    revoke_auth_session,
+    revoke_other_auth_sessions,
+)
 from services.login_rate_limit import (
     check_login_rate_limit,
     clear_login_account_failures,
@@ -32,6 +39,29 @@ router = APIRouter(
 )
 
 password_hash = PasswordHash.recommended()
+
+def _issue_access_token(existing_user: dict, request: Request, session_version: int | None = None) -> str:
+    """Issue a unique JWT and persist its server-side device session before returning it."""
+    session_id = str(uuid.uuid4())
+    effective_session_version = (
+        int(existing_user.get("session_version") or 0)
+        if session_version is None
+        else int(session_version)
+    )
+    token = create_access_token(
+        user_id=str(existing_user["_id"]),
+        role=existing_user["role"],
+        session_version=effective_session_version,
+        session_id=session_id,
+    )
+    token_payload = decode_access_token(token)
+    create_auth_session(
+        user_id=str(existing_user.get("_db_id") or existing_user["_id"]),
+        session_id=session_id,
+        expires_at=token_payload["expires_at"],
+        user_agent=request.headers.get("user-agent"),
+    )
+    return token
 
 
 # =========================
@@ -275,11 +305,14 @@ def login_user(user: LoginRequest, request: Request):
                 detail="Your account is not approved for login."
             )
 
-    access_token = create_access_token(
-        user_id=str(existing_user["_id"]),
-        role=existing_user["role"],
-        session_version=existing_user.get("session_version", 0),
-    )
+    try:
+        access_token = _issue_access_token(existing_user, request)
+    except Exception as exc:
+        print(f"Login session could not be created: {type(exc).__name__}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Sign-in is temporarily unavailable. Please try again.",
+        ) from exc
 
     return {
         "message": "Login successful.",
@@ -302,6 +335,7 @@ def login_user(user: LoginRequest, request: Request):
 @router.post("/change-password")
 def change_password(
     payload: ChangePasswordRequest,
+    request: Request,
     current_user: dict = Depends(get_current_user)
 ):
     user_id = current_user.get("user_id")
@@ -364,16 +398,106 @@ def change_password(
         ) from exc
 
     # Keep the current browser session alive with a freshly issued token.
-    replacement_token = create_access_token(
-        user_id=str(existing_user["_id"]),
-        role=existing_user["role"],
-        session_version=new_session_version,
-    )
+    try:
+        replacement_token = _issue_access_token(
+            existing_user,
+            request,
+            session_version=new_session_version,
+        )
+    except Exception as exc:
+        print(f"Replacement session could not be created after password change: {type(exc).__name__}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Your password was changed, but a new session could not be created. Please sign in again.",
+        ) from exc
 
     return {
         "message": "Password changed successfully. Other active sessions have been signed out.",
         "access_token": replacement_token,
         "token_type": "bearer",
+    }
+
+
+# ============================================================
+# DEVICE SESSIONS & SERVER-SIDE SIGN OUT
+# ============================================================
+
+@router.post("/logout")
+def logout(current_user: dict = Depends(get_current_user)):
+    """Revoke this browser/device session on the server."""
+    try:
+        revoke_auth_session(
+            current_user["session_id"],
+            current_user["database_user_id"],
+        )
+    except Exception as exc:
+        print(f"Logout session revocation failed: {type(exc).__name__}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to complete secure sign out right now. Please try again.",
+        ) from exc
+    return {"message": "You have been signed out successfully."}
+
+
+@router.get("/sessions")
+def get_active_sessions(current_user: dict = Depends(get_current_user)):
+    """List the signed-in user's active devices only."""
+    try:
+        sessions = list_active_auth_sessions(
+            current_user["database_user_id"],
+            current_user["session_id"],
+        )
+    except Exception as exc:
+        print(f"Session list lookup failed: {type(exc).__name__}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to load active sessions right now. Please try again.",
+        ) from exc
+    return {
+        "sessions": sessions,
+        "current_session_id": current_user["session_id"],
+    }
+
+
+@router.delete("/sessions/{session_id}")
+def sign_out_device(
+    session_id: uuid.UUID,
+    current_user: dict = Depends(get_current_user),
+):
+    """Revoke a session only when it belongs to the authenticated account."""
+    try:
+        revoked = revoke_auth_session(str(session_id), current_user["database_user_id"])
+    except Exception as exc:
+        print(f"Device session revocation failed: {type(exc).__name__}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to sign out that device right now. Please try again.",
+        ) from exc
+    if not revoked:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="That active session was not found.",
+        )
+    return {"message": "The selected device has been signed out."}
+
+
+@router.post("/sessions/revoke-others")
+def sign_out_other_devices(current_user: dict = Depends(get_current_user)):
+    """Revoke every other active session while preserving this browser."""
+    try:
+        revoked_count = revoke_other_auth_sessions(
+            current_user["database_user_id"],
+            current_user["session_id"],
+        )
+    except Exception as exc:
+        print(f"Other device session revocation failed: {type(exc).__name__}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to sign out other devices right now. Please try again.",
+        ) from exc
+    return {
+        "message": "All other active devices have been signed out.",
+        "revoked_count": revoked_count,
     }
 
 

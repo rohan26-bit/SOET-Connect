@@ -303,13 +303,93 @@ export const authService = {
   // ============================================================
 
   async signOut() {
-    localStorage.removeItem(
-      'soet_access_token'
-    );
+    const token = localStorage.getItem('soet_access_token');
+    try {
+      if (token) {
+        // Revoke this browser's session server-side before clearing local credentials.
+        await fetch(`${API_URL}/auth/logout`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+    } catch (error) {
+      // Local sign-out must still complete during a temporary network outage.
+      console.warn('Server-side sign out could not be confirmed:', error);
+    } finally {
+      localStorage.removeItem('soet_access_token');
+      localStorage.removeItem('soet_user');
+    }
+  },
 
-    localStorage.removeItem(
-      'soet_user'
-    );
+  // ============================================================
+  // ACTIVE DEVICE SESSIONS
+  // ============================================================
+
+  async getActiveSessions(): Promise<{
+    sessions: Array<{
+      id: string;
+      device_label: string;
+      created_at: string;
+      last_seen_at: string;
+      expires_at: string;
+      is_current: boolean;
+    }>;
+    current_session_id: string;
+  }> {
+    const token = localStorage.getItem('soet_access_token');
+    if (!token) throw new Error('Your session has expired. Please log in again.');
+
+    const response = await fetch(`${API_URL}/auth/sessions`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
+    });
+    const result = await safeJsonParse(response);
+    if (response.status === 401) {
+      localStorage.removeItem('soet_access_token');
+      localStorage.removeItem('soet_user');
+      throw new Error('Your session has expired or has been revoked. Please sign in again.');
+    }
+    if (!response.ok) {
+      throw new Error(result.detail || 'Unable to load active sessions.');
+    }
+    return result;
+  },
+
+  async revokeSession(sessionId: string): Promise<{ message: string }> {
+    const token = localStorage.getItem('soet_access_token');
+    if (!token) throw new Error('Your session has expired. Please log in again.');
+
+    const response = await fetch(`${API_URL}/auth/sessions/${encodeURIComponent(sessionId)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const result = await safeJsonParse(response);
+    if (response.status === 401) {
+      localStorage.removeItem('soet_access_token');
+      localStorage.removeItem('soet_user');
+      throw new Error('Your session has expired or has been revoked. Please sign in again.');
+    }
+    if (!response.ok) throw new Error(result.detail || 'Unable to sign out that device.');
+    return result;
+  },
+
+  async revokeOtherSessions(): Promise<{ message: string; revoked_count: number }> {
+    const token = localStorage.getItem('soet_access_token');
+    if (!token) throw new Error('Your session has expired. Please log in again.');
+
+    const response = await fetch(`${API_URL}/auth/sessions/revoke-others`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const result = await safeJsonParse(response);
+    if (response.status === 401) {
+      localStorage.removeItem('soet_access_token');
+      localStorage.removeItem('soet_user');
+      throw new Error('Your session has expired or has been revoked. Please sign in again.');
+    }
+    if (!response.ok) throw new Error(result.detail || 'Unable to sign out other devices.');
+    return result;
   },
 
   // ============================================================

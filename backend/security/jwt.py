@@ -1,4 +1,5 @@
 import os
+import uuid
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -36,7 +37,7 @@ except ValueError:
     SECRET_KEY = ""
 
 
-def create_access_token(user_id: str, role: str, session_version: int = 0):
+def create_access_token(user_id: str, role: str, session_version: int = 0, session_id: str | None = None):
     secret_key = get_jwt_secret_key()
     expire = datetime.now(timezone.utc) + timedelta(hours=24)
 
@@ -46,6 +47,11 @@ def create_access_token(user_id: str, role: str, session_version: int = 0):
         "sv": max(0, int(session_version)),
         "exp": expire
     }
+    if session_id is not None:
+        try:
+            payload["sid"] = str(uuid.UUID(str(session_id)))
+        except (TypeError, ValueError, AttributeError):
+            raise ValueError("session_id must be a valid UUID.")
 
     return jwt.encode(
         payload,
@@ -82,10 +88,23 @@ def decode_access_token(token: str):
                 detail="Invalid authentication token."
             )
 
+        session_id = payload.get("sid")
+        if session_id is not None:
+            try:
+                session_id = str(uuid.UUID(str(session_id)))
+            except (TypeError, ValueError, AttributeError):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid authentication token."
+                )
+
+        expires_at = datetime.fromtimestamp(float(payload["exp"]), timezone.utc).isoformat()
         return {
             "user_id": user_id,
             "role": role,
             "session_version": session_version,
+            "session_id": session_id,
+            "expires_at": expires_at,
         }
 
     except jwt.ExpiredSignatureError:
