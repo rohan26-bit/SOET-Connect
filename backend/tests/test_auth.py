@@ -819,3 +819,19 @@ def test_login_fails_closed_when_rate_limit_store_is_unavailable(client, monkeyp
 
     assert response.status_code == 503
     assert "temporarily unavailable" in response.json().get("detail", "").lower()
+
+def test_login_fails_cleanly_when_account_database_lookup_is_unavailable(client, monkeypatch):
+    """A users-table read failure returns a service error rather than an unhandled 500."""
+    import routes.auth as auth_routes
+
+    def unavailable(*args, **kwargs):
+        raise RuntimeError("users table unavailable")
+
+    monkeypatch.setattr(auth_routes.users_collection, "find_one", unavailable)
+    response = client.post("/auth/login", json={
+        "email": "known-user@example.com",
+        "password": "CorrectPassword123!",
+    })
+
+    assert response.status_code == 503
+    assert "temporarily unavailable" in response.json().get("detail", "").lower()
