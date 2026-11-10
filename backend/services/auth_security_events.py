@@ -260,7 +260,8 @@ def send_unfamiliar_sign_in_email_alert(
     if not claimed:
         return False
 
-    signals = set(event.get("signals") or [])
+    metadata = event.get("metadata") if isinstance(event.get("metadata"), dict) else {}
+    signals = set(event.get("signals") or metadata.get("signals") or [])
     reasons = []
     if "new_browser_or_platform" in signals:
         reasons.append("a browser or device type not seen in your recent sign-in history")
