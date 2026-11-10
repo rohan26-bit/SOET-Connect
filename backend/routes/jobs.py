@@ -5,6 +5,8 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
+from security.document_attachments import sanitize_document_attachment_text, validate_document_attachment_text
+
 from database import users_collection, supabase
 from security.dependencies import get_current_user
 from services.notifications import NOTIFICATION_TYPES, create_notification_once
@@ -55,6 +57,13 @@ def safe_external_application_url(value: str | None) -> str:
     except ValueError:
         return ""
 
+def sanitize_job_document(job: dict) -> dict:
+    """Return a job record with unsafe legacy links and attachments suppressed."""
+    result = dict(job)
+    result["application_url"] = safe_external_application_url(result.get("application_url"))
+    result["description"] = sanitize_document_attachment_text(result.get("description")) or ""
+    return result
+
 
 class JobCreateRequest(BaseModel):
     title: str
@@ -73,6 +82,12 @@ class JobCreateRequest(BaseModel):
     @classmethod
     def validate_application_url(cls, value: str) -> str:
         return validate_external_application_url(value)
+
+    @field_validator("description")
+    @classmethod
+    def validate_description_attachment(cls, value: str) -> str:
+        validated = validate_document_attachment_text(value)
+        return validated or ""
 
 
 class JobDeadlineUpdateRequest(BaseModel):
@@ -178,7 +193,7 @@ def load_jobs(status: str | None = None, posted_by: str | None = None) -> list[d
 
         jobs = []
         for row in raw_jobs:
-            j = dict(row)
+            j = sanitize_job_document(dict(row))
             j["employment_type"] = row.get("job_type", "")
             j["experience"] = row.get("experience_level", "")
             j["salary"] = row.get("salary_range", "")
@@ -402,7 +417,7 @@ def get_job_details(
             status_code=404,
             detail="Job not found."
         )
-    job = res.data[0]
+    job = sanitize_job_document(res.data[0])
     role = current_user.get("role")
     user_id = str(current_user.get("user_id"))
     is_owner = str(job.get("posted_by")) == user_id
@@ -482,7 +497,7 @@ def update_job_deadline(
 
     return {
         "message": "Job deadline updated successfully.",
-        "job": job
+        "job": sanitize_job_document(job)
     }
 
 
@@ -602,5 +617,5 @@ def delete_job(
 
     return {
         "message": "Job deleted successfully.",
-        "job": target_job
+        "job": sanitize_job_document(target_job)
     }
