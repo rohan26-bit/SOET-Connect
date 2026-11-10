@@ -475,3 +475,62 @@ def test_profile_avatar_invalid_format_fails():
     # javascript: scheme
     resp = test_client.post("/profile/avatar", json={"avatar_url": "javascript:alert(1)"}, headers=headers["student"])
     assert resp.status_code == 422
+
+
+def test_profile_avatar_rejects_svg_invalid_base64_and_mime_mismatch():
+    """Avatar data URIs must contain verified JPEG, PNG, or WebP raster bytes."""
+    headers = setup_test_users()
+    svg_data_url = "data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9YWxlcnQoMSk+PC9zdmc+"
+    invalid_base64 = "data:image/png;base64,%%%not-base64%%%"
+    png_bytes_declared_as_jpeg = (
+        "data:image/jpeg;base64,"
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    )
+    malformed_png = "data:image/png;base64,SGVsbG8="
+
+    for avatar_url in (
+        svg_data_url,
+        invalid_base64,
+        png_bytes_declared_as_jpeg,
+        malformed_png,
+    ):
+        post_response = test_client.post(
+            "/profile/avatar",
+            json={"avatar_url": avatar_url},
+            headers=headers["student"],
+        )
+        assert post_response.status_code == 422
+
+        patch_response = test_client.patch(
+            "/profile/me",
+            json={"avatar_url": avatar_url},
+            headers=headers["student"],
+        )
+        assert patch_response.status_code == 422
+
+
+def test_profile_avatar_requires_https_for_remote_images():
+    """Remote avatar URLs must use HTTPS and must not include embedded credentials."""
+    headers = setup_test_users()
+
+    insecure = test_client.post(
+        "/profile/avatar",
+        json={"avatar_url": "http://cdn.example.com/avatar.png"},
+        headers=headers["student"],
+    )
+    assert insecure.status_code == 422
+
+    credentialed = test_client.patch(
+        "/profile/me",
+        json={"avatar_url": "https://user:password@cdn.example.com/avatar.png"},
+        headers=headers["student"],
+    )
+    assert credentialed.status_code == 422
+
+    valid = test_client.post(
+        "/profile/avatar",
+        json={"avatar_url": "https://cdn.example.com/avatar.png"},
+        headers=headers["student"],
+    )
+    assert valid.status_code == 200
+    assert valid.json()["avatar_url"] == "https://cdn.example.com/avatar.png"
