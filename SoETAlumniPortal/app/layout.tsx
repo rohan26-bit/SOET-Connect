@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AuthProvider } from "@/components/AuthProvider";
 import "./globals.css";
@@ -18,7 +19,13 @@ export const metadata: Metadata = {
   description: "Connecting SOET students and alumni through opportunities, events, and career updates.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // Nonce-based CSP requires request-time rendering. Restrict this to protected
+  // Vercel previews so production pages retain their existing static behavior.
+  if (process.env.VERCEL_ENV === "preview") {
+    await headers();
+  }
+
   return (
     <html
       lang="en"
