@@ -89,6 +89,21 @@ def test_invalid_token_returns_401(client):
     assert response.status_code == 401
     assert "Invalid authentication token" in response.json().get("detail", "")
 
+def test_authenticated_user_lookup_database_failure_returns_503(client, admin_user, monkeypatch):
+    """A user-table outage must not be reported as a missing account."""
+    import security.dependencies as dependencies
+
+    def fail_user_lookup(*args, **kwargs):
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(dependencies.users_collection, "find_one", fail_user_lookup)
+
+    response = client.get("/profile/me", headers=admin_user["headers"])
+
+    assert response.status_code == 503
+    assert "Authentication service is temporarily unavailable" in response.json().get("detail", "")
+
+
 
 def test_register_student_success(client):
     """Registering a student with valid fields returns 201."""

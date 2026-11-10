@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from database import supabase, users_collection
 from security.dependencies import get_current_user, get_optional_current_user
-from services.gallery import validate_image_file, generate_watermarked_display
+from services.gallery import MAX_IMAGE_SIZE_BYTES, validate_image_file, generate_watermarked_display
 from services.notifications import create_notification_once
 
 router = APIRouter(
@@ -102,11 +102,15 @@ async def upload_gallery_photo(
                 detail="Your alumni account must be verified by an administrator before uploading photos."
             )
 
-    # Read bytes
+    # Read at most the configured limit plus one byte so oversized uploads
+    # are rejected before the complete request body is held in application memory.
     try:
-        file_bytes = await file.read()
-    except Exception as e:
+        file_bytes = await file.read(MAX_IMAGE_SIZE_BYTES + 1)
+    except Exception:
         raise HTTPException(status_code=400, detail="Failed to read uploaded file.")
+
+    if len(file_bytes) > MAX_IMAGE_SIZE_BYTES:
+        raise HTTPException(status_code=413, detail="File exceeds maximum allowed size of 8 MB.")
 
     # Validate image file integrity and format
     try:

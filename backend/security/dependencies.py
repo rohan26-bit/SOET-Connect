@@ -16,8 +16,12 @@ def get_user_by_id(user_id: str) -> dict | None:
     user_id_str = str(user_id).strip()
     try:
         return users_collection.find_one({"_id": user_id_str}, include_profiles=False)
-    except Exception:
-        return None
+    except Exception as exc:
+        # Keep a database outage distinct from a genuine missing account.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service is temporarily unavailable. Please try again.",
+        ) from exc
 
 
 def get_current_user(
