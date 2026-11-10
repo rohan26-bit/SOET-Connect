@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from urllib.parse import urlparse
 from pydantic import BaseModel, Field, field_validator
 
 from database import supabase, users_collection
