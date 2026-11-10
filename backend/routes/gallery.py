@@ -241,7 +241,10 @@ def get_approved_gallery_photos(
         }
     except Exception as e:
         print("Error fetching approved gallery photos:", e)
-        return {"photos": [], "total": 0}
+        raise HTTPException(
+            status_code=503,
+            detail="The photo gallery is temporarily unavailable. Please try again.",
+        ) from e
 
 
 # ============================================================
@@ -259,7 +262,10 @@ def get_my_gallery_photos(
         return [_format_photo_doc(p, current_user_id=user_id) for p in photos]
     except Exception as e:
         print("Error fetching user's gallery photos:", e)
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Your photo submissions are temporarily unavailable. Please try again.",
+        ) from e
 
 
 # ============================================================
@@ -288,7 +294,10 @@ def get_admin_gallery_photos(
         return [_format_photo_doc(p, is_admin=True) for p in photos]
     except Exception as e:
         print("Error fetching admin gallery photos:", e)
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Gallery moderation data is temporarily unavailable. Please try again.",
+        ) from e
 
 
 # ============================================================
