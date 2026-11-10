@@ -534,3 +534,22 @@ def test_profile_avatar_requires_https_for_remote_images():
     )
     assert valid.status_code == 200
     assert valid.json()["avatar_url"] == "https://cdn.example.com/avatar.png"
+
+
+def test_profile_avatar_decoded_bytes_are_limited_to_two_megabytes():
+    """A base64 payload under the request-field limit can still exceed the decoded image limit."""
+    import base64
+
+    headers = setup_test_users()
+    oversized_bytes = b"x" * (2 * 1024 * 1024 + 1)
+    oversized_data_url = (
+        "data:image/png;base64,"
+        + base64.b64encode(oversized_bytes).decode("ascii")
+    )
+
+    response = test_client.post(
+        "/profile/avatar",
+        json={"avatar_url": oversized_data_url},
+        headers=headers["student"],
+    )
+    assert response.status_code == 422
