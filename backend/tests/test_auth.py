@@ -1007,3 +1007,169 @@ def test_password_change_revokes_registered_device_sessions_in_mock_mode(admin_u
     next_version = update_password_and_revoke_sessions(admin_user["id"], "new-argon2-hash")
     assert next_version == 1
     assert list_active_auth_sessions(admin_user["id"], session_id) == []
+
+
+# ============================================================
+# HTTPONLY COOKIE AUTHENTICATION
+# ============================================================
+
+def test_login_sets_host_only_httponly_api_cookie(client):
+    payload = {
+        "name": "Cookie Login User",
+        "email": "cookie.login@example.com",
+        "password": "SecurePassword123!",
+        "role": "student",
+        **VALID_STUDENT_FIELDS,
+    }
+    assert client.post("/api/auth/register", json=payload).status_code == 201
+    from database import users_collection
+    users_collection.update_one(
+        {"email": payload["email"]},
+        {"$set": {"is_verified": True, "verification_status": "approved"}},
+    )
+
+    response = client.post(
+        "/api/auth/login",
+        json={"email": payload["email"], "password": payload["password"]},
+    )
+
+    assert response.status_code == 200
+    cookie = response.headers.get("set-cookie", "").lower()
+    assert "soet_access_token=" in cookie
+    assert "httponly" in cookie
+    assert "samesite=lax" in cookie
+    assert "path=/api" in cookie
+    assert "domain=" not in cookie
+
+
+def test_cookie_authenticates_same_origin_api_requests(client):
+    payload = {
+        "name": "Cookie Session User",
+        "email": "cookie.session@example.com",
+        "password": "SecurePassword123!",
+        "role": "student",
+        **VALID_STUDENT_FIELDS,
+    }
+    assert client.post("/api/auth/register", json=payload).status_code == 201
+    from database import users_collection
+    users_collection.update_one(
+        {"email": payload["email"]},
+        {"$set": {"is_verified": True, "verification_status": "approved"}},
+    )
+
+    login = client.post(
+        "/api/auth/login",
+        json={"email": payload["email"], "password": payload["password"]},
+    )
+    assert login.status_code == 200
+    assert "soet_access_token" in client.cookies
+
+    profile = client.get("/api/profile/me")
+    assert profile.status_code == 200
+
+
+def test_cookie_auth_rejects_untrusted_origin_on_state_change(client):
+    payload = {
+        "name": "Cookie CSRF User",
+        "email": "cookie.csrf@example.com",
+        "password": "SecurePassword123!",
+        "role": "student",
+        **VALID_STUDENT_FIELDS,
+    }
+    assert client.post("/api/auth/register", json=payload).status_code == 201
+    from database import users_collection
+    users_collection.update_one(
+        {"email": payload["email"]},
+        {"$set": {"is_verified": True, "verification_status": "approved"}},
+    )
+
+    login = client.post(
+        "/api/auth/login",
+        json={"email": payload["email"], "password": payload["password"]},
+    )
+    assert login.status_code == 200
+
+    blocked = client.post("/api/auth/logout", headers={"Origin": "https://evil.example"})
+    assert blocked.status_code == 403
+
+    accepted = client.post("/api/auth/logout", headers={"Origin": "https://soet-connect.vercel.app"})
+    assert accepted.status_code == 200
+    assert "max-age=0" in accepted.headers.get("set-cookie", "").lower()
+
+
+def test_login_does_not_return_jwt_in_production_response(client, monkeypatch):
+    payload = {
+        "name": "Cookie Private User",
+        "email": "cookie.private@example.com",
+        "password": "SecurePassword123!",
+        "role": "student",
+        **VALID_STUDENT_FIELDS,
+    }
+    assert client.post("/api/auth/register", json=payload).status_code == 201
+    from database import users_collection
+    users_collection.update_one(
+        {"email": payload["email"]},
+        {"$set": {"is_verified": True, "verification_status": "approved"}},
+    )
+    monkeypatch.delenv("AUTH_EXPOSE_TEST_TOKENS", raising=False)
+
+    response = client.post(
+        "/api/auth/login",
+        json={"email": payload["email"], "password": payload["password"]},
+    )
+
+    assert response.status_code == 200
+    assert "access_token" not in response.json()
+    assert "token_type" not in response.json()
+    assert "httponly" in response.headers.get("set-cookie", "").lower()
+
+
+def test_login_rejects_untrusted_origin(client):
+    payload = {
+        "name": "Cross Origin Login User",
+        "email": "cross.origin.login@example.com",
+        "password": "SecurePassword123!",
+        "role": "student",
+        **VALID_STUDENT_FIELDS,
+    }
+    assert client.post("/auth/register", json=payload).status_code == 201
+    from database import users_collection
+    users_collection.update_one(
+        {"email": payload["email"]},
+        {"$set": {"is_verified": True, "verification_status": "approved"}},
+    )
+
+    response = client.post(
+        "/auth/login",
+        headers={"Origin": "https://evil.example"},
+        json={"email": payload["email"], "password": payload["password"]},
+    )
+
+    assert response.status_code == 403
+    assert "origin is not allowed" in response.json()["detail"].lower()
+
+
+def test_password_change_replaces_the_http_only_cookie(client, admin_user, monkeypatch):
+    from routes.auth import password_hash
+    from database import users_collection
+
+    users_collection.update_one(
+        {"_id": admin_user["id"]},
+        {"$set": {"password_hash": password_hash.hash("OldPassword123!")}},
+    )
+    monkeypatch.delenv("AUTH_EXPOSE_TEST_TOKENS", raising=False)
+
+    response = client.post(
+        "/api/auth/change-password",
+        headers=admin_user["headers"],
+        json={
+            "current_password": "OldPassword123!",
+            "new_password": "NewPassword456!",
+            "confirm_new_password": "NewPassword456!",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "access_token" not in response.json()
+    assert "httponly" in response.headers.get("set-cookie", "").lower()
+    assert client.get("/api/profile/me").status_code == 200

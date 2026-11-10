@@ -1,10 +1,6 @@
 const API_URL = '/api';
 
-function getToken(): string {
-  const token = localStorage.getItem('soet_access_token');
-  if (!token) throw new Error('Your session has expired. Please log in again.');
-  return token;
-}
+
 
 async function parseResponse(response: Response) {
   const data = await response.json().catch(() => ({}));
@@ -71,7 +67,7 @@ export const placementService = {
 
   async getAdminRecords(): Promise<PlacementCelebration[]> {
     const response = await fetch(`${API_URL}/placements/admin`, {
-      headers: { Authorization: `Bearer ${getToken()}` },
+      headers: {}` },
       cache: 'no-store',
     });
     const data = await parseResponse(response);
@@ -81,8 +77,7 @@ export const placementService = {
   async create(input: PlacementInput): Promise<PlacementCelebration> {
     const response = await fetch(`${API_URL}/placements`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${getToken()}`,
+      headers: {}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(input),
@@ -93,8 +88,7 @@ export const placementService = {
   async update(id: string, input: Partial<PlacementInput>): Promise<PlacementCelebration> {
     const response = await fetch(`${API_URL}/placements/${encodeURIComponent(id)}`, {
       method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${getToken()}`,
+      headers: {}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(input),
@@ -105,7 +99,7 @@ export const placementService = {
   async remove(id: string): Promise<void> {
     const response = await fetch(`${API_URL}/placements/${encodeURIComponent(id)}`, {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${getToken()}` },
+      headers: {}` },
     });
     await parseResponse(response);
   },

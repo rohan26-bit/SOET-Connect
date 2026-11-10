@@ -1,12 +1,6 @@
 const API_URL = '/api';
 
-function getToken(): string {
-  const token = localStorage.getItem('soet_access_token');
-  if (!token) {
-    throw new Error('Your session has expired. Please log in again.');
-  }
-  return token;
-}
+
 
 async function parseResponse(response: Response) {
   const data = await response.json().catch(() => ({}));
@@ -75,8 +69,7 @@ export const chatService = {
   async sendPresenceHeartbeat(): Promise<void> {
     const response = await fetch(`${API_URL}/chat/presence`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${getToken()}`,
+      headers: {}`,
         'Content-Type': 'application/json',
       },
       cache: 'no-store',
@@ -91,8 +84,7 @@ export const chatService = {
   async getConversations(): Promise<ConversationItem[]> {
     const response = await fetch(`${API_URL}/chat/conversations`, {
       method: 'GET',
-      headers: {
-        Authorization: `Bearer ${getToken()}`,
+      headers: {}`,
         'Content-Type': 'application/json',
       },
       cache: 'no-store',
@@ -109,8 +101,7 @@ export const chatService = {
   async createOrGetConversation(participantId: string): Promise<ConversationDetail> {
     const response = await fetch(`${API_URL}/chat/conversations`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${getToken()}`,
+      headers: {}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ participant_id: participantId }),
@@ -128,8 +119,7 @@ export const chatService = {
       `${API_URL}/chat/conversations/${encodeURIComponent(conversationId)}`,
       {
         method: 'GET',
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
+        headers: {}`,
           'Content-Type': 'application/json',
         },
       }
@@ -147,8 +137,7 @@ export const chatService = {
       `${API_URL}/chat/conversations/${encodeURIComponent(conversationId)}`,
       {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
+        headers: {}`,
           'Content-Type': 'application/json',
         },
       }
@@ -166,8 +155,7 @@ export const chatService = {
       `${API_URL}/chat/conversations/${encodeURIComponent(conversationId)}/messages`,
       {
         method: 'GET',
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
+        headers: {}`,
           'Content-Type': 'application/json',
         },
         cache: 'no-store',
@@ -187,8 +175,7 @@ export const chatService = {
       `${API_URL}/chat/conversations/${encodeURIComponent(conversationId)}/messages`,
       {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
+        headers: {}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ content }),
@@ -215,7 +202,7 @@ export const chatService = {
       API_URL + '/chat/conversations/' + encodeURIComponent(conversationId) + '/attachments',
       {
         method: 'POST',
-        headers: { Authorization: 'Bearer ' + getToken() },
+        headers: {},
         body: formData,
       }
     );
@@ -225,7 +212,7 @@ export const chatService = {
   async downloadAttachment(messageId: string, attachmentId: string): Promise<Blob> {
     const response = await fetch(
       API_URL + '/chat/messages/' + encodeURIComponent(messageId) + '/attachments/' + encodeURIComponent(attachmentId),
-      { headers: { Authorization: 'Bearer ' + getToken() } }
+      { headers: {} }
     );
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
@@ -244,8 +231,7 @@ export const chatService = {
       `${API_URL}/chat/messages/${encodeURIComponent(messageId)}/read`,
       {
         method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
+        headers: {}`,
           'Content-Type': 'application/json',
         },
       }

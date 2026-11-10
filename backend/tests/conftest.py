@@ -11,6 +11,7 @@ os.environ["DATABASE_BACKEND"] = "supabase"
 os.environ["DATABASE_MODE"] = "mock"
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-soet-connect-tests-32char"
 os.environ["JWT_ALGORITHM"] = "HS256"
+os.environ["AUTH_EXPOSE_TEST_TOKENS"] = "1"
 
 # Compatibility shim for legacy tests that import bson.ObjectId
 class MockObjectId:

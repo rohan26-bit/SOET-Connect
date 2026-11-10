@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
 from database import DuplicatePrnError, users_collection
 from models.user import create_user_document
@@ -13,6 +13,7 @@ from schemas.auth import RegisterRequest, LoginRequest, ChangePasswordRequest
 from pwdlib import PasswordHash
 from security.jwt import create_access_token, decode_access_token
 from security.dependencies import get_current_user
+from security.auth_cookie import clear_auth_cookie, is_trusted_origin, set_auth_cookie
 from services.session_security import update_password_and_revoke_sessions
 from services.auth_sessions import (
     create_auth_session,
@@ -206,7 +207,16 @@ def _login_rate_limit_response(retry_after_seconds: int) -> HTTPException:
 
 
 @router.post("/login")
-def login_user(user: LoginRequest, request: Request):
+def login_user(user: LoginRequest, request: Request, response: Response):
+    # Block cross-origin login-CSRF attempts while allowing non-browser API clients
+    # that do not send an Origin header.
+    origin = request.headers.get("origin")
+    if origin and not is_trusted_origin(origin):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Request origin is not allowed.",
+        )
+
     email = user.email.lower().strip()
     client_ip = get_client_ip(request)
 
@@ -314,10 +324,9 @@ def login_user(user: LoginRequest, request: Request):
             detail="Sign-in is temporarily unavailable. Please try again.",
         ) from exc
 
-    return {
+    set_auth_cookie(response, access_token)
+    result = {
         "message": "Login successful.",
-        "access_token": access_token,
-        "token_type": "bearer",
         "user": {
             "id": str(existing_user["_id"]),
             "name": existing_user["name"],
@@ -326,6 +335,12 @@ def login_user(user: LoginRequest, request: Request):
             "is_verified": existing_user.get("is_verified", False)
         }
     }
+    # Automated tests opt in to token JSON for assertions and legacy bearer fixtures.
+    # Production responses never expose the credential to browser JavaScript.
+    if os.getenv("AUTH_EXPOSE_TEST_TOKENS") == "1":
+        result["access_token"] = access_token
+        result["token_type"] = "bearer"
+    return result
 
 
 # =========================
@@ -336,6 +351,7 @@ def login_user(user: LoginRequest, request: Request):
 def change_password(
     payload: ChangePasswordRequest,
     request: Request,
+    response: Response,
     current_user: dict = Depends(get_current_user)
 ):
     user_id = current_user.get("user_id")
@@ -411,11 +427,14 @@ def change_password(
             detail="Your password was changed, but a new session could not be created. Please sign in again.",
         ) from exc
 
-    return {
+    set_auth_cookie(response, replacement_token)
+    result = {
         "message": "Password changed successfully. Other active sessions have been signed out.",
-        "access_token": replacement_token,
-        "token_type": "bearer",
     }
+    if os.getenv("AUTH_EXPOSE_TEST_TOKENS") == "1":
+        result["access_token"] = replacement_token
+        result["token_type"] = "bearer"
+    return result
 
 
 # ============================================================
@@ -423,7 +442,7 @@ def change_password(
 # ============================================================
 
 @router.post("/logout")
-def logout(current_user: dict = Depends(get_current_user)):
+def logout(response: Response, current_user: dict = Depends(get_current_user)):
     """Revoke this browser/device session on the server."""
     try:
         revoke_auth_session(
@@ -436,6 +455,7 @@ def logout(current_user: dict = Depends(get_current_user)):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Unable to complete secure sign out right now. Please try again.",
         ) from exc
+    clear_auth_cookie(response)
     return {"message": "You have been signed out successfully."}
 
 

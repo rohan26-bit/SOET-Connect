@@ -7,6 +7,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from database import users_collection
 from security.jwt import decode_access_token
 from services.auth_sessions import ensure_legacy_auth_session, is_auth_session_active
+from security.auth_cookie import AUTH_COOKIE_NAME, is_trusted_origin
 
 
 security = HTTPBearer(auto_error=False)
@@ -32,13 +33,26 @@ def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ) -> dict:
-    if not credentials:
+    # Prefer an explicit bearer header for controlled legacy clients and tests.
+    # Browser sessions use the HttpOnly cookie and are protected against CSRF by
+    # requiring a trusted Origin on every state-changing cookie-authenticated call.
+    cookie_token = request.cookies.get(AUTH_COOKIE_NAME)
+    if credentials:
+        token = credentials.credentials
+    elif cookie_token:
+        if request.method.upper() not in {"GET", "HEAD", "OPTIONS"}:
+            origin = request.headers.get("origin")
+            if not is_trusted_origin(origin):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Request origin is not allowed.",
+                )
+        token = cookie_token
+    else:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication credentials were not provided."
         )
-
-    token = credentials.credentials
     payload = decode_access_token(token)
     user_id = payload.get("user_id")
 
@@ -111,6 +125,6 @@ def get_optional_current_user(
 
     Invalid or expired tokens still fail closed through get_current_user.
     """
-    if credentials is None:
+    if credentials is None and not request.cookies.get(AUTH_COOKIE_NAME):
         return None
     return get_current_user(request, credentials)

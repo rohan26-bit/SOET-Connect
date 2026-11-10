@@ -1,12 +1,6 @@
 const API_URL = '/api';
 
-function getToken(): string {
-  const token = localStorage.getItem('soet_access_token');
-  if (!token) {
-    throw new Error('Your session has expired. Please log in again.');
-  }
-  return token;
-}
+
 
 async function parseResponse(response: Response) {
   const data = await response.json().catch(() => ({}));
@@ -82,8 +76,7 @@ export const notificationService = {
   async getNotifications(_userId?: string): Promise<NotificationItem[]> {
     const response = await fetch(`${API_URL}/notifications`, {
       method: 'GET',
-      headers: {
-        Authorization: `Bearer ${getToken()}`,
+      headers: {}`,
         'Content-Type': 'application/json',
       },
     });
@@ -101,8 +94,7 @@ export const notificationService = {
       `${API_URL}/notifications/${encodeURIComponent(notificationId)}/read`,
       {
         method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
+        headers: {}`,
           'Content-Type': 'application/json',
         },
       }
@@ -118,8 +110,7 @@ export const notificationService = {
   async markAllAsRead(_userId?: string) {
     const response = await fetch(`${API_URL}/notifications/read-all`, {
       method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${getToken()}`,
+      headers: {}`,
         'Content-Type': 'application/json',
       },
     });
@@ -134,8 +125,7 @@ export const notificationService = {
   async getPreferences(): Promise<NotificationPreferences> {
     const response = await fetch(`${API_URL}/notifications/preferences`, {
       method: 'GET',
-      headers: {
-        Authorization: `Bearer ${getToken()}`,
+      headers: {}`,
         'Content-Type': 'application/json',
       },
     });
@@ -150,8 +140,7 @@ export const notificationService = {
   async updatePreferences(prefs: Partial<NotificationPreferences>): Promise<NotificationPreferences> {
     const response = await fetch(`${API_URL}/notifications/preferences`, {
       method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${getToken()}`,
+      headers: {}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(prefs),
@@ -167,8 +156,7 @@ export const notificationService = {
   async getDeliveries(limit: number = 20): Promise<NotificationDeliveryItem[]> {
     const response = await fetch(`${API_URL}/notifications/deliveries?limit=${limit}`, {
       method: 'GET',
-      headers: {
-        Authorization: `Bearer ${getToken()}`,
+      headers: {}`,
         'Content-Type': 'application/json',
       },
     });

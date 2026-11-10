@@ -112,16 +112,7 @@ export interface AlumniAciResponse {
 }
 
 function getAuthHeaders(): Record<string, string> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('soet_access_token') : null;
-
-  if (!token) {
-    throw new Error('Please log in again.');
-  }
-
-  return {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  };
+  return { 'Content-Type': 'application/json' };
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {

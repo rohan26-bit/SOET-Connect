@@ -180,15 +180,7 @@ function sortNewestFirst<T extends { created_at?: string }>(items: T[]): T[] {
   });
 }
 
-function getToken(): string {
-  const token = localStorage.getItem('soet_access_token');
 
-  if (!token) {
-    throw new Error('Your session has expired. Please log in again.');
-  }
-
-  return token;
-}
 
 async function parseResponse(response: Response) {
   const data = await response.json().catch(() => ({}));
@@ -216,8 +208,7 @@ export const adminService = {
       `${API_URL}/alumni/pending`,
       {
         method: 'GET',
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
+        headers: {}`,
           'Content-Type': 'application/json',
         },
       }
@@ -239,8 +230,7 @@ export const adminService = {
       `${API_URL}/alumni/verify/${encodeURIComponent(userId)}?status=${encodeURIComponent(status)}`,
       {
         method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
+        headers: {}`,
           'Content-Type': 'application/json',
         },
       }
@@ -258,8 +248,7 @@ export const adminService = {
     `${API_URL}/admin/metrics`,
     {
       method: 'GET',
-      headers: {
-        Authorization: `Bearer ${getToken()}`,
+      headers: {}`,
         'Content-Type': 'application/json',
       },
     }
@@ -275,8 +264,7 @@ export const adminService = {
   async getAllStudents(): Promise<UserManagementItem[]> {
     const response = await fetch(`${API_URL}/admin/students`, {
       method: 'GET',
-      headers: {
-        Authorization: `Bearer ${getToken()}`,
+      headers: {}`,
         'Content-Type': 'application/json',
       },
     });
@@ -309,8 +297,7 @@ export const adminService = {
   async getPendingStudents(): Promise<UserManagementItem[]> {
     const response = await fetch(`${API_URL}/admin/students/pending`, {
       method: 'GET',
-      headers: {
-        Authorization: `Bearer ${getToken()}`,
+      headers: {}`,
         'Content-Type': 'application/json',
       },
     });
@@ -347,8 +334,7 @@ export const adminService = {
       `${API_URL}/admin/students/${encodeURIComponent(userId)}/verification?status=${encodeURIComponent(status)}`,
       {
         method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
+        headers: {}`,
           'Content-Type': 'application/json',
         },
       }
@@ -360,8 +346,7 @@ export const adminService = {
   async getAllAlumni(): Promise<UserManagementItem[]> {
     const response = await fetch(`${API_URL}/admin/alumni`, {
       method: 'GET',
-      headers: {
-        Authorization: `Bearer ${getToken()}`,
+      headers: {}`,
         'Content-Type': 'application/json',
       },
     });
@@ -405,8 +390,7 @@ export const adminService = {
       `${API_URL}/admin/users/${encodeURIComponent(userId)}/active`,
       {
         method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
+        headers: {}`,
           'Content-Type': 'application/json',
         },
       }
@@ -420,8 +404,7 @@ export const adminService = {
       `${API_URL}/admin/users/${encodeURIComponent(userId)}`,
       {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
+        headers: {}`,
           'Content-Type': 'application/json',
         },
       }
@@ -444,8 +427,7 @@ export const adminService = {
 
     const query = params.toString() ? `?${params.toString()}` : '';
     const response = await fetch(`${API_URL}/admin/participation/events${query}`, {
-      headers: {
-        Authorization: `Bearer ${getToken()}`,
+      headers: {}`,
       },
     });
 
@@ -471,8 +453,7 @@ export const adminService = {
     const response = await fetch(
       `${API_URL}/admin/participation/events/${encodeURIComponent(eventId)}/participants${query}`,
       {
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
+        headers: {}`,
         },
       }
     );
@@ -490,8 +471,7 @@ export const adminService = {
 
     const query = params.toString() ? `?${params.toString()}` : '';
     const response = await fetch(`${API_URL}/admin/participation/jobs${query}`, {
-      headers: {
-        Authorization: `Bearer ${getToken()}`,
+      headers: {}`,
       },
     });
 
@@ -517,8 +497,7 @@ export const adminService = {
     const response = await fetch(
       `${API_URL}/admin/participation/jobs/${encodeURIComponent(jobId)}/applicants${query}`,
       {
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
+        headers: {}`,
         },
       }
     );

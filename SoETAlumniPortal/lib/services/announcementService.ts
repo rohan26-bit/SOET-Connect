@@ -6,13 +6,7 @@ import {
 
 const API_URL = '/api';
 
-function getToken(): string {
-  const token = localStorage.getItem('soet_access_token');
-  if (!token) {
-    throw new Error('Your session has expired. Please log in again.');
-  }
-  return token;
-}
+
 
 async function parseResponse(response: Response) {
   const data = await response.json().catch(() => ({}));
@@ -57,8 +51,7 @@ export const announcementService = {
   async getAnnouncements(): Promise<AnnouncementItem[]> {
     const response = await fetch(`${API_URL}/announcements`, {
       method: 'GET',
-      headers: {
-        Authorization: `Bearer ${getToken()}`,
+      headers: {}`,
         'Content-Type': 'application/json',
       },
     });
@@ -95,8 +88,7 @@ export const announcementService = {
 
     const response = await fetch(`${API_URL}/announcements`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${getToken()}`,
+      headers: {}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -139,8 +131,7 @@ export const announcementService = {
       `${API_URL}/announcements/${encodeURIComponent(id)}`,
       {
         method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
+        headers: {}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
@@ -159,8 +150,7 @@ export const announcementService = {
       `${API_URL}/announcements/${encodeURIComponent(id)}`,
       {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
+        headers: {}`,
           'Content-Type': 'application/json',
         },
       }
