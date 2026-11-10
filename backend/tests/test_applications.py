@@ -416,3 +416,40 @@ def test_legacy_unsafe_resume_urls_are_not_returned_as_links():
     assert resolve_resume_url("data:text/html,<script>alert(1)</script>") == ""
     assert resolve_resume_url("https://user:password@example.com/resume.pdf") == ""
     assert resolve_resume_url("https://example.com/resume.pdf") == "https://example.com/resume.pdf"
+
+
+def test_legacy_unsafe_resume_links_are_sanitized_on_compatibility_reads(
+    client, admin_user, student_user
+):
+    """Compatibility GET/PATCH responses must never return a stored javascript: URL."""
+    job_id = _create_approved_job(client, admin_user)
+    submitted = client.post(
+        "/applications",
+        json={"job_id": job_id, "resume_url": "https://example.com/resume.pdf"},
+        headers=student_user["headers"],
+    )
+    assert submitted.status_code == 200
+    application_id = submitted.json()["application"]["id"]
+
+    supabase.table("job_applications").update({
+        "resume_url": "javascript:alert(1)",
+    }).eq("id", application_id).execute()
+
+    mine = client.get("/jobs/applications/me", headers=student_user["headers"])
+    assert mine.status_code == 200
+    assert next(item for item in mine.json() if item["id"] == application_id)["resume_url"] == ""
+
+    applicants = client.get(
+        f"/jobs/{job_id}/applications",
+        headers=admin_user["headers"],
+    )
+    assert applicants.status_code == 200
+    assert next(item for item in applicants.json() if item["id"] == application_id)["resume_url"] == ""
+
+    status_update = client.patch(
+        f"/jobs/applications/{application_id}/status",
+        json={"status": "under_review"},
+        headers=admin_user["headers"],
+    )
+    assert status_update.status_code == 200
+    assert status_update.json()["application"]["resume_url"] == ""
