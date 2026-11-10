@@ -109,13 +109,16 @@ def test_alumni_directory_suppresses_unsafe_legacy_social_links(
 ):
     from database import users_collection
 
+    existing_user = users_collection.find_one({"_id": verified_alumni_user["id"]})
+    legacy_profile = dict(existing_user.get("alumni_profile") or {})
+    legacy_profile.update({
+        "linkedin": "javascript:alert(1)",
+        "github": "https://user:password@example.com/profile",
+        "website": "https://safe.example.com/profile",
+    })
     users_collection.update_one(
         {"_id": verified_alumni_user["id"]},
-        {"$set": {
-            "alumni_profile.linkedin": "javascript:alert(1)",
-            "alumni_profile.github": "https://user:password@example.com/profile",
-            "alumni_profile.website": "https://safe.example.com/profile",
-        }},
+        {"$set": {"alumni_profile": legacy_profile}},
     )
 
     response = client.get("/alumni/directory", headers=student_user["headers"])
