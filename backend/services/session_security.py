@@ -3,6 +3,7 @@
 import os
 
 from database import supabase, users_collection
+from services.auth_sessions import revoke_all_auth_sessions
 
 
 def update_password_and_revoke_sessions(user_id: str, password_hash: str) -> int:
@@ -24,6 +25,7 @@ def update_password_and_revoke_sessions(user_id: str, password_hash: str) -> int
         )
         if not result.modified_count:
             raise RuntimeError("Password update did not modify the user account.")
+        revoke_all_auth_sessions(user_id)
         return next_version
 
     result = supabase.rpc(
