@@ -163,3 +163,26 @@ def test_job_event_and_announcement_models_validate_embedded_attachments():
 
     with pytest.raises(ValidationError):
         AnnouncementUpdateRequest(content=unsafe)
+
+
+def test_job_event_and_announcement_models_accept_valid_pdf_attachment():
+    valid = _attachment_text(
+        "guide.pdf",
+        "PDF",
+        "application/pdf",
+        b"%PDF-1.4\\n%%EOF",
+    )
+
+    job = JobCreateRequest(
+        title="Job",
+        company="Example",
+        description=valid,
+        location="Remote",
+        employment_type="full-time",
+    )
+    event = EventCreateRequest(title="Event", description=valid)
+    announcement = AnnouncementCreateRequest(title="Announcement", content=valid)
+
+    assert job.description == valid
+    assert event.description == valid
+    assert announcement.content == valid
