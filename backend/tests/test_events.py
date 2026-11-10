@@ -316,18 +316,42 @@ def test_update_and_delete_authorization():
 
 
 def test_registration_cleanup_after_delete():
-    """Deleting an event cleans up associated registrations."""
+    """Deleting an event notifies active attendees and cleans up registrations."""
+    from services.notifications import NOTIFICATION_TYPES
+
     headers = setup_test_users()
-    res_create = client.post("/events", json={"title": "Event To Delete", "description": "D", "event_date": "2026-11-15"}, headers=headers["admin"])
+    res_create = client.post(
+        "/events",
+        json={"title": "Event To Delete", "description": "D", "event_date": "2026-11-15"},
+        headers=headers["admin"],
+    )
+    assert res_create.status_code == 200
     event_id = res_create.json()["event"]["id"]
 
     client.post(f"/events/{event_id}/register", headers=headers["student"])
-    assert len(events_module.load_registrations()) == 1
+    client.post(f"/events/{event_id}/register", headers=headers["student2"])
+    assert len(events_module.load_registrations()) == 2
 
-    # Delete event
-    client.delete(f"/events/{event_id}", headers=headers["admin"])
-    # Registrations for this event must be cleaned up
+    # Delete event: both registrants must be told their registrations were cancelled.
+    deleted = client.delete(f"/events/{event_id}", headers=headers["admin"])
+    assert deleted.status_code == 200
+    assert deleted.json()["notified_attendees"] == 2
+
+    for attendee_key in ("student", "student2"):
+        notes = client.get("/notifications", headers=headers[attendee_key]).json()
+        deletion_notes = [
+            note for note in notes
+            if note.get("entity_id") == event_id
+            and note.get("type") == NOTIFICATION_TYPES["event_cancellation"]
+        ]
+        assert len(deletion_notes) == 1
+        assert deletion_notes[0]["title"] == "Event deleted"
+        assert "Your registration has been cancelled" in deletion_notes[0]["message"]
+
+    # The event owner/admin and unrelated users are not notified.
+    assert client.get("/notifications", headers=headers["admin"]).json() == []
     assert len(events_module.load_registrations()) == 0
+    assert client.delete(f"/events/{event_id}", headers=headers["admin"]).status_code == 404
 
 
 def test_get_events_includes_counts_and_is_registered():
