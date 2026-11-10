@@ -683,3 +683,139 @@ def test_change_password_unauthenticated(client):
     })
     assert res.status_code == 401
 
+def test_login_throttles_repeated_failures_for_account_and_ip(client, monkeypatch):
+    """Eight failures for one account from one source trigger a temporary 429."""
+    from database import users_collection
+    from services.login_rate_limit import reset_mock_login_rate_limits
+
+    reset_mock_login_rate_limits()
+    monkeypatch.setenv("VERCEL", "1")
+
+    payload = {
+        "name": "Rate Limited Student",
+        "email": "rate.limit.student@example.com",
+        "password": "CorrectPassword123!",
+        "role": "student",
+        **VALID_STUDENT_FIELDS,
+    }
+    assert client.post("/auth/register", json=payload).status_code == 201
+    users_collection.update_one(
+        {"email": payload["email"]},
+        {"$set": {"is_verified": True, "verification_status": "approved"}},
+    )
+
+    headers = {"x-forwarded-for": "198.51.100.10"}
+    for attempt in range(8):
+        response = client.post(
+            "/auth/login",
+            headers=headers,
+            json={"email": payload["email"], "password": "WrongPassword123!"},
+        )
+        if attempt < 7:
+            assert response.status_code == 401
+        else:
+            assert response.status_code == 429
+            assert int(response.headers["Retry-After"]) > 0
+            assert "Too many sign-in attempts" in response.json().get("detail", "")
+
+    # Even the correct password is delayed while the account/IP bucket is locked.
+    blocked = client.post("/auth/login", headers=headers, json={
+        "email": payload["email"],
+        "password": payload["password"],
+    })
+    assert blocked.status_code == 429
+    assert "Retry-After" in blocked.headers
+
+
+def test_login_ip_limit_applies_across_different_accounts(client, monkeypatch):
+    """The IP-wide bucket protects the service against password spraying."""
+    import services.login_rate_limit as rate_limits
+
+    rate_limits.reset_mock_login_rate_limits()
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setattr(rate_limits, "ACCOUNT_MAX_ATTEMPTS", 100)
+    monkeypatch.setattr(rate_limits, "ACCOUNT_IP_MAX_ATTEMPTS", 100)
+    monkeypatch.setattr(rate_limits, "IP_MAX_ATTEMPTS", 2)
+
+    headers = {"x-forwarded-for": "203.0.113.25"}
+    first = client.post("/auth/login", headers=headers, json={
+        "email": "spray-one@example.com",
+        "password": "WrongPassword123!",
+    })
+    second = client.post("/auth/login", headers=headers, json={
+        "email": "spray-two@example.com",
+        "password": "WrongPassword123!",
+    })
+    third = client.post("/auth/login", headers=headers, json={
+        "email": "spray-three@example.com",
+        "password": "WrongPassword123!",
+    })
+
+    assert first.status_code == 401
+    assert second.status_code == 429
+    assert third.status_code == 429
+    assert "Retry-After" in third.headers
+
+
+def test_login_account_limit_applies_across_different_ips(monkeypatch):
+    """The account-wide bucket caps distributed guessing against one email."""
+    import services.login_rate_limit as rate_limits
+
+    rate_limits.reset_mock_login_rate_limits()
+    monkeypatch.setattr(rate_limits, "ACCOUNT_MAX_ATTEMPTS", 2)
+    monkeypatch.setattr(rate_limits, "ACCOUNT_IP_MAX_ATTEMPTS", 100)
+    monkeypatch.setattr(rate_limits, "IP_MAX_ATTEMPTS", 100)
+
+    assert not rate_limits.record_login_failure(
+        "target@example.com", "198.51.100.1"
+    )["blocked"]
+    second = rate_limits.record_login_failure(
+        "target@example.com", "198.51.100.2"
+    )
+    third_ip_check = rate_limits.check_login_rate_limit(
+        "target@example.com", "198.51.100.3"
+    )
+
+    assert second["blocked"] is True
+    assert third_ip_check["blocked"] is True
+    assert second["retry_after_seconds"] > 0
+
+
+def test_clearing_account_failures_does_not_clear_ip_spray_history(monkeypatch):
+    """A successful account login cannot erase failures recorded against other accounts from its IP."""
+    import services.login_rate_limit as rate_limits
+
+    rate_limits.reset_mock_login_rate_limits()
+    monkeypatch.setattr(rate_limits, "ACCOUNT_MAX_ATTEMPTS", 100)
+    monkeypatch.setattr(rate_limits, "ACCOUNT_IP_MAX_ATTEMPTS", 100)
+    monkeypatch.setattr(rate_limits, "IP_MAX_ATTEMPTS", 1)
+
+    failure = rate_limits.record_login_failure(
+        "first-user@example.com", "198.51.100.50"
+    )
+    rate_limits.clear_login_account_failures(
+        "first-user@example.com", "198.51.100.50"
+    )
+    other_account = rate_limits.check_login_rate_limit(
+        "second-user@example.com", "198.51.100.50"
+    )
+
+    assert failure["blocked"] is True
+    assert other_account["blocked"] is True
+
+
+def test_login_fails_closed_when_rate_limit_store_is_unavailable(client, monkeypatch):
+    """Login must not bypass throttling when the shared limiter cannot be checked."""
+    import routes.auth as auth_routes
+
+    def unavailable(*args, **kwargs):
+        raise RuntimeError("rate-limit store unavailable")
+
+    monkeypatch.setattr(auth_routes, "check_login_rate_limit", unavailable)
+    response = client.post("/auth/login", json={
+        "email": "any-user@example.com",
+        "password": "WrongPassword123!",
+    })
+
+    assert response.status_code == 503
+    assert "temporarily unavailable" in response.json().get("detail", "").lower()
