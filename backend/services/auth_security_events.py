@@ -3,11 +3,13 @@
 import hashlib
 import hmac
 import os
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from database import supabase
 from services.auth_sessions import device_label_from_user_agent
+from services import delivery
 
 SIGN_IN_LOOKBACK_DAYS = 90
 ALLOWED_EVENT_TYPES = {
@@ -154,3 +156,150 @@ def list_auth_events(user_id: str, limit: int = 25) -> list[dict[str, Any]]:
             "signals": [str(signal) for signal in signals if isinstance(signal, str)],
         })
     return events
+
+
+# One security email per account in this window prevents frequent mobile-network
+# changes or VPN use from generating repeated alerts.
+UNFAMILIAR_SIGN_IN_EMAIL_COOLDOWN_SECONDS = 6 * 60 * 60
+_MOCK_ALERT_LOCK = threading.Lock()
+
+
+def claim_unfamiliar_sign_in_email_alert(
+    user_id: str,
+    event_id: str,
+    now: datetime | None = None,
+) -> bool:
+    """Atomically reserve one unfamiliar-sign-in email alert per account per six hours."""
+    now = now or datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    cutoff = (now - timedelta(seconds=UNFAMILIAR_SIGN_IN_EMAIL_COOLDOWN_SECONDS)).isoformat()
+
+    if os.getenv("DATABASE_MODE", "").strip().lower() == "mock":
+        with _MOCK_ALERT_LOCK:
+            recent_claims = (
+                supabase.table("auth_security_events")
+                .select("id")
+                .eq("user_id", str(user_id))
+                .eq("event_type", "unfamiliar_sign_in")
+                .gte("email_alert_claimed_at", cutoff)
+                .is_("email_alert_claimed_at", "not_null")
+                .limit(1)
+                .execute()
+                .data or []
+            )
+            if recent_claims:
+                return False
+
+            updated = (
+                supabase.table("auth_security_events")
+                .update({"email_alert_claimed_at": now_iso})
+                .eq("id", str(event_id))
+                .eq("user_id", str(user_id))
+                .eq("event_type", "unfamiliar_sign_in")
+                .is_("email_alert_claimed_at", "null")
+                .execute()
+            )
+            return bool(updated.data)
+
+    result = supabase.rpc(
+        "claim_unfamiliar_sign_in_email_alert",
+        {
+            "p_user_id": str(user_id),
+            "p_event_id": str(event_id),
+            "p_now": now_iso,
+            "p_cooldown_seconds": UNFAMILIAR_SIGN_IN_EMAIL_COOLDOWN_SECONDS,
+        },
+    ).execute()
+    data = result.data
+    if isinstance(data, list):
+        value = data[0] if data else False
+        if isinstance(value, dict):
+            value = next(iter(value.values()), False)
+        return bool(value)
+    if isinstance(data, dict):
+        return bool(next(iter(data.values()), False))
+    return bool(data)
+
+
+def send_unfamiliar_sign_in_email_alert(
+    user_id: str,
+    user_email: str,
+    event: dict,
+) -> bool:
+    """
+    Send a privacy-safe account security alert after an unfamiliar sign-in.
+
+    These are essential security notices and deliberately do not obey optional
+    product-notification email preferences.
+    """
+    email = str(user_email or "").strip()
+    event_id = str(event.get("id") or "")
+    if not email or not event_id or event.get("event_type") != "unfamiliar_sign_in":
+        return False
+
+    if not delivery.is_email_configured():
+        delivery.record_delivery(
+            user_id=str(user_id),
+            channel="email",
+            recipient=email,
+            status="skipped",
+            event_type="unfamiliar_sign_in",
+            provider=delivery.get_email_provider_name(),
+            error_message="Security alert email provider is not configured.",
+        )
+        return False
+
+    try:
+        claimed = claim_unfamiliar_sign_in_email_alert(user_id, event_id)
+    except Exception as exc:
+        # Fail closed for sending: do not send an unthrottled security-email burst
+        # when the shared database-backed cooldown cannot be checked.
+        print(f"Unable to claim unfamiliar sign-in email alert: {type(exc).__name__}")
+        return False
+
+    if not claimed:
+        return False
+
+    metadata = event.get("metadata") if isinstance(event.get("metadata"), dict) else {}
+    signals = set(event.get("signals") or metadata.get("signals") or [])
+    reasons = []
+    if "new_browser_or_platform" in signals:
+        reasons.append("a browser or device type not seen in your recent sign-in history")
+    if "new_network" in signals:
+        reasons.append("a network not seen in your recent sign-in history")
+    reason_text = " and ".join(reasons) if reasons else "an unfamiliar sign-in pattern"
+    device_label = str(event.get("device_label") or "Unknown device")[:120]
+    happened_at = str(event.get("created_at") or datetime.now(timezone.utc).isoformat())
+    app_url = os.getenv("PUBLIC_APP_URL", "https://soet-connect.vercel.app").strip().rstrip("/")
+    review_url = f"{app_url}/account/sessions"
+
+    subject = "SOET Connect - New sign-in to your account"
+    message = (
+        "A new sign-in to your SOET Connect account matched "
+        f"{reason_text}.\n\n"
+        f"Device or browser: {device_label}\n"
+        f"Time (UTC): {happened_at}\n\n"
+        "No IP address is included in this alert. A changing mobile network or VPN "
+        "can sometimes cause an unfamiliar-network notice.\n\n"
+        "If this was you, no action is needed. If you do not recognize this activity, "
+        "open Active Sessions, sign out unfamiliar devices, and change your password:\n"
+        f"{review_url}\n\n"
+        "This is an account security notice and is sent independently of optional "
+        "product notification preferences."
+    )
+
+    provider = delivery.get_email_provider_name()
+    success, provider_message_id, error = delivery.send_email_message(email, subject, message)
+    delivery.record_delivery(
+        user_id=str(user_id),
+        channel="email",
+        recipient=email,
+        status="accepted" if success else "failed",
+        event_type="unfamiliar_sign_in",
+        provider=provider,
+        provider_message_id=provider_message_id,
+        error_message=None if success else (error or "Security alert email delivery failed."),
+    )
+    if not success:
+        print(f"Unfamiliar sign-in alert email delivery failed: {provider}")
+    return bool(success)

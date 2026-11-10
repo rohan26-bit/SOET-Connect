@@ -31,6 +31,7 @@ from services.auth_security_events import (
     list_auth_events,
     record_auth_event,
     record_sign_in_event,
+    send_unfamiliar_sign_in_email_alert,
 )
 from services.auth_sessions import device_label_from_user_agent
 
@@ -333,14 +334,21 @@ def login_user(user: LoginRequest, request: Request, response: Response):
     # Ignore the just-created session when checking whether this browser/platform is new.
     try:
         token_payload = decode_access_token(access_token)
-        record_sign_in_event(
+        security_event = record_sign_in_event(
             user_id=str(existing_user.get("_db_id") or existing_user["_id"]),
             user_agent=request.headers.get("user-agent"),
             client_ip=client_ip,
             current_session_id=token_payload.get("session_id"),
         )
+        if security_event.get("event_type") == "unfamiliar_sign_in":
+            send_unfamiliar_sign_in_email_alert(
+                user_id=str(existing_user.get("_db_id") or existing_user["_id"]),
+                user_email=str(existing_user.get("email") or ""),
+                event=security_event,
+            )
     except Exception as exc:
-        print(f"Unable to record successful sign-in security event: {type(exc).__name__}")
+        # A notification provider outage must not interrupt a valid sign-in.
+        print(f"Unable to complete successful sign-in security notification: {type(exc).__name__}")
 
     set_auth_cookie(response, access_token)
     result = {
