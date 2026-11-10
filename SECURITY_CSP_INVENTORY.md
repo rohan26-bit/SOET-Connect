@@ -21,6 +21,8 @@ The production homepage and `/api/health` both returned HTTP 200 after PR #95. B
 
 The public `/api/placements` response was inspected: the current placement image URL is a relative `/api/gallery/{id}/image` path, not an external image host.
 
+The updated preview route `/location-suggestions?type=city&q=Aurangabad` returned HTTP 200 with suggestions. Both `/register/student` and `/register/alumni` returned HTTP 200. The old `/api/location-suggestions` path correctly remains unavailable because Vercel reserves `/api/*` for the FastAPI service.
+
 ## Recommended CSP rollout
 
 1. Remove the direct Photon browser request and use the same-origin `/location-suggestions` endpoint for autocomplete. The former `/api/location-suggestions` path was intercepted by Vercel's `/api/*` backend rewrite, so the Next.js route must live outside `/api`.
