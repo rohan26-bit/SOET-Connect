@@ -91,3 +91,21 @@ def test_alumni_aci_reports_database_read_failure(client, verified_alumni_user, 
     _fail_table_read(monkeypatch, alumni_module, "jobs")
     response = client.get("/api/alumni/me/aci", headers=verified_alumni_user["headers"])
     _assert_service_unavailable(response)
+
+def test_mark_notification_read_reports_database_read_failure(client, student_user, monkeypatch):
+    _fail_table_read(monkeypatch, notifications_module, "notifications")
+    response = client.patch(
+        "/api/notifications/not-a-real-id/read",
+        headers=student_user["headers"],
+    )
+    _assert_service_unavailable(response)
+
+
+def test_mark_all_notifications_read_reports_database_read_failure(client, student_user, monkeypatch):
+    _fail_table_read(monkeypatch, notifications_module, "notifications")
+    response = client.patch(
+        "/api/notifications/read-all",
+        headers=student_user["headers"],
+    )
+    _assert_service_unavailable(response)
+
