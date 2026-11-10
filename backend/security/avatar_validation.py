@@ -75,7 +75,7 @@ def validate_avatar_url(value: str | None) -> str | None:
                 raise ValueError("Animated avatar images are not supported.")
         except ValueError:
             raise
-        except (UnidentifiedImageError, OSError, SyntaxError, Image.DecompressionBombError) as exc:
+        except Exception as exc:
             raise ValueError("Avatar data is not a valid supported image.") from exc
 
         return trimmed
