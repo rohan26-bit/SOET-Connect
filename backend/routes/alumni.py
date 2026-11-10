@@ -117,7 +117,14 @@ def get_my_aci(
             detail="Your alumni account must be verified by an administrator before accessing ACI."
         )
 
-    return calculate_alumni_aci(str(user["_id"]), user_doc=user)
+    try:
+        return calculate_alumni_aci(str(user["_id"]), user_doc=user)
+    except RuntimeError as exc:
+        print(f"Unable to calculate alumni contribution index: {exc}")
+        raise HTTPException(
+            status_code=503,
+            detail="Alumni contribution data is temporarily unavailable. Please try again.",
+        ) from exc
 
 
 # ============================================================
