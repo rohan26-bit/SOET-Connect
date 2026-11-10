@@ -1599,7 +1599,7 @@ def test_sms_trial_error_invalidates_challenge(monkeypatch, verified_alumni_user
 
 
 def test_forgot_password_endpoint_cooldown_and_validity_metadata(client: TestClient, verified_alumni_user: dict):
-    """Forgot password endpoint returns 20s cooldown and 10min (600s) validity metadata."""
+    """Forgot password endpoint returns 60s cooldown and 10min (600s) validity metadata."""
     email = verified_alumni_user["email"]
     resp = client.post(
         "/api/auth/forgot-password",
@@ -1607,7 +1607,7 @@ def test_forgot_password_endpoint_cooldown_and_validity_metadata(client: TestCli
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["cooldown_seconds"] == 20
+    assert data["cooldown_seconds"] == 60
     assert data["expires_in"] == 600
     assert "message" in data
 
@@ -1620,6 +1620,119 @@ def test_forgot_password_endpoint_nonexistent_user_anti_enumeration(client: Test
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["cooldown_seconds"] == 20
+    assert data["cooldown_seconds"] == 60
     assert data["expires_in"] == 600
     assert "If an account matching" in data["message"]
+
+
+def test_password_reset_send_limits_are_server_enforced(monkeypatch, verified_alumni_user: dict):
+    """Password reset sends use a 60s cooldown and a three-per-hour account quota."""
+    from datetime import datetime, timedelta, timezone
+    import services.password_recovery as recovery
+
+    current_time = [datetime.now(timezone.utc)]
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            value = current_time[0]
+            return value if tz is None else value.astimezone(tz)
+
+    monkeypatch.setattr(recovery, "datetime", FrozenDateTime)
+    monkeypatch.setattr("services.delivery.is_email_configured", lambda: True)
+
+    sent = []
+
+    def mock_send_email(to, subject, message):
+        sent.append(to)
+        return True, f"reset-message-{len(sent)}", None
+
+    monkeypatch.setattr("services.delivery.send_email_message", mock_send_email)
+
+    email = verified_alumni_user["email"]
+    user_id = str(verified_alumni_user["id"])
+
+    first = recovery.request_password_reset(email, "email")
+    assert first[0] is True
+    assert first[2] is not None
+    assert len(sent) == 1
+
+    # A second request inside the cooldown window returns the same generic
+    # response but does not create a challenge or send another message.
+    immediate_retry = recovery.request_password_reset(email, "email")
+    assert immediate_retry[0] is True
+    assert immediate_retry[2] is None
+    assert len(sent) == 1
+
+    current_time[0] = current_time[0] + timedelta(seconds=61)
+    second = recovery.request_password_reset(email, "email")
+    assert second[0] is True
+    assert second[2] is not None
+    assert len(sent) == 2
+
+    current_time[0] = current_time[0] + timedelta(seconds=61)
+    third = recovery.request_password_reset(email, "email")
+    assert third[0] is True
+    assert third[2] is not None
+    assert len(sent) == 3
+
+    current_time[0] = current_time[0] + timedelta(seconds=61)
+    hourly_limited = recovery.request_password_reset(email, "email")
+    assert hourly_limited[0] is True
+    assert hourly_limited[2] is None
+    assert len(sent) == 3
+
+    challenges = (
+        supabase.table("password_reset_challenges")
+        .select("*")
+        .eq("user_id", user_id)
+        .execute()
+        .data
+    )
+    assert len(challenges) == 3
+    assert all(row["delivery_status"] == "accepted" for row in challenges)
+
+
+def test_failed_password_reset_delivery_does_not_consume_send_quota(monkeypatch, verified_alumni_user: dict):
+    """A provider rejection invalidates the challenge and permits a clean retry."""
+    import services.password_recovery as recovery
+
+    monkeypatch.setattr("services.delivery.is_email_configured", lambda: True)
+    monkeypatch.setattr(
+        "services.delivery.send_email_message",
+        lambda to, subject, message: (False, None, "temporary provider rejection"),
+    )
+
+    email = verified_alumni_user["email"]
+    user_id = str(verified_alumni_user["id"])
+    failed = recovery.request_password_reset(email, "email")
+    assert failed[0] is True
+
+    row = (
+        supabase.table("password_reset_challenges")
+        .select("*")
+        .eq("user_id", user_id)
+        .execute()
+        .data[0]
+    )
+    assert row["delivery_status"] == "failed"
+    assert row["is_used"] is True
+
+    monkeypatch.setattr(
+        "services.delivery.send_email_message",
+        lambda to, subject, message: (True, "retry-accepted", None),
+    )
+    retried = recovery.request_password_reset(email, "email")
+    assert retried[0] is True
+    assert retried[2] is not None
+
+    rows = (
+        supabase.table("password_reset_challenges")
+        .select("*")
+        .eq("user_id", user_id)
+        .execute()
+        .data
+    )
+    assert len(rows) == 2
+    assert sorted(row["delivery_status"] for row in rows) == ["accepted", "failed"]
+

@@ -317,6 +317,8 @@ def change_password(
 
 from pydantic import BaseModel, Field
 from services.password_recovery import (
+    PASSWORD_RESET_COOLDOWN_SECONDS,
+    PHONE_CODE_COOLDOWN_SECONDS,
     request_password_reset,
     verify_password_reset_code,
     reset_password_with_token,
@@ -350,7 +352,7 @@ def forgot_password_endpoint(payload: ForgotPasswordRequest):
 
     resp = {
         "message": message,
-        "cooldown_seconds": 20,
+        "cooldown_seconds": PASSWORD_RESET_COOLDOWN_SECONDS,
         "expires_in": 600,
     }
     # Expose debug code strictly in automated test suite runner
@@ -417,7 +419,7 @@ def send_phone_verification_endpoint(
 
     resp = {
         "message": message,
-        "cooldown_seconds": 20,
+        "cooldown_seconds": PHONE_CODE_COOLDOWN_SECONDS,
         "expires_in": 600,
     }
     if debug_code is not None and os.getenv("PYTEST_CURRENT_TEST"):

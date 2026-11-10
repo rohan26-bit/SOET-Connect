@@ -17,6 +17,8 @@ password_hasher = PasswordHash.recommended()
 CODE_EXPIRATION_MINUTES = 10
 TOKEN_EXPIRATION_MINUTES = 10
 MAX_ATTEMPTS = 5
+PASSWORD_RESET_COOLDOWN_SECONDS = 60
+PASSWORD_RESET_MAX_SENDS_PER_HOUR = 3
 PHONE_CODE_COOLDOWN_SECONDS = 60
 PHONE_CODE_MAX_SENDS_PER_HOUR = 3
 PHONE_CODE_MAX_ATTEMPTS = 5
@@ -107,6 +109,85 @@ def find_user_by_contact(identifier: str) -> Optional[dict]:
     return None
 
 
+def _create_password_reset_challenge(challenge_row: dict, now: datetime) -> tuple[str, int]:
+    """Create a reset challenge with account-serialized cooldown and hourly limits."""
+    user_id = str(challenge_row["user_id"])
+    now_iso = now.isoformat()
+    window_start = (now - timedelta(hours=1)).isoformat()
+
+    if os.getenv("DATABASE_MODE", "").strip().lower() == "mock":
+        recent_rows = (
+            supabase.table("password_reset_challenges")
+            .select("id,created_at,delivery_status")
+            .eq("user_id", user_id)
+            .gte("created_at", window_start)
+            .in_("delivery_status", ["accepted", "pending"])
+            .execute()
+            .data or []
+        )
+        timestamps = []
+        for row in recent_rows:
+            try:
+                created_at = datetime.fromisoformat(str(row.get("created_at", "")).replace("Z", "+00:00"))
+                if created_at.tzinfo is None:
+                    created_at = created_at.replace(tzinfo=timezone.utc)
+                timestamps.append(created_at.astimezone(timezone.utc))
+            except (TypeError, ValueError):
+                continue
+
+        latest_created_at = max(timestamps, default=None)
+        if latest_created_at and now < latest_created_at + timedelta(seconds=PASSWORD_RESET_COOLDOWN_SECONDS):
+            retry_after = max(1, int((latest_created_at + timedelta(seconds=PASSWORD_RESET_COOLDOWN_SECONDS) - now).total_seconds() + 0.999))
+            return "cooldown", retry_after
+        if len(recent_rows) >= PASSWORD_RESET_MAX_SENDS_PER_HOUR:
+            return "hourly_limit", 0
+
+        supabase.table("password_reset_challenges").update({
+            "is_used": True,
+            "used_at": now_iso,
+        }).eq("user_id", user_id).eq("is_used", False).execute()
+        supabase.table("password_reset_challenges").insert(challenge_row).execute()
+        return "created", 0
+
+    result = supabase.rpc(
+        "create_password_reset_challenge",
+        {
+            "p_user_id": user_id,
+            "p_challenge_id": str(challenge_row["id"]),
+            "p_channel": str(challenge_row["channel"]),
+            "p_recipient": str(challenge_row["recipient"]),
+            "p_verification_provider": str(challenge_row["verification_provider"]),
+            "p_code_hash": str(challenge_row["code_hash"]),
+            "p_expires_at": str(challenge_row["expires_at"]),
+            "p_now": now_iso,
+        },
+    ).execute()
+    rows = result.data or []
+    if not rows:
+        raise RuntimeError("Password reset rate-limit operation returned no result.")
+    row = rows[0]
+    return str(row.get("outcome") or "unavailable"), int(row.get("retry_after_seconds") or 0)
+
+
+def _mark_password_reset_delivery(challenge_id: str, status: str) -> None:
+    """Persist whether the delivery provider accepted or rejected a reset request."""
+    if status not in {"accepted", "failed"}:
+        raise ValueError("Invalid password reset delivery status.")
+    try:
+        result = (
+            supabase.table("password_reset_challenges")
+            .update({"delivery_status": status})
+            .eq("id", str(challenge_id))
+            .execute()
+        )
+        if os.getenv("DATABASE_MODE", "").strip().lower() != "mock" and not result.data:
+            raise RuntimeError("Password reset challenge delivery status was not updated.")
+    except Exception as exc:
+        # A pending row remains rate-limited by the database for the full hour,
+        # so a status-write outage cannot let repeated sends bypass the quota.
+        print(f"Unable to record password reset delivery status for challenge {challenge_id}: {exc}")
+
+
 def request_password_reset(identifier: str, channel: str = "email") -> Tuple[bool, str, Optional[str]]:
     """
     Initiate a password reset flow.
@@ -161,15 +242,8 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
             return False, "SMS service is currently unavailable. Please use email recovery.", None
         recipient = phone
 
-    # Rate limiting: invalidate all previous active challenges for this user
+    # Create a challenge only when the account-level cooldown and hourly quota allow it.
     now = datetime.now(timezone.utc)
-    try:
-        supabase.table("password_reset_challenges").update({
-            "is_used": True,
-            "used_at": now.isoformat(),
-        }).eq("user_id", user_id).eq("is_used", False).execute()
-    except Exception:
-        pass
 
     # Generate 6-digit code
     code = generate_verification_code()
@@ -195,9 +269,20 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
         "used_at": None,
         "expires_at": expires_at,
         "created_at": now.isoformat(),
+        "delivery_status": "pending",
     }
 
-    supabase.table("password_reset_challenges").insert(challenge_row).execute()
+    try:
+        outcome, _retry_after = _create_password_reset_challenge(challenge_row, now)
+    except Exception as exc:
+        print(f"Password reset challenge creation failed: {exc}")
+        return False, "Password recovery is temporarily unavailable. Please try again later.", None
+
+    if outcome in {"cooldown", "hourly_limit", "not_found"}:
+        # Keep the public response identical for known, unknown, and rate-limited accounts.
+        return True, generic_success_msg, None
+    if outcome != "created":
+        return False, "Password recovery is temporarily unavailable. Please try again later.", None
 
     # Dispatch code via selected channel
     message_text = f"Your SOET Connect password reset code is: {code}. It is valid for 10 minutes. Do not share this code with anyone."
@@ -247,7 +332,8 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
                     error_message=err,
                 )
                 if not success:
-                    # Invalidate the challenge – code was never delivered
+                    # Invalidate the challenge – code was never delivered.
+                    _mark_password_reset_delivery(challenge_id, "failed")
                     _invalidate_challenge(challenge_id, now)
                     return False, f"SMS verification delivery failed: {err}. Please use Email recovery instead.", None
             elif delivery.is_sms_configured():
@@ -263,7 +349,8 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
                     error_message=err,
                 )
                 if not success and ("572006" in (err or "") or "trial" in (err or "").lower()):
-                    # Invalidate the challenge – code was never delivered
+                    # Invalidate the challenge – code was never delivered.
+                    _mark_password_reset_delivery(challenge_id, "failed")
                     _invalidate_challenge(challenge_id, now)
                     return False, "SMS password recovery is currently unavailable due to Twilio trial restrictions (custom SMS messages are blocked). Please use Email recovery instead.", None
                 if not success:
@@ -279,7 +366,8 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
                     provider="twilio",
                     error_message="SMS provider not configured (Twilio credentials missing).",
                 )
-                # Invalidate the challenge – code was never delivered
+                # Invalidate the challenge – code was never delivered.
+                _mark_password_reset_delivery(challenge_id, "failed")
                 _invalidate_challenge(challenge_id, now)
                 return False, "SMS recovery is currently unavailable. Please use Email recovery.", None
     except Exception as e:
@@ -290,9 +378,12 @@ def request_password_reset(identifier: str, channel: str = "email") -> Tuple[boo
     # If the provider rejected the message, invalidate the challenge immediately
     # so the user is not stranded for 10 minutes with an unusable code.
     if delivery_failed:
+        _mark_password_reset_delivery(challenge_id, "failed")
         _invalidate_challenge(challenge_id, now)
         # Log for operators (never includes secrets, codes, or PII)
         print(f"Password reset delivery failed for challenge {challenge_id}: {delivery_error_detail}")
+    else:
+        _mark_password_reset_delivery(challenge_id, "accepted")
 
     # In automated test suite mode strictly, provide code to test runner; NEVER in normal or production server runs
     debug_code = (
