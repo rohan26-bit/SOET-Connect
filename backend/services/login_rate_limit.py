@@ -168,7 +168,7 @@ def _mock_bump(
     if expired:
         attempts = 1
         window_started_at = now
-        blocked_until = None
+        blocked_until = now + timedelta(seconds=LOCK_SECONDS) if attempts >= max_attempts else None
     else:
         attempts = int(bucket["attempts"]) + 1
         window_started_at = bucket["window_started_at"]
