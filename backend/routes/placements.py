@@ -2,10 +2,11 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from database import supabase
 from security.dependencies import get_current_user
+from security.placement_photo_urls import sanitize_placement_photo_url, validate_placement_photo_url
 
 
 router = APIRouter(prefix="/placements", tags=["Placement Celebrations"])
@@ -17,10 +18,15 @@ class PlacementCreateRequest(BaseModel):
     designation: str | None = Field(default=None, max_length=255)
     department: str | None = Field(default=None, max_length=160)
     batch_year: str | None = Field(default=None, max_length=20)
-    photo_url: str | None = None
+    photo_url: str | None = Field(default=None, max_length=2048)
     photo_consent: bool = False
     message: str | None = Field(default=None, max_length=1000)
     is_published: bool = False
+
+    @field_validator("photo_url")
+    @classmethod
+    def validate_photo_url(cls, value: str | None) -> str | None:
+        return validate_placement_photo_url(value)
 
 
 class PlacementUpdateRequest(BaseModel):
@@ -34,6 +40,11 @@ class PlacementUpdateRequest(BaseModel):
     message: str | None = Field(default=None, max_length=1000)
     is_published: bool | None = None
 
+    @field_validator("photo_url")
+    @classmethod
+    def validate_photo_url(cls, value: str | None) -> str | None:
+        return validate_placement_photo_url(value)
+
 
 def _require_admin(current_user: dict) -> None:
     if current_user.get("role") != "admin":
@@ -41,20 +52,23 @@ def _require_admin(current_user: dict) -> None:
 
 
 def _normalise_photo_url(value: str | None) -> str | None:
-    photo_url = (value or "").strip()
-    if not photo_url:
-        return None
-    if photo_url.startswith("/api/gallery/"):
-        return photo_url
-    if photo_url.startswith("https://"):
-        return photo_url
-    raise HTTPException(status_code=400, detail="Photo must use HTTPS or an approved SOET gallery image URL.")
+    try:
+        return validate_placement_photo_url(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _sanitize_placement_row(row: dict) -> dict:
+    """Copy a placement row and hide unsupported legacy photo URLs."""
+    result = dict(row)
+    result["photo_url"] = sanitize_placement_photo_url(result.get("photo_url"))
+    return result
 
 
 def _load_placements(query):
     try:
         result = query.order("created_at", desc=True).execute()
-        return result.data or []
+        return [_sanitize_placement_row(row) for row in (result.data or [])]
     except Exception as exc:
         print("Error loading placement celebrations:", exc)
         raise HTTPException(status_code=503, detail="Placement celebrations are temporarily unavailable. Apply migration 005 and retry.")
@@ -106,7 +120,7 @@ def get_published_placements(
 
     response.headers["X-Total-Count"] = str(result.count or 0)
     response.headers["Access-Control-Expose-Headers"] = "X-Total-Count"
-    return result.data or []
+    return [_sanitize_placement_row(row) for row in (result.data or [])]
 
 
 @router.get("/admin")
@@ -141,7 +155,7 @@ def create_placement(
     except Exception as exc:
         print("Error creating placement celebration:", exc)
         raise HTTPException(status_code=503, detail="Could not save placement. Confirm migration 005 has been applied.")
-    return result.data[0] if result.data else row
+    return _sanitize_placement_row(result.data[0]) if result.data else _sanitize_placement_row(row)
 
 
 @router.patch("/{placement_id}")
@@ -165,7 +179,9 @@ def update_placement(
     current_row = current.data[0]
     will_publish = updates.get("is_published", current_row.get("is_published", False))
     will_have_consent = updates.get("photo_consent", current_row.get("photo_consent", False))
-    will_have_photo = updates.get("photo_url", current_row.get("photo_url"))
+    will_have_photo = sanitize_placement_photo_url(
+        updates.get("photo_url", current_row.get("photo_url"))
+    )
     if will_publish and not will_have_consent:
         raise HTTPException(status_code=400, detail="Photo consent is required before publishing this placement.")
     if will_publish and not will_have_photo:
@@ -175,7 +191,7 @@ def update_placement(
     result = supabase.table("placement_celebrations").update(updates).eq("id", placement_id).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Placement record not found.")
-    return result.data[0]
+    return _sanitize_placement_row(result.data[0])
 
 
 @router.delete("/{placement_id}")
