@@ -147,7 +147,16 @@ def update_presence(
 def get_conversations(
     current_user: dict = Depends(get_active_chat_user),
 ):
-    return list_user_conversations(current_user["user_id"])
+    try:
+        return list_user_conversations(current_user["user_id"])
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print(f"Unable to load chat conversations: {exc}")
+        raise HTTPException(
+            status_code=503,
+            detail="Chat conversations are temporarily unavailable. Please try again.",
+        ) from exc
 
 
 @router.post(
@@ -187,10 +196,19 @@ def get_conversation(
     conversation_id: str,
     current_user: dict = Depends(get_active_chat_user),
 ):
-    return get_user_conversation(
-        conversation_id=conversation_id,
-        current_user_id=current_user["user_id"],
-    )
+    try:
+        return get_user_conversation(
+            conversation_id=conversation_id,
+            current_user_id=current_user["user_id"],
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print(f"Unable to load chat conversation {conversation_id}: {exc}")
+        raise HTTPException(
+            status_code=503,
+            detail="This conversation is temporarily unavailable. Please try again.",
+        ) from exc
 
 
 @router.delete(
@@ -219,10 +237,19 @@ def get_messages(
     conversation_id: str,
     current_user: dict = Depends(get_active_chat_user),
 ):
-    return get_conversation_messages(
-        conversation_id=conversation_id,
-        current_user_id=current_user["user_id"],
-    )
+    try:
+        return get_conversation_messages(
+            conversation_id=conversation_id,
+            current_user_id=current_user["user_id"],
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print(f"Unable to load messages for chat conversation {conversation_id}: {exc}")
+        raise HTTPException(
+            status_code=503,
+            detail="Messages for this conversation are temporarily unavailable. Please try again.",
+        ) from exc
 
 
 @router.post(

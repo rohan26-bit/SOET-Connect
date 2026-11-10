@@ -242,51 +242,138 @@ function ChatContent() {
   // ============================================================
 
   useEffect(() => {
-    if (!selectedConversationId || !user) return;
+    const currentUserId = String(user?.id || '');
+    if (!selectedConversationId || !currentUserId) return;
 
     let isMounted = true;
+    let requestInFlight = false;
+    let intervalId: number | undefined;
+    const knownMessageIds = new Set<string>();
+    const readReceiptRequests = new Set<string>();
+    const completedReadReceipts = new Set<string>();
+
     setLoadingMessages(true);
     setError(null);
 
-    async function fetchMessages() {
+    const markIncomingMessagesRead = (items: ChatMessage[]) => {
+      const unreadIncoming = items.filter(
+        (message) =>
+          message.sender_id !== currentUserId
+          && !message.read_by?.includes(currentUserId)
+          && !readReceiptRequests.has(message.id)
+          && !completedReadReceipts.has(message.id)
+      );
+
+      if (!unreadIncoming.length) return;
+
+      // Update the active thread's unread badge immediately while read receipts
+      // are being persisted by the API.
+      setConversations((previous) =>
+        previous.map((conversation) =>
+          conversation.id === selectedConversationId
+            ? { ...conversation, unread_count: 0 }
+            : conversation
+        )
+      );
+
+      for (const message of unreadIncoming) {
+        readReceiptRequests.add(message.id);
+        void chatService.markMessageAsRead(message.id)
+          .then((result) => {
+            completedReadReceipts.add(message.id);
+            if (!isMounted) return;
+            const readBy = Array.isArray(result.read_by)
+              ? result.read_by
+              : [...(message.read_by || []), currentUserId];
+            setMessages((previous) =>
+              previous.map((item) =>
+                item.id === message.id ? { ...item, read_by: readBy } : item
+              )
+            );
+          })
+          .catch((readError) => {
+            console.warn('Unable to mark an incoming chat message as read:', readError);
+          })
+          .finally(() => {
+            readReceiptRequests.delete(message.id);
+          });
+      }
+    };
+
+    const fetchMessages = async (initialLoad = false) => {
+      if (!isMounted || requestInFlight) return;
+      if (!initialLoad && document.visibilityState !== 'visible') return;
+
+      requestInFlight = true;
+      if (initialLoad) setLoadingMessages(true);
+
       try {
-        const msgs = await chatService.getMessages(selectedConversationId!);
+        const fetchedMessages = await chatService.getMessages(selectedConversationId);
         if (!isMounted) return;
-        setMessages(msgs);
-        setTimeout(scrollToBottom, 50);
 
-        // Mark unread incoming messages as read
-        const unreadIncoming = msgs.filter(
-          (m) => m.sender_id !== user?.id && !m.read_by?.includes(user?.id || '')
+        const newIncomingMessages = fetchedMessages.filter(
+          (message) => !knownMessageIds.has(message.id) && message.sender_id !== currentUserId
         );
+        fetchedMessages.forEach((message) => knownMessageIds.add(message.id));
 
-        if (unreadIncoming.length > 0) {
-          for (const msg of unreadIncoming) {
-            chatService.markMessageAsRead(msg.id).catch(() => {});
+        setMessages(fetchedMessages);
+        markIncomingMessagesRead(fetchedMessages);
+
+        if (initialLoad) {
+          window.setTimeout(scrollToBottom, 50);
+        } else if (newIncomingMessages.length > 0) {
+          // A new incoming message arrived in the active thread; keep the thread
+          // current and refresh the inbox preview/unread metadata as well.
+          window.setTimeout(scrollToBottom, 50);
+          try {
+            const updatedConversations = await chatService.getConversations();
+            if (isMounted) {
+              setConversations(
+                updatedConversations.map((conversation) =>
+                  conversation.id === selectedConversationId
+                    ? { ...conversation, unread_count: 0 }
+                    : conversation
+                )
+              );
+            }
+          } catch (conversationError) {
+            console.warn('Unable to refresh chat previews after a new message:', conversationError);
           }
-
-          // Decrement local unread count
-          setConversations((prev) =>
-            prev.map((c) =>
-              c.id === selectedConversationId ? { ...c, unread_count: 0 } : c
-            )
-          );
         }
       } catch (err: any) {
         if (!isMounted) return;
-        console.error('Failed to load messages:', err);
-        setError(err.message || 'Failed to load messages.');
+        if (initialLoad) {
+          console.error('Failed to load messages:', err);
+          setError(err.message || 'Failed to load messages.');
+        } else {
+          // Keep the existing thread visible during a transient polling failure.
+          console.warn('Unable to refresh the active chat thread:', err);
+        }
       } finally {
-        if (isMounted) setLoadingMessages(false);
+        requestInFlight = false;
+        if (isMounted && initialLoad) setLoadingMessages(false);
       }
-    }
+    };
 
-    fetchMessages();
+    void fetchMessages(true);
+
+    // The inbox refreshes separately; poll the selected thread as well so
+    // incoming messages appear without requiring the user to switch chats.
+    intervalId = window.setInterval(() => {
+      void fetchMessages(false);
+    }, 15_000);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void fetchMessages(false);
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => {
       isMounted = false;
+      if (intervalId !== undefined) window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [selectedConversationId, user]);
+  }, [selectedConversationId, user?.id]);
 
   // ============================================================
   // SEND MESSAGE

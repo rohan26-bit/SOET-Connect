@@ -1350,8 +1350,8 @@ class SupabaseConversationsCollection:
                     "created_at": m["created_at"],
                 }
                 last_msg_at = m["created_at"]
-        except Exception:
-            pass
+        except Exception as exc:
+            raise RuntimeError("Chat message previews are temporarily unavailable.") from exc
 
         return {
             "_id": conv_id,
@@ -1379,8 +1379,8 @@ class SupabaseConversationsCollection:
                     if c_res.data:
                         convs.append(self._format_conv(c_res.data[0]))
                 return convs
-            except Exception:
-                return []
+            except Exception as exc:
+                raise RuntimeError("Chat conversations are temporarily unavailable.") from exc
 
         res = supabase.table("conversations").select("*").execute()
         return [self._format_conv(r) for r in res.data or []]

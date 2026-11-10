@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from database import database, users_collection
+import routes.chat as chat_routes
 
 
 @pytest.fixture(autouse=True)
@@ -799,3 +800,43 @@ def test_deleted_chat_participant_is_not_shown_as_online_and_history_is_preserve
     )
     assert blocked_send.status_code == 409
     assert "no longer available" in blocked_send.json()["detail"].lower()
+
+# ============================================================
+# DATABASE READ FAILURE HANDLING
+# ============================================================
+
+def test_conversation_list_read_failure_returns_503(client, student_user, monkeypatch):
+    def fail_list(_user_id):
+        raise RuntimeError("simulated conversation store outage")
+
+    monkeypatch.setattr(chat_routes, "list_user_conversations", fail_list)
+    response = client.get("/chat/conversations", headers=student_user["headers"])
+    assert response.status_code == 503
+    assert "temporarily unavailable" in response.json()["detail"].lower()
+
+
+def test_conversation_details_read_failure_returns_503(client, student_user, monkeypatch):
+    def fail_get(**_kwargs):
+        raise RuntimeError("simulated conversation store outage")
+
+    monkeypatch.setattr(chat_routes, "get_user_conversation", fail_get)
+    response = client.get(
+        "/chat/conversations/507f1f77bcf86cd799439011",
+        headers=student_user["headers"],
+    )
+    assert response.status_code == 503
+    assert "temporarily unavailable" in response.json()["detail"].lower()
+
+
+def test_conversation_messages_read_failure_returns_503(client, student_user, monkeypatch):
+    def fail_get(**_kwargs):
+        raise RuntimeError("simulated message store outage")
+
+    monkeypatch.setattr(chat_routes, "get_conversation_messages", fail_get)
+    response = client.get(
+        "/chat/conversations/507f1f77bcf86cd799439011/messages",
+        headers=student_user["headers"],
+    )
+    assert response.status_code == 503
+    assert "temporarily unavailable" in response.json()["detail"].lower()
+
