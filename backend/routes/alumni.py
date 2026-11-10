@@ -462,9 +462,9 @@ def get_pending_alumni(
             "industry": profile.get("industry"),
             "location": profile.get("location"),
             "skills": profile.get("skills", []),
-            "linkedin": profile.get("linkedin"),
-            "github": profile.get("github"),
-            "website": profile.get("website"),
+            "linkedin": safe_external_profile_url(profile.get("linkedin")),
+            "github": safe_external_profile_url(profile.get("github")),
+            "website": safe_external_profile_url(profile.get("website")),
             "bio": profile.get("bio"),
             "is_verified": alumni.get("is_verified", False),
             "verification_status": alumni.get(
