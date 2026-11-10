@@ -194,7 +194,15 @@ def login_user(user: LoginRequest, request: Request):
     if limit_state.get("blocked"):
         raise _login_rate_limit_response(limit_state.get("retry_after_seconds", 1))
 
-    existing_user = users_collection.find_one({"email": email})
+    try:
+        existing_user = users_collection.find_one({"email": email})
+    except Exception as exc:
+        print(f"Login account lookup failed: {type(exc).__name__}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Sign-in is temporarily unavailable. Please try again.",
+        ) from exc
+
     password_record = (
         existing_user.get("password_hash") or _DUMMY_PASSWORD_HASH
         if existing_user
