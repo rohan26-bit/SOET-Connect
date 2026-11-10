@@ -856,7 +856,7 @@ def delete_event(
                 notification_type=NOTIFICATION_TYPES["event_cancellation"],
                 entity_type="event",
                 entity_id=str(event_id),
-                dedupe_key=f"event_deletion:{event_id}:{attendee_id}",
+                dedupe_key=f"event_cancellation:{event_id}:{attendee_id}",
             )
         except Exception as exc:
             # Notification delivery is best-effort; deleting the event must not
