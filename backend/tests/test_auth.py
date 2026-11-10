@@ -1236,3 +1236,100 @@ def test_successful_login_records_unfamiliar_network_activity(client, monkeypatc
     assert activity.status_code == 200
     assert activity.json()["events"][0]["event_type"] == "unfamiliar_sign_in"
     assert "ip_fingerprint" not in activity.text
+
+
+def test_unfamiliar_sign_in_sends_one_privacy_safe_email_per_six_hours(client, monkeypatch):
+    """A new network triggers one security email, then the per-account cooldown prevents spam."""
+    from database import supabase, users_collection
+    from routes.auth import password_hash
+
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setenv("LOGIN_SECURITY_EVENT_SECRET", "test-login-security-event-secret")
+
+    sent_emails = []
+    monkeypatch.setattr("services.delivery.is_email_configured", lambda: True)
+    monkeypatch.setattr("services.delivery.get_email_provider_name", lambda: "test_provider")
+    monkeypatch.setattr(
+        "services.delivery.send_email_message",
+        lambda recipient, subject, message: (
+            sent_emails.append({
+                "recipient": recipient,
+                "subject": subject,
+                "message": message,
+            }) or (True, "security-alert-test-id", None)
+        ),
+    )
+
+    payload = {
+        "name": "Sign In Alert Student",
+        "email": "signin.alert@example.com",
+        "password": "SecurePassword123!",
+        "role": "student",
+        **VALID_STUDENT_FIELDS,
+    }
+    assert client.post("/auth/register", json=payload).status_code == 201
+    users_collection.update_one(
+        {"email": payload["email"]},
+        {"$set": {
+            "is_verified": True,
+            "verification_status": "approved",
+            "password_hash": password_hash.hash(payload["password"]),
+        }},
+    )
+
+    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+
+    first = client.post(
+        "/auth/login",
+        headers={"user-agent": user_agent, "x-forwarded-for": "203.0.113.10"},
+        json={"email": payload["email"], "password": payload["password"]},
+    )
+    assert first.status_code == 200
+    assert sent_emails == []
+
+    second = client.post(
+        "/auth/login",
+        headers={"user-agent": user_agent, "x-forwarded-for": "203.0.113.11"},
+        json={"email": payload["email"], "password": payload["password"]},
+    )
+    assert second.status_code == 200
+    assert len(sent_emails) == 1
+    alert = sent_emails[0]
+    assert alert["recipient"] == payload["email"]
+    assert "new sign-in" in alert["subject"].lower()
+    assert "Chrome on Windows" in alert["message"]
+    assert "new network" in alert["message"].lower()
+    assert "203.0.113.11" not in alert["message"]
+    assert "203.0.113.10" not in alert["message"]
+    assert "/account/sessions" in alert["message"]
+
+    third = client.post(
+        "/auth/login",
+        headers={"user-agent": user_agent, "x-forwarded-for": "203.0.113.12"},
+        json={"email": payload["email"], "password": payload["password"]},
+    )
+    assert third.status_code == 200
+    assert len(sent_emails) == 1
+
+    user_id = str(second.json()["user"]["id"])
+    alerts = (
+        supabase.table("auth_security_events")
+        .select("id,email_alert_claimed_at,event_type")
+        .eq("user_id", user_id)
+        .eq("event_type", "unfamiliar_sign_in")
+        .is_("email_alert_claimed_at", "not_null")
+        .execute()
+        .data
+    )
+    assert len(alerts) == 1
+
+    deliveries = (
+        supabase.table("notification_deliveries")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("event_type", "unfamiliar_sign_in")
+        .execute()
+        .data
+    )
+    assert len(deliveries) == 1
+    assert deliveries[0]["status"] == "accepted"
