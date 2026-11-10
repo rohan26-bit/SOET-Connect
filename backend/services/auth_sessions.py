@@ -205,6 +205,31 @@ def revoke_auth_session(session_id: str, user_id: str) -> bool:
     return bool(result.data)
 
 
+def revoke_all_auth_sessions(user_id: str) -> int:
+    """Revoke every registered device session for an account."""
+    result = (
+        supabase.table(SESSION_TABLE)
+        .select("id,revoked_at")
+        .eq("user_id", str(user_id))
+        .execute()
+    )
+    now = utc_now().isoformat()
+    revoked = 0
+    for row in result.data or []:
+        if row.get("revoked_at"):
+            continue
+        update_result = (
+            supabase.table(SESSION_TABLE)
+            .update({"revoked_at": now})
+            .eq("id", str(row["id"]))
+            .eq("user_id", str(user_id))
+            .execute()
+        )
+        if update_result.data:
+            revoked += 1
+    return revoked
+
+
 def revoke_other_auth_sessions(user_id: str, current_session_id: str) -> int:
     result = (
         supabase.table(SESSION_TABLE)
