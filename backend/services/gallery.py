@@ -5,6 +5,7 @@ from typing import Tuple, Optional
 from PIL import Image, ImageDraw, ImageFont
 
 MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024  # 8 MB
+MAX_IMAGE_PIXELS = 40_000_000  # 40 megapixels; limits decompression memory use
 ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
@@ -45,6 +46,8 @@ def validate_image_file(file_bytes: bytes, filename: str, content_type: Optional
         detected_format = (img.format or "").upper()
         if detected_format not in {"JPEG", "PNG", "WEBP"}:
             raise ValueError(f"Detected unsupported image format: {detected_format}")
+        if width <= 0 or height <= 0 or width * height > MAX_IMAGE_PIXELS:
+            raise ValueError("Image resolution exceeds the maximum supported size of 40 megapixels.")
 
     canonical_ext = ".jpg" if ext in {".jpg", ".jpeg"} else ext
     detected_mime = "image/jpeg" if canonical_ext == ".jpg" else f"image/{canonical_ext.lstrip('.')}"
