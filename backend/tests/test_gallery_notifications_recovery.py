@@ -1771,3 +1771,42 @@ def test_failed_password_reset_delivery_does_not_consume_send_quota(monkeypatch,
     assert len(rows) == 2
     assert sorted(row["delivery_status"] for row in rows) == ["accepted", "failed"]
 
+
+
+def test_successful_password_reset_code_is_consumed_once(verified_alumni_user: dict, monkeypatch):
+    """Replaying a correct OTP cannot mint or replace another password-reset token."""
+    import services.password_recovery as recovery
+
+    monkeypatch.setattr("services.delivery.is_email_configured", lambda: True)
+    monkeypatch.setattr(
+        "services.delivery.send_email_message",
+        lambda to, subject, message: (True, "single-use-reset-code", None),
+    )
+
+    success, _, code = recovery.request_password_reset(verified_alumni_user["email"], "email")
+    assert success is True
+    assert code is not None
+
+    verified, _, reset_token = recovery.verify_password_reset_code(verified_alumni_user["email"], code)
+    assert verified is True
+    assert reset_token
+
+    replayed, message, replay_token = recovery.verify_password_reset_code(verified_alumni_user["email"], code)
+    assert replayed is False
+    assert replay_token is None
+    assert "already been used" in message.lower()
+
+    challenge = (
+        supabase.table("password_reset_challenges")
+        .select("*")
+        .eq("user_id", str(verified_alumni_user["id"]))
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+        .data[0]
+    )
+    assert challenge["token_hash"] == recovery._hash_value(reset_token)
+    assert challenge["code_verified_at"] is not None
+
+    reset_ok, _ = recovery.reset_password_with_token(reset_token, "OneTimeResetPassword789!")
+    assert reset_ok is True

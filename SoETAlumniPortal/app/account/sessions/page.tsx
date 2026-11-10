@@ -15,6 +15,8 @@ import {
   Smartphone,
   Laptop,
   LogOut,
+  AlertTriangle,
+  History,
 } from 'lucide-react';
 
 interface AuthSession {
@@ -24,6 +26,26 @@ interface AuthSession {
   last_seen_at: string;
   expires_at: string;
   is_current: boolean;
+}
+
+interface SecurityEvent {
+  id: string;
+  event_type: string;
+  device_label: string;
+  created_at: string;
+  signals: string[];
+}
+
+function securityEventLabel(eventType: string): string {
+  const labels: Record<string, string> = {
+    sign_in: 'Sign-in',
+    unfamiliar_sign_in: 'Unfamiliar sign-in',
+    password_changed: 'Password changed',
+    password_reset: 'Password reset',
+    signed_out: 'Signed out',
+    sessions_revoked: 'Other session(s) signed out',
+  };
+  return labels[eventType] || 'Account security activity';
 }
 
 function formatDate(value?: string): string {
@@ -40,6 +62,7 @@ export default function ActiveSessionsPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [sessions, setSessions] = useState<AuthSession[]>([]);
+  const [securityEvents, setSecurityEvents] = useState<SecurityEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
@@ -53,6 +76,13 @@ export default function ActiveSessionsPage() {
     try {
       const result = await authService.getActiveSessions();
       setSessions(result.sessions || []);
+      try {
+        const activity = await authService.getSecurityEvents();
+        setSecurityEvents(activity.events || []);
+      } catch (activityError) {
+        // Keep session controls available even if the audit history is temporarily unavailable.
+        console.warn('Recent security activity could not be loaded:', activityError);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to load your active sessions.';
       setError(message);
@@ -238,6 +268,52 @@ export default function ActiveSessionsPage() {
               ))}
             </div>
           )}
+        </section>
+
+        <section className="mt-6 overflow-hidden rounded-3xl border border-[#DDD7D2] bg-white shadow-sm">
+          <div className="flex items-center gap-3 border-b border-[#F0EBE6] p-5 sm:p-6">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F7F4EF] text-[#6B5147]">
+              <History className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-[#4A3832]">Recent security activity</h2>
+              <p className="mt-0.5 text-xs text-[#77706B]">Recent sign-ins and important account security changes</p>
+            </div>
+          </div>
+          {securityEvents.length === 0 ? (
+            <div className="p-8 text-center text-xs text-[#77706B]">
+              No recent security activity has been recorded yet.
+            </div>
+          ) : (
+            <div className="divide-y divide-[#F0EBE6]">
+              {securityEvents.map((event) => (
+                <div key={event.id} className="flex flex-col gap-2 p-5 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex min-w-0 items-start gap-3">
+                    {event.event_type === 'unfamiliar_sign_in' ? (
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                    ) : (
+                      <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#8A786E]" />
+                    )}
+                    <div className="min-w-0">
+                      <p className={`text-xs font-bold ${event.event_type === 'unfamiliar_sign_in' ? 'text-amber-700' : 'text-[#4A3832]'}`}>
+                        {securityEventLabel(event.event_type)}
+                      </p>
+                      <p className="mt-1 text-[11px] text-[#77706B]">{event.device_label}</p>
+                      {event.signals?.length > 0 && (
+                        <p className="mt-1 text-[11px] text-amber-700">
+                          {event.signals.map((signal) => signal === 'new_network' ? 'New network' : 'New browser/platform').join(' · ')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <time className="shrink-0 pl-7 text-[11px] text-[#A49A92] sm:pl-0">{formatDate(event.created_at)}</time>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="border-t border-[#F0EBE6] bg-[#FBFAF8] px-5 py-3 text-[11px] leading-relaxed text-[#77706B]">
+            An unfamiliar sign-in means the browser/platform type or network differs from the recent sign-in history. VPNs and changing mobile networks can cause a review flag; no raw IP address is shown or stored in this history.
+          </p>
         </section>
 
         <div className="mt-5 rounded-2xl border border-[#DDD7D2] bg-[#FBFAF8] p-4 text-xs leading-relaxed text-[#6B6B6B]">

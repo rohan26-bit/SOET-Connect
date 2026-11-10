@@ -1173,3 +1173,66 @@ def test_password_change_replaces_the_http_only_cookie(client, admin_user, monke
     assert "access_token" not in response.json()
     assert "httponly" in response.headers.get("set-cookie", "").lower()
     assert client.get("/api/profile/me").status_code == 200
+
+
+def test_successful_login_records_unfamiliar_network_activity(client, monkeypatch):
+    """Successful sign-ins are audited using HMAC IP fingerprints, never raw IP addresses."""
+    from database import supabase, users_collection
+    from routes.auth import password_hash
+
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setenv("LOGIN_SECURITY_EVENT_SECRET", "test-login-security-event-secret")
+
+    payload = {
+        "name": "Security Activity Student",
+        "email": "security.activity@example.com",
+        "password": "SecurePassword123!",
+        "role": "student",
+        **VALID_STUDENT_FIELDS,
+    }
+    assert client.post("/auth/register", json=payload).status_code == 201
+    users_collection.update_one(
+        {"email": payload["email"]},
+        {"$set": {
+            "is_verified": True,
+            "verification_status": "approved",
+            "password_hash": password_hash.hash(payload["password"]),
+        }},
+    )
+
+    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+    first = client.post(
+        "/auth/login",
+        headers={"user-agent": user_agent, "x-forwarded-for": "203.0.113.10"},
+        json={"email": payload["email"], "password": payload["password"]},
+    )
+    assert first.status_code == 200
+
+    second = client.post(
+        "/auth/login",
+        headers={"user-agent": user_agent, "x-forwarded-for": "203.0.113.11"},
+        json={"email": payload["email"], "password": payload["password"]},
+    )
+    assert second.status_code == 200
+
+    user_id = str(second.json()["user"]["id"])
+    events = (
+        supabase.table("auth_security_events")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
+        .execute()
+        .data
+    )
+    assert [event["event_type"] for event in events] == ["unfamiliar_sign_in", "sign_in"]
+    assert "new_network" in events[0]["metadata"]["signals"]
+    assert len(events[0]["ip_fingerprint"]) == 64
+    assert "203.0.113.11" not in events[0]["ip_fingerprint"]
+
+    activity = client.get(
+        "/auth/security-events",
+        headers={"Authorization": f"Bearer {second.json()['access_token']}"},
+    )
+    assert activity.status_code == 200
+    assert activity.json()["events"][0]["event_type"] == "unfamiliar_sign_in"
+    assert "ip_fingerprint" not in activity.text

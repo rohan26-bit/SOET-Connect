@@ -442,7 +442,7 @@ def change_password(
 # ============================================================
 
 @router.post("/logout")
-def logout(response: Response, current_user: dict = Depends(get_current_user)):
+def logout(request: Request, response: Response, current_user: dict = Depends(get_current_user)):
     """Revoke this browser/device session on the server."""
     try:
         revoke_auth_session(

@@ -381,6 +381,30 @@ export const authService = {
     return result;
   },
 
+  async getSecurityEvents(): Promise<{
+    events: Array<{
+      id: string;
+      event_type: string;
+      device_label: string;
+      created_at: string;
+      signals: string[];
+    }>;
+  }> {
+    const response = await fetch(`${API_URL}/auth/security-events`, {
+      method: 'GET',
+      credentials: 'same-origin',
+      cache: 'no-store',
+    });
+    const result = await safeJsonParse(response);
+    if (response.status === 401) {
+      localStorage.removeItem('soet_access_token');
+      localStorage.removeItem('soet_user');
+      throw new Error('Your session has expired or has been revoked. Please sign in again.');
+    }
+    if (!response.ok) throw new Error(result.detail || 'Unable to load recent security activity.');
+    return result;
+  },
+
   // ============================================================
   // CURRENT USER
   // ============================================================
