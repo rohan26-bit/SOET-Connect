@@ -170,7 +170,7 @@ def test_job_event_and_announcement_models_accept_valid_pdf_attachment():
         "guide.pdf",
         "PDF",
         "application/pdf",
-        b"%PDF-1.4\\n%%EOF",
+        b"%PDF-1.4\n%%EOF",
     )
 
     job = JobCreateRequest(
