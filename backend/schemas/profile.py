@@ -1,6 +1,7 @@
 import re
-from urllib.parse import urlparse
 from pydantic import BaseModel, Field, field_validator
+
+from security.external_urls import validate_external_profile_url
 
 
 class ProfileUpdateRequest(BaseModel):
@@ -29,9 +30,9 @@ class ProfileUpdateRequest(BaseModel):
     industry: str | None = Field(default=None, max_length=100)
     location: str | None = Field(default=None, max_length=100)
     skills: list[str] | None = Field(default=None)
-    linkedin: str | None = None
-    github: str | None = None
-    website: str | None = None
+    linkedin: str | None = Field(default=None, max_length=2048)
+    github: str | None = Field(default=None, max_length=2048)
+    website: str | None = Field(default=None, max_length=2048)
     bio: str | None = Field(default=None, max_length=2000)
 
     @field_validator("phone")
@@ -66,16 +67,8 @@ class ProfileUpdateRequest(BaseModel):
 
     @field_validator("linkedin", "github", "website")
     @classmethod
-    def validate_url(cls, v: str | None) -> str | None:
-        if v is None:
-            return None
-        trimmed = v.strip()
-        if not trimmed:
-            return None
-        parsed = urlparse(trimmed)
-        if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
-            raise ValueError("URL must start with http:// or https:// and include a valid domain.")
-        return trimmed
+    def validate_url(cls, value: str | None) -> str | None:
+        return validate_external_profile_url(value)
 
     @field_validator("avatar_url")
     @classmethod
