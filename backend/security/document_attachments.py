@@ -22,7 +22,7 @@ _ALLOWED_DOCUMENTS = {
     ),
 }
 _DATA_URI_RE = re.compile(
-    r"^data:(application/pdf|application/msword|application/vnd\\.openxmlformats-officedocument\\.wordprocessingml\\.document);base64,([A-Za-z0-9+/]+={0,2})$",
+    r"^data:(application/pdf|application/msword|application/vnd\.openxmlformats-officedocument\\.wordprocessingml\\.document);base64,([A-Za-z0-9+/]+={0,2})$",
     re.IGNORECASE,
 )
 
