@@ -25,6 +25,17 @@ router = APIRouter(
 )
 
 
+def _load_notifications_or_503() -> list[dict]:
+    """Translate notification storage failures into an explicit API service error."""
+    try:
+        return load_notifications()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Notifications are temporarily unavailable. Please try again.",
+        ) from exc
+
+
 # ============================================================
 # GET /notifications  — List own notifications
 # ============================================================
@@ -34,7 +45,7 @@ def get_notifications(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user.get("user_id"))
-    notifications = load_notifications()
+    notifications = _load_notifications_or_503()
 
     user_notifications = [
         n for n in notifications
@@ -222,7 +233,11 @@ def get_notification_deliveries(
         res = query.execute()
         return res.data or []
     except Exception as e:
-        return []
+        print(f"Error loading notification delivery history: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail="Notification delivery history is temporarily unavailable. Please try again.",
+        ) from e
 
 
 # ============================================================
