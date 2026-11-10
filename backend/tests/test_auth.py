@@ -886,7 +886,6 @@ def test_login_creates_a_registered_device_session(client):
 def test_user_can_revoke_one_device_without_signing_out_current_device(client, admin_user):
     """Revoking one device invalidates only that JWT and leaves the current device active."""
     import uuid
-    from datetime import datetime, timedelta, timezone
 
     from database import supabase
     from security.jwt import create_access_token, decode_access_token
@@ -991,13 +990,10 @@ def test_server_side_logout_revokes_current_device(client, admin_user):
 
 def test_password_change_revokes_registered_device_sessions_in_mock_mode(admin_user):
     """The in-memory test adapter mirrors the production password/session transaction."""
-    from database import users_collection
+    import uuid
     from services.auth_sessions import create_auth_session, list_active_auth_sessions
     from services.session_security import update_password_and_revoke_sessions
-    from security.jwt import decode_access_token
-
-    from security.dependencies import get_user_by_id
-    from security.jwt import create_access_token
+    from security.jwt import create_access_token, decode_access_token
 
     session_id = str(uuid.uuid4())
     token = create_access_token(
@@ -1005,7 +1001,6 @@ def test_password_change_revokes_registered_device_sessions_in_mock_mode(admin_u
         role="admin",
         session_id=session_id,
     )
-    from datetime import datetime, timedelta, timezone
     expiry = decode_access_token(token)["expires_at"]
     create_auth_session(admin_user["id"], session_id, expiry, "Chrome on Windows")
 
