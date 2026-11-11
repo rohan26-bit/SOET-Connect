@@ -974,10 +974,10 @@ def test_phone_verification_locks_after_five_incorrect_attempts(
 # ==============================================================================
 
 def test_migration_015_session_revocation_and_otp_security():
-    """Migration 015 persists token versions and adds locked, service-only recovery RPCs."""
+    """Production-timestamped auth/session migration persists token versions and service-only recovery RPCs."""
     import pathlib
 
-    migration_path = pathlib.Path(__file__).parents[2] / "supabase" / "migrations" / "015_auth_session_and_phone_verification_security.sql"
+    migration_path = pathlib.Path(__file__).parents[2] / "supabase" / "migrations" / "20261108085038_auth_session_and_phone_verification_security.sql"
     assert migration_path.exists()
     sql = migration_path.read_text(encoding="utf-8")
 
