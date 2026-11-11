@@ -154,23 +154,6 @@ export default function HomepageCommunitySections() {
         </div>
       </section>
       <PlacementDetailsModal placement={viewingPlacement} onClose={() => setViewingPlacement(null)} />
-      <style jsx global>{`
-        @keyframes soet-placement-marquee {
-          from { transform: translateX(0); }
-          to { transform: translateX(-50%); }
-        }
-        .placement-marquee-track {
-          display: flex;
-          width: max-content;
-          animation: soet-placement-marquee 38s linear infinite;
-        }
-        .placement-marquee-shell:hover .placement-marquee-track {
-          animation-play-state: paused;
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .placement-marquee-track { animation: none; flex-wrap: wrap; width: auto; }
-        }
-      `}</style>
     </div>
   );
 }
