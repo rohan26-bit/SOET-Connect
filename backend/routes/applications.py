@@ -1,8 +1,6 @@
 from datetime import datetime, timezone
-import io
 import os
 import uuid
-import zipfile
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -11,6 +9,7 @@ from pydantic import BaseModel, field_validator
 
 from database import users_collection, supabase
 from security.dependencies import get_current_user
+from security.document_attachments import validate_document_file_bytes
 from services.notifications import NOTIFICATION_TYPES, create_notification_once
 from routes.jobs import load_jobs, is_job_expired
 
@@ -210,18 +209,14 @@ async def _store_application_resume(upload: Any, applicant_id: str) -> str:
     if len(file_bytes) > MAX_RESUME_SIZE_BYTES:
         raise HTTPException(status_code=413, detail="Resume file must not exceed 5 MB.")
 
-    if extension == "pdf" and not file_bytes.startswith(b"%PDF-"):
-        raise HTTPException(status_code=400, detail="The uploaded file is not a valid PDF document.")
-    if extension == "doc" and not file_bytes.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"):
-        raise HTTPException(status_code=400, detail="The uploaded file is not a valid DOC document.")
-    if extension == "docx":
-        try:
-            with zipfile.ZipFile(io.BytesIO(file_bytes)) as document:
-                valid_docx = "word/document.xml" in document.namelist()
-        except (OSError, zipfile.BadZipFile):
-            valid_docx = False
-        if not valid_docx:
-            raise HTTPException(status_code=400, detail="The uploaded file is not a valid DOCX document.")
+    try:
+        validate_document_file_bytes(
+            filename,
+            file_bytes,
+            max_bytes=MAX_RESUME_SIZE_BYTES,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     storage_path = f"{applicant_id}/{uuid.uuid4().hex}.{extension}"
     normalized_mime = mime_type if mime_type != "application/octet-stream" else {
