@@ -186,6 +186,71 @@ def test_register_duplicate_email_fails(client):
     assert "already exists" in res2.json().get("detail", "")
 
 
+def test_prn_availability_rate_limits_source_ip(client, monkeypatch):
+    """60 public PRN checks are allowed; the 61st request is blocked for that IP."""
+    import routes.auth
+
+    monkeypatch.setattr(
+        routes.auth,
+        "get_client_ip",
+        lambda request: request.headers.get("x-test-client-ip", "203.0.113.30"),
+    )
+
+    for index in range(60):
+        response = client.get(
+            f"/auth/check-prn?prn=900000{index:03d}",
+            headers={"x-test-client-ip": "203.0.113.30"},
+        )
+        assert response.status_code == 200
+
+    blocked = client.get(
+        "/auth/check-prn?prn=900000999",
+        headers={"x-test-client-ip": "203.0.113.30"},
+    )
+    assert blocked.status_code == 429
+    assert int(blocked.headers["Retry-After"]) > 0
+    assert "too many" in blocked.json()["detail"].lower()
+
+
+def test_prn_availability_rate_limit_isolated_by_source_ip(client, monkeypatch):
+    """A source that exhausted its quota does not block another source IP."""
+    import routes.auth
+
+    monkeypatch.setattr(
+        routes.auth,
+        "get_client_ip",
+        lambda request: request.headers.get("x-test-client-ip", "203.0.113.31"),
+    )
+
+    for index in range(60):
+        response = client.get(
+            f"/auth/check-prn?prn=910000{index:03d}",
+            headers={"x-test-client-ip": "203.0.113.31"},
+        )
+        assert response.status_code == 200
+
+    allowed = client.get(
+        "/auth/check-prn?prn=910000999",
+        headers={"x-test-client-ip": "198.51.100.31"},
+    )
+    assert allowed.status_code == 200
+    assert allowed.json()["available"] is True
+
+
+def test_prn_availability_rate_limit_fails_closed(client, monkeypatch):
+    """Do not reveal PRN availability when the shared rate-limit store is unavailable."""
+    import routes.auth
+
+    def fail_rate_limit(_client_ip):
+        raise RuntimeError("rate-limit store unavailable")
+
+    monkeypatch.setattr(routes.auth, "record_prn_availability_request", fail_rate_limit)
+    response = client.get("/auth/check-prn?prn=920000001")
+
+    assert response.status_code == 503
+    assert "temporarily unavailable" in response.json()["detail"].lower()
+
+
 def test_admin_registration_throttles_secret_attempts_per_source_ip(client, monkeypatch):
     """Five wrong secret attempts consume the source bucket; the sixth is blocked."""
     import routes.auth

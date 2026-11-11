@@ -28,6 +28,7 @@ from services.login_rate_limit import (
     record_login_failure,
     record_password_reset_request,
     record_admin_registration_attempt,
+    record_prn_availability_request,
 )
 from services.auth_security_events import (
     list_auth_events,
@@ -79,13 +80,33 @@ def _issue_access_token(existing_user: dict, request: Request, session_version: 
 # =========================
 
 @router.get("/check-prn")
-def check_prn_availability(prn: str = Query(..., min_length=1, max_length=100)):
+def check_prn_availability(request: Request, prn: str = Query(..., min_length=1, max_length=100)):
     """Check whether a PRN is free across student and alumni accounts."""
     normalized_prn = prn.strip()
     if not normalized_prn:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="PRN is required."
+        )
+
+    # This endpoint is public for registration, but must not become an
+    # unrestricted directory-enumeration API. Count every valid lookup,
+    # including unknown PRNs, in a shared source-IP bucket.
+    try:
+        limit_state = record_prn_availability_request(get_client_ip(request))
+    except Exception as exc:
+        print(f"PRN availability rate-limit check failed: {type(exc).__name__}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="PRN availability is temporarily unavailable. Please try again.",
+        ) from exc
+
+    if limit_state.get("blocked"):
+        retry_after = max(1, int(limit_state.get("retry_after_seconds") or 1))
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many PRN availability checks. Please try again later.",
+            headers={"Retry-After": str(retry_after)},
         )
 
     available = not users_collection.prn_exists(normalized_prn)
