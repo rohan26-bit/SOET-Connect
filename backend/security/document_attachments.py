@@ -21,6 +21,73 @@ _ALLOWED_DOCUMENTS = {
     ),
 }
 
+
+def validate_document_file_bytes(
+    name: object,
+    payload: object,
+    max_bytes: int = MAX_DOCUMENT_BYTES,
+) -> None:
+    """Validate raw PDF, DOC, or DOCX bytes before the file is stored."""
+    if not isinstance(name, str) or not name or len(name) > 255:
+        raise ValueError("Attached document name is invalid.")
+    if any(ord(char) < 32 for char in name) or "/" in name or "\\" in name:
+        raise ValueError("Attached document name is invalid.")
+
+    extension = PurePosixPath(name).suffix.lower()
+    if extension not in _ALLOWED_DOCUMENTS:
+        raise ValueError("Attached document must be a PDF, DOC, or DOCX file.")
+    if not isinstance(payload, (bytes, bytearray)):
+        raise ValueError("Attached document data is invalid.")
+    if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 1:
+        raise ValueError("Attached document size limit is invalid.")
+    if not payload or len(payload) > min(max_bytes, MAX_DOCUMENT_BYTES):
+        raise ValueError("Attached document exceeds the supported size.")
+
+    if extension == ".pdf":
+        if not payload.startswith(b"%PDF-"):
+            raise ValueError("Attached file is not a valid PDF document.")
+        return
+
+    if extension == ".doc":
+        if not payload.startswith(b"\\xd0\\xcf\\x11\\xe0\\xa1\\xb1\\x1a\\xe1"):
+            raise ValueError("Attached file is not a valid DOC document.")
+        return
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            entries = archive.infolist()
+            names = {entry.filename for entry in entries}
+            if len(entries) > MAX_DOCX_ENTRIES:
+                raise ValueError("Attached DOCX contains too many archive entries.")
+            if "[Content_Types].xml" not in names or "word/document.xml" not in names:
+                raise ValueError("Attached file is not a valid DOCX document.")
+            if any(name.casefold().endswith("vbaproject.bin") for name in names):
+                raise ValueError("Attached DOCX contains unsupported macro content.")
+
+            total_uncompressed = 0
+            for entry in entries:
+                normalized_name = entry.filename.replace("\\\\", "/")
+                entry_path = PurePosixPath(normalized_name)
+                if (
+                    normalized_name.startswith("/")
+                    or (entry_path.parts and ":" in entry_path.parts[0])
+                    or ".." in entry_path.parts
+                    or entry.flag_bits & 0x1
+                ):
+                    raise ValueError("Attached DOCX contains an unsafe archive entry.")
+                total_uncompressed += entry.file_size
+                if total_uncompressed > MAX_DOCX_UNCOMPRESSED_BYTES:
+                    raise ValueError("Attached DOCX expands beyond the supported size.")
+                if entry.file_size > 0 and entry.compress_size == 0:
+                    raise ValueError("Attached DOCX contains an invalid compressed entry.")
+                if entry.compress_size > 0 and entry.file_size / entry.compress_size > 200:
+                    raise ValueError("Attached DOCX has an unsafe compression ratio.")
+    except ValueError:
+        raise
+    except (OSError, zipfile.BadZipFile, RuntimeError) as exc:
+        raise ValueError("Attached file is not a valid DOCX document.") from exc
+
+
 def _validate_document_file(name: object, kind: object, size: object, data_url: object) -> None:
     if not isinstance(name, str) or not name or len(name) > 255:
         raise ValueError("Attached document name is invalid.")
