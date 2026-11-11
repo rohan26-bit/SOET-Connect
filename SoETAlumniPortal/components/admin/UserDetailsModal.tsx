@@ -49,7 +49,7 @@ function safeExternalUrl(value?: string): string | null {
     return null;
   }
 
-  const candidate = /^https?:\/\//i.test(raw) ? raw : \`https://\${raw}\`;
+  const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
   try {
     const parsed = new URL(candidate);
     const authority = candidate.split('://', 2)[1]?.split(/[/?#]/, 1)[0] ?? '';
