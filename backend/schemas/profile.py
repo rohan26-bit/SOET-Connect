@@ -2,6 +2,8 @@ import re
 from urllib.parse import urlparse
 from pydantic import BaseModel, Field, field_validator
 
+from security.avatar_validation import validate_avatar_url
+
 
 class ProfileUpdateRequest(BaseModel):
     full_name: str | None = Field(default=None, max_length=100)
@@ -80,17 +82,7 @@ class ProfileUpdateRequest(BaseModel):
     @field_validator("avatar_url")
     @classmethod
     def validate_avatar_url(cls, v: str | None) -> str | None:
-        if v is None:
-            return None
-        trimmed = v.strip()
-        if not trimmed:
-            return None
-        if trimmed.startswith("data:image/"):
-            return trimmed
-        parsed = urlparse(trimmed)
-        if parsed.scheme.lower() in {"http", "https"} and parsed.netloc:
-            return trimmed
-        raise ValueError("Avatar URL must be a valid http/https URL or an image data URI.")
+        return validate_avatar_url(v)
 
     @field_validator("skills")
     @classmethod
