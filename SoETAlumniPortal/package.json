@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:routes": "node --test tests/*.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.31.0",
