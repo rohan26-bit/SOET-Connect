@@ -1810,3 +1810,106 @@ def test_successful_password_reset_code_is_consumed_once(verified_alumni_user: d
 
     reset_ok, _ = recovery.reset_password_with_token(reset_token, "OneTimeResetPassword789!")
     assert reset_ok is True
+
+
+def test_forgot_password_endpoint_enforces_ip_limit_for_unknown_identifiers(client, monkeypatch):
+    """A source IP cannot bypass recovery throttling by cycling through unknown accounts."""
+    from routes import auth as auth_routes
+    from services.login_rate_limit import (
+        PASSWORD_RESET_IP_MAX_REQUESTS,
+        reset_mock_login_rate_limits,
+    )
+
+    monkeypatch.setenv("DATABASE_MODE", "mock")
+    monkeypatch.setenv("LOGIN_RATE_LIMIT_SECRET", "soet-test-login-rate-limit-secret")
+    reset_mock_login_rate_limits()
+
+    dispatched = []
+
+    def fake_request_password_reset(identifier, channel):
+        dispatched.append((identifier, channel))
+        return (
+            True,
+            "If an account matching the provided contact exists, a verification code has been sent.",
+            None,
+        )
+
+    monkeypatch.setattr(auth_routes, "request_password_reset", fake_request_password_reset)
+
+    try:
+        for index in range(PASSWORD_RESET_IP_MAX_REQUESTS):
+            response = client.post(
+                "/api/auth/forgot-password",
+                json={
+                    "identifier": f"unknown-{index}@example.com",
+                    "channel": "email",
+                },
+            )
+            assert response.status_code == 200
+            assert "If an account matching" in response.json()["message"]
+
+        assert len(dispatched) == PASSWORD_RESET_IP_MAX_REQUESTS
+
+        # The next request is blocked before account lookup or delivery dispatch.
+        blocked = client.post(
+            "/api/auth/forgot-password",
+            json={"identifier": "another-unknown@example.com", "channel": "email"},
+        )
+        assert blocked.status_code == 429
+        assert int(blocked.headers["Retry-After"]) > 0
+        assert "too many password recovery requests" in blocked.json()["detail"].lower()
+        assert len(dispatched) == PASSWORD_RESET_IP_MAX_REQUESTS
+    finally:
+        reset_mock_login_rate_limits()
+
+
+def test_password_reset_ip_buckets_are_separate_and_count_requests(monkeypatch):
+    """IP fingerprints are isolated and the source bucket is independent of account identifiers."""
+    from services.login_rate_limit import (
+        PASSWORD_RESET_IP_MAX_REQUESTS,
+        record_password_reset_request,
+        reset_mock_login_rate_limits,
+    )
+
+    monkeypatch.setenv("DATABASE_MODE", "mock")
+    monkeypatch.setenv("LOGIN_RATE_LIMIT_SECRET", "soet-test-login-rate-limit-secret")
+    reset_mock_login_rate_limits()
+
+    try:
+        for _ in range(PASSWORD_RESET_IP_MAX_REQUESTS):
+            state = record_password_reset_request("203.0.113.10")
+            assert state["blocked"] is False
+
+        blocked = record_password_reset_request("203.0.113.10")
+        assert blocked["blocked"] is True
+        assert blocked["retry_after_seconds"] > 0
+
+        other_source = record_password_reset_request("203.0.113.11")
+        assert other_source["blocked"] is False
+    finally:
+        reset_mock_login_rate_limits()
+
+
+def test_forgot_password_fails_closed_when_ip_rate_limit_store_is_unavailable(client, monkeypatch):
+    """A rate-limit outage must not turn the forgot-password endpoint into an unthrottled sender."""
+    from routes import auth as auth_routes
+
+    dispatched = []
+
+    def unavailable(_client_ip):
+        raise RuntimeError("simulated rate-limit database outage")
+
+    monkeypatch.setattr(auth_routes, "record_password_reset_request", unavailable)
+    monkeypatch.setattr(
+        auth_routes,
+        "request_password_reset",
+        lambda *args, **kwargs: dispatched.append(args),
+    )
+
+    response = client.post(
+        "/api/auth/forgot-password",
+        json={"identifier": "person@example.com", "channel": "email"},
+    )
+    assert response.status_code == 503
+    assert "temporarily unavailable" in response.json()["detail"].lower()
+    assert dispatched == []
