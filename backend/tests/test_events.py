@@ -762,3 +762,75 @@ def test_approved_restricted_event_audience_applies_to_creator_too():
     assert any(event["id"] == event_id for event in alumni_feed.json())
     assert client.get(f"/events/{event_id}", headers=headers["student"]).status_code == 404
     assert client.get(f"/events/{event_id}", headers=headers["alumni_ver"]).status_code == 200
+
+
+def test_registration_rpc_rechecks_role_and_maps_transactional_deadline(
+    monkeypatch,
+):
+    """The database transaction receives the authenticated role and can reject a stale pre-check."""
+    from fastapi import HTTPException
+    from types import SimpleNamespace
+
+    event_date = (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()
+    monkeypatch.setattr(
+        events_module,
+        "_find_event",
+        lambda _event_id: {
+            "id": "event-transaction-test",
+            "title": "Transactional Eligibility Test",
+            "status": "approved",
+            "visibility": "everyone",
+            "date": event_date,
+            "time": "14:00",
+            "registration_deadline": None,
+            "capacity": 10,
+        },
+    )
+    monkeypatch.setattr(
+        events_module,
+        "get_user_from_token",
+        lambda _current_user: {
+            "_id": "demo-student-id",
+            "name": "Demo Student",
+            "email": "test@student.com",
+            "is_active": True,
+        },
+    )
+
+    original_getenv = os.getenv
+    monkeypatch.setattr(
+        events_module.os,
+        "getenv",
+        lambda key, default=None: "supabase" if key == "DATABASE_MODE" else original_getenv(key, default),
+    )
+
+    captured = {}
+
+    class FakeRpcQuery:
+        def execute(self):
+            return SimpleNamespace(
+                data=[{
+                    "outcome": "closed",
+                    "registration_id": None,
+                    "registered_at": None,
+                }]
+            )
+
+    def fake_rpc(function_name, params):
+        captured["function_name"] = function_name
+        captured["params"] = params
+        return FakeRpcQuery()
+
+    monkeypatch.setattr(events_module.supabase, "rpc", fake_rpc)
+
+    with pytest.raises(HTTPException) as exc_info:
+        events_module.register_for_event(
+            "event-transaction-test",
+            {"user_id": "demo-student-id", "role": "student"},
+        )
+
+    assert exc_info.value.status_code == 400
+    assert "deadline" in exc_info.value.detail.lower()
+    assert captured["function_name"] == "register_event_with_capacity"
+    assert captured["params"]["p_user_role"] == "student"
+    assert captured["params"]["p_user_id"] == "demo-student-id"
