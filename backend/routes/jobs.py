@@ -1,8 +1,9 @@
 from datetime import datetime, timezone, timedelta
+from urllib.parse import urlparse
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from database import users_collection, supabase
 from security.dependencies import get_current_user
@@ -22,6 +23,39 @@ JOBS_FILE = None
 # REQUEST MODELS
 # ============================================================
 
+def validate_external_application_url(value: str | None) -> str:
+    """Allow only absolute HTTP(S) job application links without credentials."""
+    cleaned = str(value or "").strip()
+    if not cleaned:
+        return ""
+
+    if any(ord(char) < 32 or char.isspace() for char in cleaned):
+        raise ValueError("Application URL contains invalid whitespace or control characters.")
+
+    parsed = urlparse(cleaned)
+    if (
+        parsed.scheme.lower() in {"http", "https"}
+        and parsed.hostname
+        and not parsed.username
+        and not parsed.password
+    ):
+        try:
+            parsed.port
+        except ValueError as exc:
+            raise ValueError("Application URL contains an invalid port.") from exc
+        return cleaned
+
+    raise ValueError("Application URL must be a valid HTTP or HTTPS URL.")
+
+
+def safe_external_application_url(value: str | None) -> str:
+    """Suppress unsafe legacy job links before exposing them to clients."""
+    try:
+        return validate_external_application_url(value)
+    except ValueError:
+        return ""
+
+
 class JobCreateRequest(BaseModel):
     title: str
     company: str
@@ -30,10 +64,15 @@ class JobCreateRequest(BaseModel):
     employment_type: str
     experience: str = ""
     salary: str = ""
-    skills: list[str] = []
-    application_url: str = ""
+    skills: list[str] = Field(default_factory=list)
+    application_url: str = Field(default="", max_length=2048)
     deadline: str | None = None
     application_deadline: str | None = None
+
+    @field_validator("application_url")
+    @classmethod
+    def validate_application_url(cls, value: str) -> str:
+        return validate_external_application_url(value)
 
 
 class JobDeadlineUpdateRequest(BaseModel):
@@ -143,6 +182,7 @@ def load_jobs(status: str | None = None, posted_by: str | None = None) -> list[d
             j["employment_type"] = row.get("job_type", "")
             j["experience"] = row.get("experience_level", "")
             j["salary"] = row.get("salary_range", "")
+            j["application_url"] = safe_external_application_url(row.get("application_url"))
             deadline_val = row.get("application_deadline") or row.get("deadline")
             j["deadline"] = deadline_val
             j["application_deadline"] = deadline_val
@@ -381,6 +421,7 @@ def get_job_details(
     job["employment_type"] = job.get("job_type", "")
     job["experience"] = job.get("experience_level", "")
     job["salary"] = job.get("salary_range", "")
+    job["application_url"] = safe_external_application_url(job.get("application_url"))
     deadline_val = job.get("application_deadline") or job.get("deadline")
     job["deadline"] = deadline_val
     job["application_deadline"] = deadline_val
@@ -437,6 +478,7 @@ def update_job_deadline(
     job["employment_type"] = job.get("job_type", "")
     job["experience"] = job.get("experience_level", "")
     job["salary"] = job.get("salary_range", "")
+    job["application_url"] = safe_external_application_url(job.get("application_url"))
 
     return {
         "message": "Job deadline updated successfully.",
@@ -487,6 +529,7 @@ def update_job_status(
     job["employment_type"] = job.get("job_type", "")
     job["experience"] = job.get("experience_level", "")
     job["salary"] = job.get("salary_range", "")
+    job["application_url"] = safe_external_application_url(job.get("application_url"))
 
     if old_status != request.status:
         owner_id = str(job.get("posted_by"))
@@ -555,6 +598,7 @@ def delete_job(
     target_job["employment_type"] = target_job.get("job_type", "")
     target_job["experience"] = target_job.get("experience_level", "")
     target_job["salary"] = target_job.get("salary_range", "")
+    target_job["application_url"] = safe_external_application_url(target_job.get("application_url"))
 
     return {
         "message": "Job deleted successfully.",
