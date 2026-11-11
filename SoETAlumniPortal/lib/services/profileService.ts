@@ -132,8 +132,9 @@ export const profileService = {
     if (file.size > MAX_FILE_SIZE_BYTES) {
       throw new Error('Avatar image size must not exceed 2MB.');
     }
-    if (!file.type || !file.type.startsWith('image/')) {
-      throw new Error('Only image files (JPEG, PNG, WebP, GIF) are allowed.');
+    const allowedAvatarTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+    if (!allowedAvatarTypes.has(file.type)) {
+      throw new Error('Only JPEG, PNG, or WebP images are allowed.');
     }
 
     // Convert image file to base64 Data URL for persistent storage
