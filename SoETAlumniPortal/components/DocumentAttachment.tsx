@@ -34,11 +34,25 @@ export interface DocumentAttachmentProps {
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx'];
-const ALLOWED_MIME_TYPES = [
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-];
+const MIME_BY_EXTENSION: Record<string, string> = {
+  '.pdf': 'application/pdf',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+};
+
+function getSafeDocumentDataUrl(attachment: DocumentAttachmentData): string | null {
+  const expectedMime = MIME_BY_EXTENSION[getFileExtension(attachment.name)];
+  if (!expectedMime || !attachment.url) return null;
+
+  const prefix = `data:${expectedMime};base64,`;
+  if (!attachment.url.startsWith(prefix)) return null;
+
+  const encoded = attachment.url.slice(prefix.length);
+  if (!encoded || encoded.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
+    return null;
+  }
+  return attachment.url;
+}
 
 export function formatFileSize(bytes: number): string {
   if (!bytes || isNaN(bytes)) return '0 B';
@@ -154,11 +168,13 @@ export default function DocumentAttachment({
 
   const validateFile = (file: File): string | null => {
     const ext = getFileExtension(file.name);
-    const isExtensionAllowed = ALLOWED_EXTENSIONS.includes(ext);
-    const isMimeAllowed = !file.type || ALLOWED_MIME_TYPES.includes(file.type);
+    const expectedMime = MIME_BY_EXTENSION[ext];
 
-    if (!isExtensionAllowed && !isMimeAllowed) {
+    if (!ALLOWED_EXTENSIONS.includes(ext) || !expectedMime) {
       return 'Please upload a PDF, DOC, or DOCX file.';
+    }
+    if (file.type && file.type !== expectedMime) {
+      return 'The selected file type does not match its extension.';
     }
 
     if (file.size > MAX_FILE_SIZE) {
@@ -185,13 +201,21 @@ export default function DocumentAttachment({
     reader.onload = () => {
       setReading(false);
       const dataUrl = reader.result as string;
-      const ext = getFileExtension(file.name).replace('.', '').toUpperCase();
+      const commaIndex = dataUrl.indexOf(',');
+      const encoded = commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : '';
+      const extension = getFileExtension(file.name);
+      const expectedMime = MIME_BY_EXTENSION[extension];
+
+      if (!encoded || !expectedMime) {
+        setError('The selected document could not be read. Please try again.');
+        return;
+      }
 
       onChange({
         name: file.name,
-        type: ext || file.type || 'DOCUMENT',
+        type: extension.replace('.', '').toUpperCase(),
         size: file.size,
-        url: dataUrl,
+        url: `data:${expectedMime};base64,${encoded}`,
         file,
       });
     };
@@ -375,13 +399,14 @@ export function DocumentAttachmentView({
 
   const category = getFileCategory(attachment.name, attachment.type);
   const isPdf = category === 'pdf';
-  const hasUrl = !!attachment.url;
+  const safeDataUrl = getSafeDocumentDataUrl(attachment);
+  const hasUrl = !!safeDataUrl;
 
   const handleDownload = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!attachment.url) return;
+    if (!safeDataUrl) return;
     const a = document.createElement('a');
-    a.href = attachment.url;
+    a.href = safeDataUrl;
     a.download = attachment.name;
     document.body.appendChild(a);
     a.click();
@@ -390,26 +415,21 @@ export function DocumentAttachmentView({
 
   const handleView = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!attachment.url) return;
-    if (attachment.url.startsWith('data:')) {
-      try {
-        const parts = attachment.url.split(',');
-        const mime = parts[0].match(/:(.*?);/)?.[1] || 'application/pdf';
-        const bstr = atob(parts[1]);
-        let n = bstr.length;
-        const u8arr = new Uint8Array(n);
-        while (n--) {
-          u8arr[n] = bstr.charCodeAt(n);
-        }
-        const blob = new Blob([u8arr], { type: mime });
-        const blobUrl = URL.createObjectURL(blob);
-        window.open(blobUrl, '_blank');
-        return;
-      } catch (err) {
-        console.error('Error opening document:', err);
+    if (!safeDataUrl || !isPdf) return;
+    try {
+      const encoded = safeDataUrl.slice(safeDataUrl.indexOf(',') + 1);
+      const binary = atob(encoded);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) {
+        bytes[i] = binary.charCodeAt(i);
       }
+      // Never derive a Blob MIME type from stored metadata. View is PDF-only.
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      console.error('Error opening document:', err);
     }
-    window.open(attachment.url, '_blank', 'noopener,noreferrer');
   };
 
   return (
