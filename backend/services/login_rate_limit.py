@@ -235,8 +235,8 @@ def record_login_failure(email: str, client_ip: str) -> dict[str, Any]:
 # bucket prevents one IP from bypassing that quota by cycling through many
 # different account identifiers.
 PASSWORD_RESET_IP_MAX_REQUESTS = 10
-PASSWORD_RESET_IP_WINDOW_SECONDS = 15 * 60
-PASSWORD_RESET_IP_LOCK_SECONDS = 15 * 60
+_PASSWORD_RESET_IP_WINDOW_SECONDS = WINDOW_SECONDS
+PASSWORD_RESET_IP_LOCK_SECONDS = LOCK_SECONDS
 _PASSWORD_RESET_IP_MAX_ATTEMPTS = PASSWORD_RESET_IP_MAX_REQUESTS + 1
 
 
