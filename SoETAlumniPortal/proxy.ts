@@ -1,18 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 
+/**
+ * Preview-only CSP canary.
+ *
+ * Production remains on its existing security headers until the report-only
+ * rollout is clean across the public routes and authenticated user journeys.
+ */
 export function proxy(request: NextRequest) {
-  // Exercise CSP only on protected Vercel preview deployments first.
-  // Production and local development keep their existing response behavior.
   if (process.env.VERCEL_ENV !== "preview") {
     return NextResponse.next();
   }
 
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
-  const csp = [
+  const policy = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
     `style-src 'self' 'nonce-${nonce}'`,
-    "img-src 'self' data: blob:",
+    "img-src 'self' blob:",
     "font-src 'self'",
     "connect-src 'self'",
     "object-src 'none'",
@@ -22,18 +26,17 @@ export function proxy(request: NextRequest) {
     "report-uri /csp-report",
   ].join("; ");
 
-  // Next.js reads the request CSP nonce and attaches it to framework scripts.
-  // The browser receives Report-Only, so existing pages continue to work while
-  // violations are collected during preview testing.
+  // Next.js reads the request CSP and x-nonce headers to nonce framework
+  // scripts and supported inline resources during request rendering.
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
-  requestHeaders.set("Content-Security-Policy", csp);
+  requestHeaders.set("Content-Security-Policy", policy);
 
   const response = NextResponse.next({
     request: { headers: requestHeaders },
   });
-  response.headers.set("Content-Security-Policy-Report-Only", csp);
 
+  response.headers.set("Content-Security-Policy-Report-Only", policy);
   return response;
 }
 

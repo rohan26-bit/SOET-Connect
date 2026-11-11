@@ -36,6 +36,30 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Homepage placement ticker animation (kept in the external stylesheet for CSP). */
+@keyframes soet-placement-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.placement-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: soet-placement-marquee 38s linear infinite;
+}
+
+.placement-marquee-shell:hover .placement-marquee-track {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .placement-marquee-track {
+    animation: none;
+    flex-wrap: wrap;
+    width: auto;
+  }
+}
+
 /* Custom sleek scrollbar for the dark sidebar */
 .dark-scrollbar::-webkit-scrollbar {
   width: 6px;
