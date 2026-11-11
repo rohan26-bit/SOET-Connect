@@ -653,6 +653,14 @@ def withdraw_application(
 
             supabase.table("job_applications").delete().eq("id", str(application_id)).execute()
 
+            # Uploaded resumes live in a private per-applicant storage folder.
+            # Remove only an object inside this applicant's own folder; legacy
+            # external URLs and malformed/cross-user paths are left untouched.
+            resume_value = str(app.get("resume_url") or "").strip()
+            owned_resume_prefix = f"{RESUME_PATH_PREFIX}{user_id}/"
+            if resume_value.startswith(owned_resume_prefix):
+                _delete_stored_resume(resume_value)
+
             return {
                 "message": "Application withdrawn successfully.",
                 "application": _safe_application_record(app)

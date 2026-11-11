@@ -453,3 +453,50 @@ def test_legacy_unsafe_resume_links_are_sanitized_on_compatibility_reads(
     )
     assert status_update.status_code == 200
     assert status_update.json()["application"]["resume_url"] == ""
+
+
+def test_withdrawing_application_deletes_its_private_resume(client, admin_user, student_user):
+    """Withdrawing an application removes its private Supabase resume object."""
+    job_id = _create_approved_job(client, admin_user)
+    resume_bytes = b"%PDF-1.7\\nSOET Connect withdrawal cleanup test\\n"
+
+    submitted = client.post(
+        "/applications",
+        data={"job_id": job_id, "cover_letter": "Please consider my application."},
+        files={"resume_file": ("withdrawal-resume.pdf", resume_bytes, "application/pdf")},
+        headers=student_user["headers"],
+    )
+    assert submitted.status_code == 200, submitted.text
+    application_id = submitted.json()["application"]["id"]
+
+    stored_rows = (
+        supabase.table("job_applications")
+        .select("resume_url")
+        .eq("id", application_id)
+        .execute()
+        .data
+    )
+    assert len(stored_rows) == 1
+    stored_value = stored_rows[0]["resume_url"]
+    assert stored_value.startswith(f"application-resumes/{student_user['id']}/")
+
+    object_path = stored_value.removeprefix("application-resumes/")
+    bucket = supabase.storage.from_("application-resumes")
+    assert bucket.download(object_path) == resume_bytes
+
+    withdrawn = client.delete(
+        f"/applications/{application_id}",
+        headers=student_user["headers"],
+    )
+    assert withdrawn.status_code == 200
+    assert withdrawn.json()["message"] == "Application withdrawn successfully."
+
+    assert bucket.download(object_path) is None
+    remaining_rows = (
+        supabase.table("job_applications")
+        .select("id")
+        .eq("id", application_id)
+        .execute()
+        .data
+    )
+    assert remaining_rows == []
