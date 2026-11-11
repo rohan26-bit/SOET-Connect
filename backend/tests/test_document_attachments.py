@@ -14,6 +14,7 @@ from security.document_attachments import (
     ATTACHMENT_META_START,
     sanitize_document_attachment_text,
     validate_document_attachment_text,
+    validate_document_file_bytes,
 )
 
 
@@ -186,3 +187,70 @@ def test_job_event_and_announcement_models_accept_valid_pdf_attachment():
     assert job.description == valid
     assert event.description == valid
     assert announcement.content == valid
+
+
+def _docx_with_entries(extra_entries: dict[str, bytes] | None = None) -> bytes:
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>")
+        archive.writestr("word/document.xml", "<document/>")
+        for name, data in (extra_entries or {}).items():
+            archive.writestr(name, data)
+    return output.getvalue()
+
+
+def test_raw_document_byte_validator_accepts_supported_resume_formats():
+    validate_document_file_bytes("resume.pdf", b"%PDF-1.7\nresume\n", max_bytes=5 * 1024 * 1024)
+    validate_document_file_bytes(
+        "resume.doc",
+        b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"0" * 16,
+        max_bytes=5 * 1024 * 1024,
+    )
+    validate_document_file_bytes(
+        "resume.docx",
+        _docx_with_entries(),
+        max_bytes=5 * 1024 * 1024,
+    )
+
+
+def test_raw_document_byte_validator_rejects_macro_bearing_docx():
+    payload = _docx_with_entries({"word/vbaProject.bin": b"macro payload"})
+    with pytest.raises(ValueError, match="macro"):
+        validate_document_file_bytes("resume.docx", payload, max_bytes=5 * 1024 * 1024)
+
+
+def test_raw_document_byte_validator_rejects_zip_slip_and_zip_bombs():
+    zip_slip = _docx_with_entries({"../outside.txt": b"not allowed"})
+    with pytest.raises(ValueError, match="unsafe archive entry"):
+        validate_document_file_bytes("resume.docx", zip_slip, max_bytes=5 * 1024 * 1024)
+
+    zip_bomb = _docx_with_entries({"word/media/payload.bin": b"A" * 300_000})
+    with pytest.raises(ValueError, match="compression ratio"):
+        validate_document_file_bytes("resume.docx", zip_bomb, max_bytes=5 * 1024 * 1024)
+
+
+def test_raw_document_byte_validator_enforces_resume_specific_size_limit():
+    with pytest.raises(ValueError, match="supported size"):
+        validate_document_file_bytes("resume.pdf", b"%PDF-" + b"x" * 32, max_bytes=10)
+
+
+def test_embedded_docx_rejects_macro_and_high_compression_payloads():
+    def make_docx(extra_entries):
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("[Content_Types].xml", "<Types/>")
+            archive.writestr("word/document.xml", "<document/>")
+            for name, data in extra_entries.items():
+                archive.writestr(name, data)
+        return output.getvalue()
+
+    mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    malicious_payloads = [
+        make_docx({"word/vbaProject.bin": b"macro payload"}),
+        make_docx({"word/media/payload.bin": b"A" * 300_000}),
+    ]
+
+    for payload in malicious_payloads:
+        unsafe = _attachment_text("guide.docx", "DOCX", mime, payload)
+        with pytest.raises(ValueError):
+            validate_document_attachment_text(unsafe)
