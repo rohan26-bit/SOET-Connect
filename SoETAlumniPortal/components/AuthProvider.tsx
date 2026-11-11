@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { authService, UserProfile } from '@/lib/services/authService';
+import { getProtectedRouteRedirect } from '@/lib/authRouteAccess.mjs';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -25,31 +26,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname();
 
   const fetchProfile = async () => {
-    try {
-      const profile = await authService.getCurrentUserProfile();
-      setUser(profile);
+    let profile: UserProfile | null = null;
 
-      // Route protection check
-      if (!profile) {
-        if (
-          pathname.startsWith('/student') ||
-          pathname.startsWith('/alumni') ||
-          pathname.startsWith('/admin')
-        ) {
-          router.push('/login');
-        }
-      } else {
-        // Enforce role isolation
-        if (pathname.startsWith('/admin') && profile.role !== 'admin') {
-          router.push(profile.role === 'alumni' ? '/alumni' : '/student');
-        } else if (pathname.startsWith('/alumni') && profile.role !== 'alumni' && profile.role !== 'admin') {
-          router.push('/student');
-        }
-      }
+    try {
+      profile = await authService.getCurrentUserProfile();
+      setUser(profile);
     } catch {
+      // Treat an unavailable profile service as unauthenticated for protected
+      // dashboard routes. Backend authorization remains the authoritative gate.
       setUser(null);
     } finally {
       setLoading(false);
+    }
+
+    const redirect = getProtectedRouteRedirect(pathname, profile);
+    if (redirect) {
+      router.replace(redirect);
     }
   };
 
