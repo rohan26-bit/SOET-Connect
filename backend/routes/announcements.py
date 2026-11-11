@@ -2,7 +2,9 @@ from datetime import datetime, timezone, timedelta
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+from security.document_attachments import sanitize_document_attachment_text, validate_document_attachment_text
 
 from database import users_collection, supabase
 from security.dependencies import get_current_user
@@ -32,12 +34,23 @@ class AnnouncementCreateRequest(BaseModel):
     target_audience: str = "all"
     expires_at: str | None = None
 
+    @field_validator("content")
+    @classmethod
+    def validate_content_attachment(cls, value: str) -> str:
+        validated = validate_document_attachment_text(value)
+        return validated or ""
+
 
 class AnnouncementUpdateRequest(BaseModel):
     title: str | None = None
     content: str | None = None
     target_audience: str | None = None
     expires_at: str | None = None
+
+    @field_validator("content")
+    @classmethod
+    def validate_content_attachment(cls, value: str | None) -> str | None:
+        return validate_document_attachment_text(value)
 
 
 # ============================================================
@@ -82,6 +95,7 @@ def load_announcements() -> list[dict]:
         res = supabase.table("announcements").select("*").order("created_at", desc=True).execute()
         announcements = res.data or []
         for ann in announcements:
+            ann["content"] = sanitize_document_attachment_text(ann.get("content")) or ""
             ann["is_expired"] = is_announcement_expired(ann)
         return announcements
     except Exception as e:
@@ -278,6 +292,7 @@ def update_announcement(
     supabase.table("announcements").update(db_updates).eq("id", str(announcement_id)).execute()
 
     ann.update(db_updates)
+    ann["content"] = sanitize_document_attachment_text(ann.get("content")) or ""
     ann["is_expired"] = is_announcement_expired(ann)
     ann["created_by"] = str(ann.get("author_id", ""))
 
@@ -310,6 +325,7 @@ def delete_announcement(
         )
 
     deleted = res.data[0]
+    deleted["content"] = sanitize_document_attachment_text(deleted.get("content")) or ""
     supabase.table("announcements").delete().eq("id", str(announcement_id)).execute()
 
     return {
