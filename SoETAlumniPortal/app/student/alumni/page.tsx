@@ -25,6 +25,31 @@ function getAciRecognition(score: number) {
   return { tier: 'Bronze Contributor', badge: '🥉', range: '0–49 pts' };
 }
 
+function safeExternalProfileUrl(value?: string): string | null {
+  const raw = value?.trim();
+  if (!raw || raw.length > 2048 || /[\s\u0000-\u001f\u007f\\]/.test(raw)) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(raw);
+    const authority = raw.split('://', 2)[1]?.split(/[/?#]/, 1)[0] ?? '';
+    if (
+      (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') ||
+      !parsed.hostname ||
+      authority.includes('@') ||
+      parsed.username ||
+      parsed.password
+    ) {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+
 export default function AlumniDirectoryPage() {
   const [alumni, setAlumni] = useState<AlumniDirectoryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -468,22 +493,22 @@ export default function AlumniDirectoryPage() {
 
               <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  {alum.linkedin && (
+                  {safeExternalProfileUrl(alum.linkedin) && (
                     <a
-                      href={alum.linkedin}
+                      href={safeExternalProfileUrl(alum.linkedin) ?? undefined}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       title="LinkedIn Profile"
                       className="p-1.5 bg-slate-50 hover:bg-blue-50 text-slate-500 hover:text-blue-600 rounded-lg transition"
                     >
                       <Globe className="w-4 h-4" />
                     </a>
                   )}
-                  {alum.github && (
+                  {safeExternalProfileUrl(alum.github) && (
                     <a
-                      href={alum.github}
+                      href={safeExternalProfileUrl(alum.github) ?? undefined}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       title="GitHub Profile"
                       className="p-1.5 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-900 rounded-lg transition"
                     >
