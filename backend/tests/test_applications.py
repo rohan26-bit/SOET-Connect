@@ -500,3 +500,46 @@ def test_withdrawing_application_deletes_its_private_resume(client, admin_user, 
         .data
     )
     assert remaining_rows == []
+
+
+def test_application_resume_upload_rejects_macro_and_compression_bomb_docx(
+    client, admin_user, student_user
+):
+    """DOCX resumes with macros or dangerous compression ratios never reach storage."""
+    import io
+    import zipfile
+
+    job_id = _create_approved_job(client, admin_user)
+
+    def make_docx(extra_entries):
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("[Content_Types].xml", "<Types/>")
+            archive.writestr("word/document.xml", "<document/>")
+            for name, data in extra_entries.items():
+                archive.writestr(name, data)
+        return output.getvalue()
+
+    malicious_files = [
+        ("macro-resume.docx", make_docx({"word/vbaProject.bin": b"macro payload"})),
+        ("compressed-resume.docx", make_docx({"word/media/payload.bin": b"A" * 300_000})),
+        ("zip-slip-resume.docx", make_docx({"../outside.txt": b"not allowed"})),
+    ]
+
+    for filename, payload in malicious_files:
+        response = client.post(
+            "/applications",
+            data={"job_id": job_id},
+            files={
+                "resume_file": (
+                    filename,
+                    payload,
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                )
+            },
+            headers=student_user["headers"],
+        )
+        assert response.status_code == 400
+        detail = response.json()["detail"].lower()
+        assert any(term in detail for term in ("macro", "compression ratio", "unsafe archive entry"))
+
