@@ -122,41 +122,8 @@ def _validate_document_file(name: object, kind: object, size: object, data_url: 
     if not payload or len(payload) > MAX_DOCUMENT_BYTES or len(payload) != size:
         raise ValueError("Attached document size does not match its data.")
 
-    if extension == ".pdf":
-        if not payload.startswith(b"%PDF-"):
-            raise ValueError("Attached file is not a valid PDF document.")
-        return
+    validate_document_file_bytes(name, payload)
 
-    if extension == ".doc":
-        if not payload.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"):
-            raise ValueError("Attached file is not a valid DOC document.")
-        return
-
-    try:
-        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
-            entries = archive.infolist()
-            names = {entry.filename for entry in entries}
-            if len(entries) > MAX_DOCX_ENTRIES:
-                raise ValueError("Attached DOCX contains too many archive entries.")
-            if "[Content_Types].xml" not in names or "word/document.xml" not in names:
-                raise ValueError("Attached file is not a valid DOCX document.")
-
-            total_uncompressed = 0
-            for entry in entries:
-                entry_path = PurePosixPath(entry.filename)
-                if entry_path.is_absolute() or ".." in entry_path.parts or entry.flag_bits & 0x1:
-                    raise ValueError("Attached DOCX contains an unsafe archive entry.")
-                total_uncompressed += entry.file_size
-                if total_uncompressed > MAX_DOCX_UNCOMPRESSED_BYTES:
-                    raise ValueError("Attached DOCX expands beyond the supported size.")
-                if entry.file_size > 0 and entry.compress_size == 0:
-                    raise ValueError("Attached DOCX contains an invalid compressed entry.")
-                if entry.compress_size > 0 and entry.file_size / entry.compress_size > 200:
-                    raise ValueError("Attached DOCX has an unsafe compression ratio.")
-    except ValueError:
-        raise
-    except (OSError, zipfile.BadZipFile, RuntimeError) as exc:
-        raise ValueError("Attached file is not a valid DOCX document.") from exc
 
 def validate_document_attachment_text(value: str | None) -> str | None:
     """Validate the shared PDF/DOC/DOCX attachment metadata embedded in text."""
