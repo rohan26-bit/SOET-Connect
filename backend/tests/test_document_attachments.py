@@ -232,3 +232,25 @@ def test_raw_document_byte_validator_rejects_zip_slip_and_zip_bombs():
 def test_raw_document_byte_validator_enforces_resume_specific_size_limit():
     with pytest.raises(ValueError, match="supported size"):
         validate_document_file_bytes("resume.pdf", b"%PDF-" + b"x" * 32, max_bytes=10)
+
+
+def test_embedded_docx_rejects_macro_and_high_compression_payloads():
+    def make_docx(extra_entries):
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("[Content_Types].xml", "<Types/>")
+            archive.writestr("word/document.xml", "<document/>")
+            for name, data in extra_entries.items():
+                archive.writestr(name, data)
+        return output.getvalue()
+
+    mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    malicious_payloads = [
+        make_docx({"word/vbaProject.bin": b"macro payload"}),
+        make_docx({"word/media/payload.bin": b"A" * 300_000}),
+    ]
+
+    for payload in malicious_payloads:
+        unsafe = _attachment_text("guide.docx", "DOCX", mime, payload)
+        with pytest.raises(ValueError):
+            validate_document_attachment_text(unsafe)
