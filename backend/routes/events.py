@@ -972,7 +972,13 @@ def register_for_event(
         try:
             rpc_result = supabase.rpc(
                 "register_event_with_capacity",
-                {"p_event_id": str(event_id), "p_user_id": user_id},
+                {
+                    "p_event_id": str(event_id),
+                    "p_user_id": user_id,
+                    # get_current_user resolves this role from the current DB user,
+                    # and the SQL function rechecks it after locking the event row.
+                    "p_user_role": str(current_user.get("role") or ""),
+                },
             ).execute()
             rows = rpc_result.data or []
             registration_result = rows[0] if rows else {"outcome": "not_found"}
@@ -993,6 +999,8 @@ def register_for_event(
         raise HTTPException(status_code=400, detail="You have already registered for this event.")
     if outcome == "full":
         raise HTTPException(status_code=409, detail="This event has reached its registration capacity.")
+    if outcome == "closed":
+        raise HTTPException(status_code=400, detail="Registration deadline has passed.")
     if outcome != "registered":
         raise HTTPException(status_code=503, detail="Unable to complete registration right now. Please try again.")
 
