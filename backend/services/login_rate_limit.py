@@ -230,6 +230,55 @@ def record_login_failure(email: str, client_ip: str) -> dict[str, Any]:
         raise RuntimeError("Unable to record failed login attempt.") from exc
 
 
+
+# Password recovery has a per-account send quota as well. This source-wide
+# bucket prevents one IP from bypassing that quota by cycling through many
+# different account identifiers.
+PASSWORD_RESET_IP_MAX_REQUESTS = 10
+_PASSWORD_RESET_IP_MAX_ATTEMPTS = PASSWORD_RESET_IP_MAX_REQUESTS + 1
+
+
+def record_password_reset_request(client_ip: str) -> dict[str, Any]:
+    """Count one password-reset request in a shared, privacy-preserving IP bucket.
+
+    The request is counted before account lookup, including for unknown
+    identifiers, so account enumeration does not bypass source throttling.
+    Ten requests per IP are allowed in each 15-minute window; the next request
+    receives a 15-minute block.
+    """
+    normalized_ip = str(client_ip or "unknown").strip().lower() or "unknown"
+    key = _fingerprint("password-reset-ip", normalized_ip)
+    now = datetime.now(timezone.utc)
+
+    if os.getenv("DATABASE_MODE", "").strip().lower() == "mock":
+        with _MOCK_LOCK:
+            bucket = _mock_bump(key, _PASSWORD_RESET_IP_MAX_ATTEMPTS, now)
+        blocked_until = bucket.get("blocked_until")
+        blocked = bool(blocked_until and blocked_until > now)
+        return {
+            "blocked": blocked,
+            "retry_after_seconds": _retry_after(blocked_until, now) if blocked else 0,
+            "attempts": int(bucket.get("attempts") or 0),
+        }
+
+    try:
+        result = supabase.rpc(
+            "record_password_reset_ip_attempt",
+            {
+                "p_key_hash": key,
+                "p_now": now.isoformat(),
+            },
+        ).execute()
+        row = _rpc_row(result)
+        return {
+            "blocked": bool(row.get("is_blocked")),
+            "retry_after_seconds": int(row.get("retry_after_seconds") or 0),
+            "attempts": int(row.get("attempts") or 0),
+        }
+    except Exception as exc:
+        raise RuntimeError("Unable to record password recovery request limit.") from exc
+
+
 def clear_login_account_failures(email: str, client_ip: str) -> None:
     """Clear account and account/IP history after correct credentials; retain the IP bucket."""
     keys = _build_keys(email, client_ip)

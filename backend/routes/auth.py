@@ -26,6 +26,7 @@ from services.login_rate_limit import (
     clear_login_account_failures,
     get_client_ip,
     record_login_failure,
+    record_password_reset_request,
 )
 from services.auth_security_events import (
     list_auth_events,
@@ -629,8 +630,28 @@ class ResetPasswordRequest(BaseModel):
 
 
 @router.post("/forgot-password")
-def forgot_password_endpoint(payload: ForgotPasswordRequest):
-    """Initiate password recovery by sending a 6-digit code via Email or SMS."""
+def forgot_password_endpoint(payload: ForgotPasswordRequest, request: Request):
+    """Initiate password recovery with a source-wide limit before account lookup."""
+    # Count every request, including unknown identifiers, before checking whether
+    # an account exists. This complements the account-level send quota and keeps
+    # the generic anti-enumeration response unchanged.
+    try:
+        limit_state = record_password_reset_request(get_client_ip(request))
+    except Exception as exc:
+        print(f"Password recovery rate-limit check failed: {type(exc).__name__}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Password recovery is temporarily unavailable. Please try again later.",
+        ) from exc
+
+    if limit_state.get("blocked"):
+        retry_after = max(1, int(limit_state.get("retry_after_seconds") or 1))
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many password recovery requests. Please try again later.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
     success, message, debug_code = request_password_reset(payload.identifier, payload.channel)
     if not success:
         raise HTTPException(status_code=400, detail=message)
