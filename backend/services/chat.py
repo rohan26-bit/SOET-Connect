@@ -394,6 +394,15 @@ def get_conversation_messages(conversation_id: str, current_user_id: str) -> lis
             detail="You do not have access to this conversation."
         )
 
+    # Archiving is per participant. Keep message history hidden for the user
+    # who archived the conversation, matching the conversation and attachment APIs.
+    deleted_for = [str(uid) for uid in conv.get("deleted_for", [])]
+    if current_user_id in deleted_for:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found."
+        )
+
     msgs = list(messages_collection.find({"conversation_id": str(conv_id)}))
     msgs.sort(key=lambda m: str(m.get("created_at") or ""))
 
@@ -642,6 +651,15 @@ def mark_message_as_read(message_id: str, current_user_id: str) -> dict:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have access to this message."
+        )
+
+    # Do not let a participant continue interacting with a conversation they
+    # archived. The other participant's view remains unaffected.
+    deleted_for = [str(uid) for uid in conv.get("deleted_for", [])]
+    if current_user_id in deleted_for:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found."
         )
 
     read_by = [str(uid) for uid in msg.get("read_by", [])]
