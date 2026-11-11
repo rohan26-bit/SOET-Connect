@@ -365,7 +365,7 @@ def get_gallery_photo_image(
             media_type="image/webp",
             headers={
                 "Content-Disposition": "inline",
-                "Cache-Control": "public, max-age=86400" if is_public else "private, no-store",
+                "Cache-Control": "private, no-store",
                 "X-Content-Type-Options": "nosniff",
             }
         )
