@@ -49,7 +49,7 @@ def validate_document_file_bytes(
         return
 
     if extension == ".doc":
-        if not payload.startswith(b"\\xd0\\xcf\\x11\\xe0\\xa1\\xb1\\x1a\\xe1"):
+        if not payload.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"):
             raise ValueError("Attached file is not a valid DOC document.")
         return
 
@@ -66,7 +66,7 @@ def validate_document_file_bytes(
 
             total_uncompressed = 0
             for entry in entries:
-                normalized_name = entry.filename.replace("\\\\", "/")
+                normalized_name = entry.filename.replace("\\", "/")
                 entry_path = PurePosixPath(normalized_name)
                 if (
                     normalized_name.startswith("/")
@@ -86,7 +86,6 @@ def validate_document_file_bytes(
         raise
     except (OSError, zipfile.BadZipFile, RuntimeError) as exc:
         raise ValueError("Attached file is not a valid DOCX document.") from exc
-
 
 def _validate_document_file(name: object, kind: object, size: object, data_url: object) -> None:
     if not isinstance(name, str) or not name or len(name) > 255:
