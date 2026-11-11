@@ -108,3 +108,16 @@ def test_chat_storage_bucket_initializer_handles_supabase_no_such_bucket_400(mon
         assert CHAT_ATTACHMENT_BUCKET in SupabaseStorageBucket._ensured_storage_buckets
     finally:
         SupabaseStorageBucket._ensured_storage_buckets.discard(CHAT_ATTACHMENT_BUCKET)
+
+def test_supabase_rest_headers_use_service_role_key(monkeypatch):
+    """Application database calls use the server-side service-role key, never the anon key."""
+    import database_supabase
+
+    monkeypatch.setattr(database_supabase, "SUPABASE_SERVICE_ROLE_KEY", "server-only-service-key")
+    monkeypatch.setattr(database_supabase, "SUPABASE_REST_URL", "https://example.supabase.co/rest/v1")
+
+    headers = database_supabase.get_headers()
+
+    assert headers["apikey"] == "server-only-service-key"
+    assert headers["Authorization"] == "Bearer server-only-service-key"
+
