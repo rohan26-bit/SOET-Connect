@@ -3,6 +3,8 @@ import os
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from starlette.datastructures import FormData
+from urllib.parse import parse_qsl
 
 from database import supabase
 from security.dependencies import get_current_user
@@ -23,6 +25,31 @@ router = APIRouter(
     prefix="/notifications",
     tags=["Notifications"],
 )
+
+MAX_RESEND_WEBHOOK_BODY_BYTES = 64 * 1024
+MAX_TWILIO_WEBHOOK_BODY_BYTES = 16 * 1024
+MAX_TWILIO_WEBHOOK_FIELDS = 64
+
+
+async def _read_limited_webhook_body(request: Request, max_bytes: int) -> bytes:
+    """Read an unauthenticated webhook body incrementally and stop at its byte cap."""
+    declared_length = request.headers.get("content-length")
+    if declared_length:
+        try:
+            declared_bytes = int(declared_length)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid webhook content length.") from exc
+        if declared_bytes < 0:
+            raise HTTPException(status_code=400, detail="Invalid webhook content length.")
+        if declared_bytes > max_bytes:
+            raise HTTPException(status_code=413, detail="Webhook payload is too large.")
+
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > max_bytes:
+            raise HTTPException(status_code=413, detail="Webhook payload is too large.")
+        body.extend(chunk)
+    return bytes(body)
 
 
 def _load_notifications_or_503() -> list[dict]:
@@ -254,7 +281,7 @@ async def resend_delivery_webhook(request: Request):
             detail="Resend webhook verification is not configured.",
         )
 
-    raw_body = await request.body()
+    raw_body = await _read_limited_webhook_body(request, MAX_RESEND_WEBHOOK_BODY_BYTES)
     if not verify_resend_webhook_signature(raw_body, request.headers, webhook_secret):
         raise HTTPException(status_code=403, detail="Invalid Resend webhook signature.")
 
@@ -310,9 +337,19 @@ async def twilio_delivery_webhook(request: Request):
             detail="Twilio webhook verification is not configured.",
         )
 
+    raw_body = await _read_limited_webhook_body(request, MAX_TWILIO_WEBHOOK_BODY_BYTES)
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if content_type != "application/x-www-form-urlencoded":
+        raise HTTPException(status_code=415, detail="Unsupported Twilio callback content type.")
+
     try:
-        form = await request.form()
-    except Exception as exc:
+        fields = parse_qsl(
+            raw_body.decode("utf-8"),
+            keep_blank_values=True,
+            max_num_fields=MAX_TWILIO_WEBHOOK_FIELDS,
+        )
+        form = FormData(fields)
+    except (UnicodeDecodeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail="Invalid Twilio callback payload.") from exc
 
     signature = request.headers.get("X-Twilio-Signature", "")
