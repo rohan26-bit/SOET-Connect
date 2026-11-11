@@ -42,6 +42,54 @@ function summarize(report: Record<string, unknown>, baseUrl: string) {
   };
 }
 
+
+/**
+ * Read at most MAX_REPORT_BYTES from an incoming request body.
+ * Returns null as soon as the stream crosses the limit, without buffering
+ * the rest of an oversized request in application memory.
+ */
+async function readLimitedBody(request: NextRequest): Promise<string | null> {
+  const reader = request.body?.getReader();
+  if (!reader) {
+    return "";
+  }
+
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_REPORT_BYTES) {
+        try {
+          await reader.cancel();
+        } catch {
+          // The request may already have been aborted by the client.
+        }
+        return null;
+      }
+
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return new TextDecoder().decode(bytes);
+}
+
 export async function POST(request: NextRequest) {
   if (process.env.VERCEL_ENV !== "preview") {
     return new NextResponse(null, { status: 404 });
@@ -52,8 +100,8 @@ export async function POST(request: NextRequest) {
     return new NextResponse(null, { status: 413 });
   }
 
-  const body = await request.text();
-  if (new TextEncoder().encode(body).byteLength > MAX_REPORT_BYTES) {
+  const body = await readLimitedBody(request);
+  if (body === null) {
     return new NextResponse(null, { status: 413 });
   }
 
