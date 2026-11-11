@@ -279,6 +279,47 @@ def record_password_reset_request(client_ip: str) -> dict[str, Any]:
         raise RuntimeError("Unable to record password recovery request limit.") from exc
 
 
+# PRN availability is a public registration helper, not a public directory.
+# Allow up to 60 lookups per source IP in each 15-minute window.
+PRN_AVAILABILITY_IP_MAX_REQUESTS = 60
+_PRN_AVAILABILITY_IP_MAX_ATTEMPTS = PRN_AVAILABILITY_IP_MAX_REQUESTS + 1
+
+
+def record_prn_availability_request(client_ip: str) -> dict[str, Any]:
+    """Count one public PRN lookup in a privacy-preserving per-IP bucket."""
+    normalized_ip = str(client_ip or "unknown").strip().lower() or "unknown"
+    key = _fingerprint("prn-availability-ip", normalized_ip)
+    now = datetime.now(timezone.utc)
+
+    if os.getenv("DATABASE_MODE", "").strip().lower() == "mock":
+        with _MOCK_LOCK:
+            bucket = _mock_bump(key, _PRN_AVAILABILITY_IP_MAX_ATTEMPTS, now)
+        blocked_until = bucket.get("blocked_until")
+        blocked = bool(blocked_until and blocked_until > now)
+        return {
+            "blocked": blocked,
+            "retry_after_seconds": _retry_after(blocked_until, now) if blocked else 0,
+            "attempts": int(bucket.get("attempts") or 0),
+        }
+
+    try:
+        result = supabase.rpc(
+            "record_prn_availability_ip_attempt",
+            {
+                "p_key_hash": key,
+                "p_now": now.isoformat(),
+            },
+        ).execute()
+        row = _rpc_row(result)
+        return {
+            "blocked": bool(row.get("is_blocked")),
+            "retry_after_seconds": int(row.get("retry_after_seconds") or 0),
+            "attempts": int(row.get("attempts") or 0),
+        }
+    except Exception as exc:
+        raise RuntimeError("Unable to record PRN availability request limit.") from exc
+
+
 # Admin registration uses the same shared private rate-limit store but a
 # separate HMAC namespace so it cannot consume or clear login/password-reset
 # buckets. Five attempts are allowed per IP in 15 minutes; the sixth is blocked.
