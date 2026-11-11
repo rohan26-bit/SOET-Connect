@@ -2,6 +2,8 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
+from security.external_urls import validate_external_profile_url
+
 
 class RegisterRequest(BaseModel):
     name: str = Field(min_length=2, max_length=100)
@@ -18,6 +20,11 @@ class RegisterRequest(BaseModel):
         if len(trimmed) > 100:
             raise ValueError("Name cannot exceed 100 characters.")
         return trimmed
+
+    @field_validator("linkedin", "github", "website")
+    @classmethod
+    def validate_profile_links(cls, value: str | None) -> str | None:
+        return validate_external_profile_url(value)
 
     @field_validator(
         "student_id", "department", "course", "academic_year", "graduation_year", "phone",
@@ -86,9 +93,9 @@ class RegisterRequest(BaseModel):
     industry: Optional[str] = None
     location: Optional[str] = None
     skills: Optional[list[str]] = None
-    linkedin: Optional[str] = None
-    github: Optional[str] = None
-    website: Optional[str] = None
+    linkedin: Optional[str] = Field(default=None, max_length=2048)
+    github: Optional[str] = Field(default=None, max_length=2048)
+    website: Optional[str] = Field(default=None, max_length=2048)
     bio: Optional[str] = None
 
 
