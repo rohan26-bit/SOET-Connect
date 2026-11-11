@@ -186,6 +186,123 @@ def test_register_duplicate_email_fails(client):
     assert "already exists" in res2.json().get("detail", "")
 
 
+def test_admin_registration_throttles_secret_attempts_per_source_ip(client, monkeypatch):
+    """Five wrong secret attempts consume the source bucket; the sixth is blocked."""
+    import routes.auth
+    from database import users_collection
+
+    monkeypatch.setattr(routes.auth, "ADMIN_REGISTRATION_SECRET", "correct-admin-secret")
+    monkeypatch.setattr(
+        routes.auth,
+        "get_client_ip",
+        lambda request: request.headers.get("x-test-client-ip", "203.0.113.10"),
+    )
+    payload = {
+        "name": "Rate Limited Admin",
+        "email": "ratelimited.admin@example.com",
+        "password": "AdminPassword123!",
+        "role": "admin",
+        "admin_secret": "wrong-secret",
+    }
+
+    for _ in range(5):
+        response = client.post("/auth/register", json=payload)
+        assert response.status_code == 403
+
+    # Even a correct secret is rejected after the source bucket is exhausted.
+    payload["admin_secret"] = "correct-admin-secret"
+    blocked = client.post("/auth/register", json=payload)
+
+    assert blocked.status_code == 429
+    assert int(blocked.headers["Retry-After"]) > 0
+    assert users_collection.find_one({"email": payload["email"]}) is None
+
+
+def test_admin_registration_rate_limit_isolated_by_source_ip(client, monkeypatch):
+    """Attempts from one source do not block a different source IP."""
+    import routes.auth
+
+    monkeypatch.setattr(routes.auth, "ADMIN_REGISTRATION_SECRET", "correct-admin-secret")
+    monkeypatch.setattr(
+        routes.auth,
+        "get_client_ip",
+        lambda request: request.headers.get("x-test-client-ip", "203.0.113.10"),
+    )
+    bad_payload = {
+        "name": "Guessing Admin",
+        "email": "guessing.admin@example.com",
+        "password": "AdminPassword123!",
+        "role": "admin",
+        "admin_secret": "wrong-secret",
+    }
+    for _ in range(5):
+        response = client.post(
+            "/auth/register",
+            json=bad_payload,
+            headers={"x-test-client-ip": "203.0.113.10"},
+        )
+        assert response.status_code == 403
+
+    allowed = client.post(
+        "/auth/register",
+        json={
+            "name": "Independent Admin",
+            "email": "independent.admin@example.com",
+            "password": "AdminPassword123!",
+            "role": "admin",
+            "admin_secret": "correct-admin-secret",
+        },
+        headers={"x-test-client-ip": "198.51.100.20"},
+    )
+    assert allowed.status_code == 201
+
+
+def test_admin_registration_rate_limit_fails_closed(client, monkeypatch):
+    """Admin creation is unavailable rather than unthrottled if the shared limiter fails."""
+    import routes.auth
+
+    monkeypatch.setattr(routes.auth, "ADMIN_REGISTRATION_SECRET", "correct-admin-secret")
+
+    def fail_rate_limit(_client_ip):
+        raise RuntimeError("rate-limit store unavailable")
+
+    monkeypatch.setattr(routes.auth, "record_admin_registration_attempt", fail_rate_limit)
+    response = client.post(
+        "/auth/register",
+        json={
+            "name": "Unavailable Admin",
+            "email": "unavailable.admin@example.com",
+            "password": "AdminPassword123!",
+            "role": "admin",
+            "admin_secret": "correct-admin-secret",
+        },
+    )
+
+    assert response.status_code == 503
+    assert "temporarily unavailable" in response.json()["detail"].lower()
+
+
+def test_regular_student_registration_does_not_use_admin_rate_limit(client, monkeypatch):
+    """The privileged admin throttle does not interfere with student registration."""
+    import routes.auth
+
+    def unexpected_rate_limit(_client_ip):
+        raise AssertionError("Admin-only rate limit must not run for student registration.")
+
+    monkeypatch.setattr(routes.auth, "record_admin_registration_attempt", unexpected_rate_limit)
+    response = client.post(
+        "/auth/register",
+        json={
+            "name": "Normal Student",
+            "email": "normal.student.rate-limit@example.com",
+            "password": "StudentPassword123!",
+            "role": "student",
+            **VALID_STUDENT_FIELDS,
+        },
+    )
+    assert response.status_code == 201
+
+
 def test_register_admin_disallowed(client, monkeypatch):
     """Attempting to self-register as admin without valid secret returns 403."""
     import routes.auth
