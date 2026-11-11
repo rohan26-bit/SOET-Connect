@@ -63,5 +63,7 @@ jobs:
           cache-dependency-path: SoETAlumniPortal/package-lock.json
       - name: Install dependencies
         run: npm ci
+      - name: Test dashboard route access
+        run: npm run test:routes
       - name: Build production frontend
         run: npm run build
