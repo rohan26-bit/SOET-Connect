@@ -27,6 +27,7 @@ from services.login_rate_limit import (
     get_client_ip,
     record_login_failure,
     record_password_reset_request,
+    record_admin_registration_attempt,
 )
 from services.auth_security_events import (
     list_auth_events,
@@ -103,7 +104,7 @@ def check_prn_availability(prn: str = Query(..., min_length=1, max_length=100)):
 # =========================
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-def register_user(user: RegisterRequest):
+def register_user(user: RegisterRequest, request: Request):
 
     # Students and alumni can register normally.
     if user.role not in {"student", "alumni", "admin"}:
@@ -118,6 +119,26 @@ def register_user(user: RegisterRequest):
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Admin registration is not configured."
+            )
+
+        # Admin registration is a privileged public entry point. Count each
+        # attempt before checking the shared secret so guessing attempts are
+        # throttled even when they use different email addresses.
+        try:
+            registration_limit = record_admin_registration_attempt(get_client_ip(request))
+        except Exception as exc:
+            print(f"Admin registration rate-limit check failed: {type(exc).__name__}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Admin registration is temporarily unavailable. Please try again.",
+            ) from exc
+
+        if registration_limit.get("blocked"):
+            retry_after = max(1, int(registration_limit.get("retry_after_seconds") or 1))
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many admin registration attempts. Please try again later.",
+                headers={"Retry-After": str(retry_after)},
             )
 
         if not user.admin_secret or not secrets.compare_digest(user.admin_secret, ADMIN_REGISTRATION_SECRET):
