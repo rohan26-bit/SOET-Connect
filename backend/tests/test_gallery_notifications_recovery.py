@@ -1185,6 +1185,77 @@ def test_resend_and_twilio_webhooks(client: TestClient, monkeypatch):
     assert sms_rec["status"] == "delivered"
 
 
+def test_notification_webhooks_reject_oversized_payloads(client: TestClient, monkeypatch):
+    """Unsigned webhook routes reject oversized payloads before signature parsing."""
+    import base64
+
+    monkeypatch.setenv(
+        "RESEND_WEBHOOK_SECRET",
+        "whsec_" + base64.b64encode(b"resend-webhook-size-test").decode("ascii"),
+    )
+    resend_body = b'{"type":"email.delivered","data":{}}' + (
+        b" " * (64 * 1024)
+    )
+    resend_response = client.post(
+        "/api/notifications/deliveries/webhook/resend",
+        content=resend_body,
+        headers={"content-type": "application/json"},
+    )
+    assert resend_response.status_code == 413
+
+    monkeypatch.setenv("TWILIO_AUTH_TOKEN", "twilio-webhook-size-test")
+    twilio_body = b"MessageSid=SM_test&" + (b"x" * (16 * 1024))
+    twilio_response = client.post(
+        "/api/notifications/deliveries/webhook/twilio",
+        content=twilio_body,
+        headers={"content-type": "application/x-www-form-urlencoded"},
+    )
+    assert twilio_response.status_code == 413
+
+
+def test_limited_webhook_reader_stops_chunked_body_at_size_cap():
+    """Chunked request bodies are stopped as soon as they cross the configured limit."""
+    import asyncio
+    from fastapi import HTTPException, Request
+    from routes.notifications import _read_limited_webhook_body
+
+    chunks = iter([
+        {"type": "http.request", "body": b"a" * 8, "more_body": True},
+        {"type": "http.request", "body": b"b", "more_body": True},
+        {"type": "http.request", "body": b"unused", "more_body": False},
+    ])
+    received = 0
+
+    async def receive():
+        nonlocal received
+        received += 1
+        return next(chunks)
+
+    request = Request(
+        {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "https",
+            "path": "/notifications/deliveries/webhook/resend",
+            "raw_path": b"/notifications/deliveries/webhook/resend",
+            "query_string": b"",
+            "headers": [],
+            "server": ("testserver", 443),
+            "client": ("testclient", 12345),
+        },
+        receive,
+    )
+
+    async def assert_limit():
+        with pytest.raises(HTTPException) as exc:
+            await _read_limited_webhook_body(request, max_bytes=8)
+        assert exc.value.status_code == 413
+        assert received == 2
+
+    asyncio.run(assert_limit())
+
+
 def test_resend_webhook_rejects_stale_or_tampered_payload(client: TestClient, monkeypatch):
     """A valid signature for an altered raw body and a stale timestamp both fail."""
     import base64
