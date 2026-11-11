@@ -237,6 +237,13 @@ def test_archive_and_unarchive_conversation(client, student_user, verified_alumn
     )
     conv_id = res.json()["id"]
 
+    message_res = client.post(
+        f"/chat/conversations/{conv_id}/messages",
+        headers=student_user["headers"],
+        json={"content": "Archive guard test"},
+    )
+    assert message_res.status_code == 201
+
     # Student archives/deletes the conversation
     del_res = client.delete(f"/chat/conversations/{conv_id}", headers=student_user["headers"])
     assert del_res.status_code == 200
@@ -248,6 +255,13 @@ def test_archive_and_unarchive_conversation(client, student_user, verified_alumn
     # Student GET /conversations/{id} returns 404
     res = client.get(f"/chat/conversations/{conv_id}", headers=student_user["headers"])
     assert res.status_code == 404
+
+    # The direct message-history endpoint must enforce the same per-user archive.
+    hidden_history = client.get(
+        f"/chat/conversations/{conv_id}/messages",
+        headers=student_user["headers"],
+    )
+    assert hidden_history.status_code == 404
 
     # Alumni STILL sees the conversation
     res_alumni = client.get("/chat/conversations", headers=verified_alumni_user["headers"])
@@ -267,9 +281,15 @@ def test_archive_and_unarchive_conversation(client, student_user, verified_alumn
     assert res_restore.status_code == 200
     assert res_restore.json()["is_new"] is False
 
-    # Student now sees it again
+    # Student now sees it and its history again after explicitly unarchiving it.
     res = client.get("/chat/conversations", headers=student_user["headers"])
     assert len(res.json()) == 1
+    restored_history = client.get(
+        f"/chat/conversations/{conv_id}/messages",
+        headers=student_user["headers"],
+    )
+    assert restored_history.status_code == 200
+    assert [item["content"] for item in restored_history.json()] == ["Archive guard test"]
 
 
 # ============================================================
@@ -419,6 +439,33 @@ def test_mark_message_read(client, student_user, verified_alumni_user, other_stu
     # Non-participant cannot mark as read
     res_forbidden = client.patch(f"/chat/messages/{msg_id}/read", headers=other_student_user["headers"])
     assert res_forbidden.status_code == 403
+
+    # The other participant sends a new message that remains unread by Student.
+    other_message = client.post(
+        f"/chat/conversations/{conv_id}/messages",
+        headers=verified_alumni_user["headers"],
+        json={"content": "A second message"},
+    )
+    assert other_message.status_code == 201
+    other_message_id = other_message.json()["id"]
+
+    # Archiving hides read receipts and message history only from the archiving user.
+    archived = client.delete(
+        f"/chat/conversations/{conv_id}",
+        headers=student_user["headers"],
+    )
+    assert archived.status_code == 200
+    hidden_read = client.patch(
+        f"/chat/messages/{other_message_id}/read",
+        headers=student_user["headers"],
+    )
+    assert hidden_read.status_code == 404
+    alumni_history = client.get(
+        f"/chat/conversations/{conv_id}/messages",
+        headers=verified_alumni_user["headers"],
+    )
+    assert alumni_history.status_code == 200
+    assert len(alumni_history.json()) == 2
 
     # Malformed message ID
     res_malformed = client.patch("/chat/messages/bad-id/read", headers=verified_alumni_user["headers"])
