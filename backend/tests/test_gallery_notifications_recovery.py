@@ -260,7 +260,16 @@ def test_admin_approve_and_reject_photo(
     # Once approved, the image is publicly viewable and may use public caching.
     public_image = client.get(image_url)
     assert public_image.status_code == 200
-    assert public_image.headers["cache-control"] == "public, max-age=86400"
+    assert public_image.headers["cache-control"] == "private, no-store"
+    # A photo can be withdrawn after approval. The same stable image URL must
+    # re-check authorization on every request rather than remain browser-cached.
+    revoke_res = client.patch(
+        f"/api/gallery/{photo_id}/status",
+        headers=admin_user["headers"],
+        json={"status": "rejected", "rejection_reason": "Consent withdrawn"},
+    )
+    assert revoke_res.status_code == 200
+    assert client.get(image_url).status_code == 404
 
 
 def test_non_admin_cannot_moderate(client: TestClient, verified_alumni_user: dict):
