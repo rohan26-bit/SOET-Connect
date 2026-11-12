@@ -311,7 +311,7 @@ export const jobService = {
   // ============================================================
 
   async getMyPostedJobs(
-    userId: string
+    _userId: string
   ): Promise<JobItem[]> {
 
     const response = await fetch(
@@ -489,7 +489,7 @@ export const jobService = {
   // ============================================================
 
   async getMyApplications(
-    studentId: string
+    _studentId: string
   ): Promise<JobApplicationItem[]> {
 
     const response = await fetch(
