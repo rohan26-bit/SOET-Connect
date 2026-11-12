@@ -18,6 +18,10 @@ export default function AdminAnnouncementsPage() {
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [viewingAnnouncement, setViewingAnnouncement] = useState<AnnouncementItem | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [deleteConfirmationId, setDeleteConfirmationId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,11 +41,13 @@ export default function AdminAnnouncementsPage() {
 
   const loadAnnouncements = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await announcementService.getAnnouncements();
       setAnnouncements(data);
     } catch (err) {
       console.error(err);
+      setLoadError(err instanceof Error ? err.message : 'Unable to load announcements.');
     } finally {
       setLoading(false);
     }
@@ -73,7 +79,7 @@ export default function AdminAnnouncementsPage() {
 
       setShowModal(false);
       setNewAnnouncement({ title: '', content: '', target_audience: 'all', expires_at: '', attachment: null });
-      loadAnnouncements();
+      await loadAnnouncements();
     } catch (err: any) {
       setError(err.message || 'Failed to create announcement.');
     } finally {
@@ -85,6 +91,7 @@ export default function AdminAnnouncementsPage() {
     e.preventDefault();
     if (!editingExpiryAnn) return;
     setUpdatingExpiry(true);
+    setActionError(null);
     try {
       const isoVal = newExpiryToSet ? new Date(newExpiryToSet).toISOString() : null;
       await announcementService.updateAnnouncement(editingExpiryAnn.id, {
@@ -94,19 +101,30 @@ export default function AdminAnnouncementsPage() {
       setNewExpiryToSet('');
       await loadAnnouncements();
     } catch (err: any) {
-      alert(err.message || 'Failed to update announcement expiration.');
+      setActionError(err.message || 'Failed to update announcement expiration.');
     } finally {
       setUpdatingExpiry(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this announcement?')) return;
+  const handleDelete = (id: string) => {
+    setActionError(null);
+    setDeleteConfirmationId(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirmationId || deletingId) return;
+    const id = deleteConfirmationId;
+    setDeletingId(id);
+    setActionError(null);
     try {
       await announcementService.deleteAnnouncement(id);
-      loadAnnouncements();
+      setDeleteConfirmationId(null);
+      await loadAnnouncements();
     } catch (err: any) {
-      alert(err.message || 'Failed to delete');
+      setActionError(err.message || 'Failed to delete announcement.');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -135,8 +153,21 @@ export default function AdminAnnouncementsPage() {
         </button>
       </div>
 
+      {actionError && (
+        <div role="alert" className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800">
+          <span>{actionError}</span>
+          <button type="button" onClick={() => setActionError(null)} className="shrink-0 font-bold underline">Dismiss</button>
+        </div>
+      )}
+
       {loading ? (
         <LoadingState message="Loading announcements" className="py-16" />
+      ) : loadError ? (
+        <div role="alert" className="rounded-3xl border border-rose-200 bg-rose-50 p-10 text-center">
+          <h3 className="text-base font-bold text-rose-800">Unable to load announcements</h3>
+          <p className="mt-2 text-xs text-rose-700">{loadError}</p>
+          <button type="button" onClick={() => void loadAnnouncements()} className="mt-4 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white">Retry</button>
+        </div>
       ) : announcements.length === 0 ? (
         <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm">
           <Megaphone className="w-12 h-12 text-slate-300 mx-auto mb-3" />
@@ -218,6 +249,16 @@ export default function AdminAnnouncementsPage() {
                 )}
               </div>
 
+              {deleteConfirmationId === a.id && (
+                <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-3">
+                  <p className="text-xs font-semibold text-rose-800">Delete this announcement permanently? It will no longer be available to portal users.</p>
+                  <div className="mt-3 flex justify-end gap-2">
+                    <button type="button" onClick={() => setDeleteConfirmationId(null)} disabled={deletingId === a.id} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50">Cancel</button>
+                    <button type="button" onClick={() => void confirmDelete()} disabled={deletingId === a.id} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{deletingId === a.id ? 'Deleting…' : 'Confirm delete'}</button>
+                  </div>
+                </div>
+              )}
+
               <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
                 <PostedAt date={a.created_at} className="text-[11px] text-slate-400" />
                 <button
@@ -235,6 +276,27 @@ export default function AdminAnnouncementsPage() {
       <AnnouncementDetailsModal announcement={viewingAnnouncement} onClose={() => setViewingAnnouncement(null)} />
 
       {/* Create Announcement Modal */}
+      {editingExpiryAnn && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" aria-labelledby="edit-announcement-expiry-title" className="w-full max-w-md rounded-3xl border border-slate-100 bg-white p-6 shadow-2xl">
+            <h3 id="edit-announcement-expiry-title" className="text-lg font-bold text-slate-900">Edit Announcement Expiry</h3>
+            <p className="mt-1 text-xs text-slate-500">Set an expiry date or clear it to keep this announcement active indefinitely.</p>
+            {actionError && <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{actionError}</p>}
+            <form onSubmit={handleUpdateExpiry} className="mt-5 space-y-4">
+              <div>
+                <label htmlFor="announcement-expiry" className="mb-1 block text-xs font-semibold text-slate-700">Expiry date and time</label>
+                <input id="announcement-expiry" type="datetime-local" value={newExpiryToSet} onChange={(event) => setNewExpiryToSet(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <p className="mt-1 text-[11px] text-slate-500">Leave blank to remove the expiry date.</p>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => { setEditingExpiryAnn(null); setNewExpiryToSet(''); setActionError(null); }} disabled={updatingExpiry} className="rounded-xl bg-slate-100 px-4 py-2.5 text-xs font-bold text-slate-700 disabled:opacity-50">Cancel</button>
+                <button type="submit" disabled={updatingExpiry} className="rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50">{updatingExpiry ? 'Saving…' : 'Save expiry'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {showModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl relative border border-slate-100">
