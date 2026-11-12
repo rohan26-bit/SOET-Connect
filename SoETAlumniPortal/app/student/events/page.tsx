@@ -19,6 +19,7 @@ export default function EventsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [createSuccess, setCreateSuccess] = useState<string | null>(null);
   const [attendeesError, setAttendeesError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [viewingEvent, setViewingEvent] = useState<EventItem | null>(null);
@@ -68,9 +69,10 @@ export default function EventsPage() {
   const handleRegister = async (eventId: string) => {
     if (!user) return;
     setActionLoading(eventId);
+    setActionError(null);
     try {
       await eventService.registerForEvent(eventId, user.id);
-      loadEvents();
+      await loadEvents();
     } catch (err: any) {
       setActionError(err.message || 'Registration failed.');
     } finally {
@@ -129,7 +131,8 @@ export default function EventsPage() {
         tags: '',
         attachment: null,
       });
-      setCreateError('Event submitted successfully and is awaiting administrator review.');
+      setShowCreateModal(false);
+      setCreateSuccess('Event submitted successfully and is awaiting administrator review.');
     } catch (err: any) {
       setCreateError(err.message || 'Failed to create event.');
     } finally {
@@ -182,6 +185,7 @@ export default function EventsPage() {
         )}
       </div>
 
+      {createSuccess && <div role="status" className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{createSuccess}<button type="button" onClick={() => setCreateSuccess(null)} className="ml-3 font-bold underline">Dismiss</button></div>}
       {actionError && <div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{actionError}</div>}
       {loading ? (
         <LoadingState message="Loading events" className="py-16" />

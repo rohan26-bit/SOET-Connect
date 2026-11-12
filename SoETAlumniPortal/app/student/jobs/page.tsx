@@ -25,6 +25,8 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [postSuccess, setPostSuccess] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [viewingJob, setViewingJob] = useState<JobItem | null>(null);
@@ -150,7 +152,7 @@ export default function JobsPage() {
         deadline: '',
         attachment: null,
       });
-      setPostError('Job posting submitted successfully and is pending admin approval.');
+      setPostSuccess('Job posting submitted successfully and is pending admin approval.');
       if (activeTab === 'my_posted_jobs') loadData();
     } catch (err: any) {
       setPostError(err.message || 'Failed to post job.');
@@ -179,7 +181,9 @@ export default function JobsPage() {
           </p>
         </div>
 
-        {isAlumniOrAdmin && (
+        {postSuccess && <div role="status" className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{postSuccess}<button type="button" onClick={() => setPostSuccess(null)} className="ml-3 font-bold underline">Dismiss</button></div>}
+
+      {isAlumniOrAdmin && (
           <button
             onClick={() => setShowPostModal(true)}
             className="flex items-center gap-2 px-5 py-2.5 bg-[#F28C38] hover:bg-[#E07D2E] text-white rounded-xl text-xs font-bold shadow-lg shadow-[#F28C38]/25 transition cursor-pointer self-start md:self-auto"
@@ -377,8 +381,7 @@ export default function JobsPage() {
       {activeTab === 'my_applications' && (
         <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
           <h2 className="text-base font-bold text-slate-900 mb-4">Your Application History</h2>
-          {loadError ? <div role="alert" className="text-sm text-red-700">{loadError} <button type="button" onClick={loadData} className="underline font-bold">Retry</button></div> : null}
-          {myApplications.length === 0 ? (
+          {loading ? <LoadingState message="Loading applications" className="py-8" /> : loadError ? <div role="alert" className="text-sm text-red-700">{loadError} <button type="button" onClick={loadData} className="underline font-bold">Retry</button></div> : myApplications.length === 0 ? (
             <div className="py-12 text-center text-slate-400 text-xs">
               You haven't submitted any job applications yet.
             </div>
@@ -412,13 +415,13 @@ export default function JobsPage() {
       {activeTab === 'my_posted_jobs' && (
         <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
           <h2 className="text-base font-bold text-slate-900 mb-4">Jobs Posted By You</h2>
-          {loadError ? <div role="alert" className="text-sm text-red-700">{loadError} <button type="button" onClick={loadData} className="underline font-bold">Retry</button></div> : null}
+          {loading ? <LoadingState message="Loading your postings" className="py-8" /> : loadError ? <div role="alert" className="text-sm text-red-700">{loadError} <button type="button" onClick={loadData} className="underline font-bold">Retry</button></div> : null}
           {deleteError && <div role="alert" className="my-2 text-sm text-red-700">{deleteError}</div>}
-          {myPostedJobs.length === 0 ? (
+          {!loading && !loadError && myPostedJobs.length === 0 ? (
             <div className="py-12 text-center text-slate-400 text-xs">
               You haven't posted any jobs yet. Click "Post New Job" above to submit one.
             </div>
-          ) : (
+          ) : !loading && !loadError ? (
             <div className="divide-y divide-slate-100">
               {myPostedJobs.map((j) => (
                 <div key={j.id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -447,25 +450,14 @@ export default function JobsPage() {
                     }`}>
                       {j.status}
                     </span>
-                    <button
-                      onClick={async () => {
-                        setDeleteError(null);
-                        try {
-                          await jobService.deleteJob(j.id);
-                          await loadData();
-                        } catch (err) {
-                          setDeleteError(err instanceof Error ? err.message : 'Unable to delete this job.');
-                        }
-                      }}
-                      className="text-xs font-bold text-red-600 hover:underline"
-                    >
-                      Delete
-                    </button>
+                    {confirmDeleteId === j.id ? (
+                      <span className="flex items-center gap-2 text-xs"><span>Delete?</span><button type="button" onClick={async () => { setDeleteError(null); try { await jobService.deleteJob(j.id); setConfirmDeleteId(null); await loadData(); } catch (err) { setDeleteError(err instanceof Error ? err.message : 'Unable to delete this job.'); } }} className="font-bold text-red-700">Confirm</button><button type="button" onClick={() => setConfirmDeleteId(null)} className="font-semibold text-slate-600">Cancel</button></span>
+                    ) : <button type="button" onClick={() => { setDeleteError(null); setConfirmDeleteId(j.id); }} className="text-xs font-bold text-red-600 hover:underline">Delete</button>}
                   </div>
                 </div>
               ))}
             </div>
-          )}
+          ) : null}
         </div>
       )}
 
