@@ -55,11 +55,25 @@ jobs:
       - name: Export local Supabase credentials without exposing them in logs
         shell: bash
         run: |
-          while IFS='=' read -r name value; do
-            [[ -z "$name" ]] && continue
-            [[ -n "$value" ]] && echo "::add-mask::$value"
-            echo "$name=$value" >> "$GITHUB_ENV"
-          done < <(supabase status --env --output-format text --override-name API_URL=SUPABASE_URL,SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY)
+          env_output="$(supabase status -o env)"
+          api_url="$(printf '%s\\n' "$env_output" | sed -n 's/^API_URL=//p' | head -n 1 | tr -d '"')"
+          service_role_key="$(printf '%s\\n' "$env_output" | sed -n 's/^SERVICE_ROLE_KEY=//p' | head -n 1 | tr -d '"')"
+
+          if [[ "$api_url" != "http://127.0.0.1:54321" ]]; then
+            echo "Expected the local Supabase API at http://127.0.0.1:54321; refusing to run integration tests against any other URL."
+            exit 1
+          fi
+          if [[ -z "$service_role_key" ]]; then
+            echo "The local Supabase SERVICE_ROLE_KEY was not returned by the CLI."
+            exit 1
+          fi
+
+          echo "::add-mask::$service_role_key"
+          {
+            echo "SUPABASE_URL=$api_url"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$service_role_key"
+          } >> "$GITHUB_ENV"
+          echo "Verified local Supabase endpoint: $api_url"
 
       - name: Set up Python for backend integration tests
         uses: actions/setup-python@v5
