@@ -313,6 +313,7 @@ export const jobService = {
   async getMyPostedJobs(
     _userId: string
   ): Promise<JobItem[]> {
+    // Preserve the caller signature; the API resolves the owner from the session.
 
     const response = await fetch(
       `${API_URL}/jobs/mine`,
@@ -491,6 +492,7 @@ export const jobService = {
   async getMyApplications(
     _studentId: string
   ): Promise<JobApplicationItem[]> {
+    // Preserve the caller signature; the API resolves the applicant from the session.
 
     const response = await fetch(
       `${API_URL}/applications/mine`,
