@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
 import { useAuth } from '@/components/AuthProvider';
+import { useAccessibleDialog } from '@/hooks/useAccessibleDialog';
 import {
   chatService,
   ConversationItem,
@@ -162,31 +163,13 @@ function ChatContent() {
   const [alumniLoadError, setAlumniLoadError] = useState<string | null>(null);
   const [startingChatId, setStartingChatId] = useState<string | null>(null);
   const [alumniSearch, setAlumniSearch] = useState('');
-  const alumniSearchInputRef = useRef<HTMLInputElement>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const newChatDialogRef = useAccessibleDialog<HTMLDivElement>(showNewChatModal, () => setShowNewChatModal(false));
 
   useEffect(() => {
     setPendingFiles([]);
   }, [selectedConversationId]);
-
-  useEffect(() => {
-    if (!showNewChatModal) return;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const focusTimer = window.setTimeout(() => alumniSearchInputRef.current?.focus(), 0);
-    const handleModalKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setShowNewChatModal(false);
-    };
-    document.addEventListener('keydown', handleModalKeyDown);
-    return () => {
-      window.clearTimeout(focusTimer);
-      document.removeEventListener('keydown', handleModalKeyDown);
-      document.body.style.overflow = previousOverflow;
-      previousFocus?.focus();
-    };
-  }, [showNewChatModal]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -869,7 +852,7 @@ function ChatContent() {
 
       {/* New Chat Modal */}
       {showNewChatModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNewChatModal(false); }}>
+        <div ref={newChatDialogRef} tabIndex={-1} className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNewChatModal(false); }}>
           <div role="dialog" aria-modal="true" aria-labelledby="new-chat-title" tabIndex={-1} className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative border border-slate-100">
             <button
               onClick={() => setShowNewChatModal(false)}
@@ -884,7 +867,6 @@ function ChatContent() {
             <div className="relative mb-4">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
               <input
-                ref={alumniSearchInputRef}
                 type="text"
                 value={alumniSearch}
                 onChange={(e) => setAlumniSearch(e.target.value)}
