@@ -15,6 +15,7 @@ export default function AdminStudentManagementPage() {
   const [students, setStudents] = useState<UserManagementItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'approved' | 'rejected' | 'suspended'>('all');
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -64,11 +65,12 @@ export default function AdminStudentManagementPage() {
   const handleToggleActive = async (student: UserManagementItem) => {
     if (processingId) return;
     setProcessingId(student.id);
+    setActionError(null);
     try {
       await adminService.toggleUserActive(student.id, student.is_active);
       await loadStudents();
-    } catch (err: any) {
-      alert(err.message || 'Action failed');
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to update this student account. Please try again.');
     } finally {
       setProcessingId(null);
     }
@@ -220,6 +222,14 @@ export default function AdminStudentManagementPage() {
           </button>
         </div>
       </div>
+
+      {/* Inline action feedback */}
+      {actionError && (
+        <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-800">
+          <div className="flex items-center gap-2"><AlertCircle className="h-4 w-4 shrink-0 text-rose-600" /><span>{actionError}</span></div>
+          <button type="button" onClick={() => setActionError(null)} aria-label="Dismiss error" className="rounded-lg p-1 text-rose-600 hover:bg-rose-100">✕</button>
+        </div>
+      )}
 
       {/* Error Banner */}
       {error && (
