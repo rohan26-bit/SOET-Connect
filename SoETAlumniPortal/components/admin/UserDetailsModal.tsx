@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useAccessibleDialog } from '@/hooks/useAccessibleDialog';
 import {
   BriefcaseBusiness,
   Code2,
@@ -113,16 +113,8 @@ function ProfileLink({ label, value }: { label: string; value?: string }) {
 }
 
 export default function UserDetailsModal({ user, onClose }: UserDetailsModalProps) {
-  useEffect(() => {
-    if (!user) return;
+  const dialogRef = useAccessibleDialog<HTMLDivElement>(Boolean(user), onClose);
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [user, onClose]);
 
   if (!user) return null;
 
@@ -139,6 +131,8 @@ export default function UserDetailsModal({ user, onClose }: UserDetailsModalProp
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       className="fixed inset-0 z-[70] flex items-center justify-center bg-[#211814]/65 backdrop-blur-sm p-3 sm:p-6"
       onClick={onClose}
     >
