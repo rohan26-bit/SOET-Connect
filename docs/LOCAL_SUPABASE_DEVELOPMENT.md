@@ -11,9 +11,9 @@ SOET Connect now has a committed Supabase CLI configuration and a reproducible l
 You can install the CLI with Scoop, or run the pinned CLI version through `npx` without installing it globally:
 
 ```powershell
-npx --yes supabase@3.0.0 --version
-npx --yes supabase@3.0.0 start
-npx --yes supabase@3.0.0 status
+npx --yes supabase@3.1.0 --version
+npx --yes supabase@3.1.0 start
+npx --yes supabase@3.1.0 status
 ```
 
 The first start downloads the local service images and can take several minutes. Supabase Studio is local; the local database URL and generated keys are shown by `status`.
@@ -23,7 +23,7 @@ The first start downloads the local service images and can take several minutes.
 The local stack applies the repository migrations when it starts. To intentionally discard and rebuild the **local** database later, run:
 
 ```powershell
-npx --yes supabase@3.0.0 db reset --local
+npx --yes supabase@3.1.0 db reset --local
 ```
 
 `db reset` is destructive to the selected local database. It is safe here only because this repository is not linked to Production and the CLI v3 default target is local. Do not add `supabase link`, `--remote`, a hosted database URL, or Production credentials to this local workflow.
@@ -31,7 +31,7 @@ npx --yes supabase@3.0.0 db reset --local
 Stop the local services when finished:
 
 ```powershell
-npx --yes supabase@3.0.0 stop
+npx --yes supabase@3.1.0 stop
 ```
 
 ## Connecting the FastAPI backend locally
@@ -44,8 +44,27 @@ Use the local Project URL and local service-role/secret key printed by `supabase
 
 Keep these values local. Never copy Production Supabase keys into a local `.env` file or commit generated credentials. Local email is captured by the local Mailpit service; it is not sent to real recipients.
 
+## Real authentication integration tests
+
+The repository's `backend/integration_tests` suite runs against the local PostgreSQL/PostgREST stack, not the in-memory mock. It covers:
+
+- Admin registration and persistence in the real `users` table.
+- Login through the API and the HttpOnly, SameSite=Lax cookie (the token is not returned in JSON).
+- Two independent device sessions, CSRF rejection for an untrusted Origin, and logout of one device without revoking the other.
+- Cross-role PRN reservation through the real PostgreSQL registry.
+
+The tests use a disposable local database and a test-only JWT/admin secret. They do not configure Resend, Twilio, SMTP credentials, or any hosted Supabase connection.
+
+To run them manually, start the local stack, export the local API URL and service-role key shown by `supabase status` into the backend environment, set `DATABASE_MODE=supabase` plus test-only JWT/admin secrets, then run:
+
+```powershell
+cd backend
+python -m pip install -r requirements.txt
+pytest -q integration_tests
+```
+
 ## Continuous integration
 
-The `Local Supabase migration replay` GitHub Actions job starts a fresh local stack and verifies the migration history on changes to `supabase/**`. It receives no Supabase login token, hosted project reference, or Production secret. A migration that cannot replay from an empty database fails the job.
+The `Local Supabase migration replay` GitHub Actions job starts a fresh local stack, applies all migrations, and runs the real authentication integration tests on changes to `supabase/**` or `backend/**`. It receives no Supabase login token, hosted project reference, or Production secret. A migration that cannot replay from an empty database or an authentication flow that fails against real PostgreSQL fails the job.
 
 The local config uses PostgreSQL 17 to match the hosted Production database major version. The `project_id` value is only a local CLI/container identity; it is not the Production project reference.
