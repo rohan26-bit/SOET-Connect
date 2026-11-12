@@ -23,8 +23,7 @@ The first start downloads the local service images and can take several minutes.
 The local stack applies the repository migrations when it starts. To intentionally discard and rebuild the **local** database later, run:
 
 ```powershell
-npx --yes supabase@3.0.0 db reset
-npx --yes supabase@3.0.0 migration list
+npx --yes supabase@3.0.0 db reset --local
 ```
 
 `db reset` is destructive to the selected local database. It is safe here only because this repository is not linked to Production and the CLI v3 default target is local. Do not add `supabase link`, `--remote`, a hosted database URL, or Production credentials to this local workflow.
