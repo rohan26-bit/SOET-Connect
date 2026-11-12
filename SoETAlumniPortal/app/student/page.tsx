@@ -25,6 +25,9 @@ export default function StudentDashboard() {
   const [jobsLoading, setJobsLoading] = useState(true);
   const [eventsLoading, setEventsLoading] = useState(true);
   const [announcementsLoading, setAnnouncementsLoading] = useState(true);
+  const [jobsError, setJobsError] = useState<string | null>(null);
+  const [eventsError, setEventsError] = useState<string | null>(null);
+  const [announcementsError, setAnnouncementsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -37,21 +40,21 @@ export default function StudentDashboard() {
         .then((jobsData) => {
           if (isMounted) setJobs(jobsData);
         })
-        .catch((err) => console.error('Error loading jobs:', err)),
+        .catch((err) => { console.error('Error loading jobs:', err); if (isMounted) setJobsError(err instanceof Error ? err.message : 'Could not load jobs.'); }),
 
       eventService
         .getApprovedEvents(user?.id)
         .then((eventsData) => {
           if (isMounted) setEvents(eventsData);
         })
-        .catch((err) => console.error('Error loading events:', err)),
+        .catch((err) => { console.error('Error loading events:', err); if (isMounted) setEventsError(err instanceof Error ? err.message : 'Could not load events.'); }),
 
       announcementService
         .getAnnouncements()
         .then((announcementsData) => {
           if (isMounted) setAnnouncements(announcementsData);
         })
-        .catch((err) => console.error('Error loading announcements:', err)),
+        .catch((err) => { console.error('Error loading announcements:', err); if (isMounted) setAnnouncementsError(err instanceof Error ? err.message : 'Could not load announcements.'); }),
     ]).finally(() => {
       if (isMounted) {
         setJobsLoading(false);
@@ -145,6 +148,11 @@ export default function StudentDashboard() {
 
             {jobsLoading ? (
               <LoadingState message="Loading opportunities" className="py-8" />
+            ) : jobsError ? (
+              <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-800">
+                <p>{jobsError}</p>
+                <button type="button" onClick={() => { setJobsLoading(true); setJobsError(null); jobService.getApprovedJobs().then(setJobs).catch((err) => setJobsError(err instanceof Error ? err.message : 'Could not load jobs.')).finally(() => setJobsLoading(false)); }} className="mt-2 font-bold underline">Retry loading jobs</button>
+              </div>
             ) : jobs.length === 0 ? (
               <div className="py-8 text-center text-xs text-[#888888]">No active job postings available yet.</div>
             ) : (
@@ -191,6 +199,11 @@ export default function StudentDashboard() {
             </h2>
             {announcementsLoading ? (
               <LoadingState message="Loading announcements" className="py-6" />
+            ) : announcementsError ? (
+              <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-800">
+                <p>{announcementsError}</p>
+                <button type="button" onClick={() => { setAnnouncementsLoading(true); setAnnouncementsError(null); announcementService.getAnnouncements().then(setAnnouncements).catch((err) => setAnnouncementsError(err instanceof Error ? err.message : 'Could not load announcements.')).finally(() => setAnnouncementsLoading(false)); }} className="mt-2 font-bold underline">Retry loading announcements</button>
+              </div>
             ) : announcements.length === 0 ? (
               <div className="py-6 text-center text-xs text-[#888888]">No announcements at this time.</div>
             ) : (
@@ -230,6 +243,11 @@ export default function StudentDashboard() {
 
             {eventsLoading ? (
               <LoadingState message="Loading events" className="py-8" />
+            ) : eventsError ? (
+              <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-800">
+                <p>{eventsError}</p>
+                <button type="button" onClick={() => { setEventsLoading(true); setEventsError(null); eventService.getApprovedEvents(user?.id).then(setEvents).catch((err) => setEventsError(err instanceof Error ? err.message : 'Could not load events.')).finally(() => setEventsLoading(false)); }} className="mt-2 font-bold underline">Retry loading events</button>
+              </div>
             ) : events.length === 0 ? (
               <div className="py-8 text-center text-xs text-[#888888]">No upcoming events scheduled.</div>
             ) : (
