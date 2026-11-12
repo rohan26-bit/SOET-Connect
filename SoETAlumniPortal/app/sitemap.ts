@@ -3,11 +3,12 @@ import type { MetadataRoute } from "next";
 const siteUrl = "https://soet-connect.vercel.app";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const publicRoutes = ["", "/gallery", "/gallery/placements"];
-
-  return publicRoutes.map((route) => ({
-    url: `${siteUrl}${route}`,
-    changeFrequency: route === "" ? "weekly" : "monthly",
-    priority: route === "" ? 1 : 0.7,
-  }));
+  // DashboardLayout-protected routes must not be advertised as public pages.
+  return [
+    {
+      url: siteUrl,
+      changeFrequency: "weekly",
+      priority: 1,
+    },
+  ];
 }
