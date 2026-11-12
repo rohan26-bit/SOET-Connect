@@ -5,6 +5,8 @@
 --              claims. Legacy duplicates are preserved until verified manually.
 -- =============================================================================
 
+BEGIN;
+
 -- Prevent profile writes while the registry is backfilled and triggers install.
 LOCK TABLE public.student_profiles, public.alumni_profiles IN SHARE ROW EXCLUSIVE MODE;
 
@@ -208,3 +210,5 @@ BEGIN
     RAISE NOTICE 'PRN registry created. Existing duplicate PRN values retained and reserved: %', duplicate_values;
 END;
 $$;
+
+COMMIT;
