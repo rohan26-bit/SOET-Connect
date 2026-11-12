@@ -121,3 +121,17 @@ def test_supabase_rest_headers_use_service_role_key(monkeypatch):
     assert headers["apikey"] == "server-only-service-key"
     assert headers["Authorization"] == "Bearer server-only-service-key"
 
+
+
+def test_mock_query_builder_supports_inclusive_range_and_total_count():
+    """Verify mock PostgREST pagination matches inclusive offset-range semantics."""
+    from database_supabase import MockQueryBuilder, reset_mock_db
+
+    reset_mock_db()
+    query = MockQueryBuilder("mock_range_rows")
+    query.insert([{"position": value} for value in range(5)]).execute()
+
+    result = query.select("*", count="exact").order("position").range(1, 3).execute()
+
+    assert [row["position"] for row in result.data] == [1, 2, 3]
+    assert result.count == 5
