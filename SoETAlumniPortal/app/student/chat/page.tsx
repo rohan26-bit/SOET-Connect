@@ -40,7 +40,7 @@ function formatAttachmentSize(size: number): string {
   return (size / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-function ChatAttachmentCard({ messageId, attachment }: { messageId: string; attachment: ChatAttachment }) {
+function ChatAttachmentCard({ messageId, attachment, onError }: { messageId: string; attachment: ChatAttachment; onError?: (message: string) => void }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -102,7 +102,7 @@ function ChatAttachmentCard({ messageId, attachment }: { messageId: string; atta
       link.remove();
       URL.revokeObjectURL(objectUrl);
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Could not download this attachment.');
+      onError?.(error instanceof Error ? error.message : 'Could not download this attachment.');
     } finally {
       setDownloading(false);
     }
@@ -151,18 +151,42 @@ function ChatContent() {
   const [sending, setSending] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+  const [archiveConfirmationId, setArchiveConfirmationId] = useState<string | null>(null);
+  const [archiving, setArchiving] = useState(false);
 
   // New Chat Modal state
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [alumniList, setAlumniList] = useState<AlumniDirectoryItem[]>([]);
   const [loadingAlumni, setLoadingAlumni] = useState(false);
+  const [alumniLoadError, setAlumniLoadError] = useState<string | null>(null);
+  const [startingChatId, setStartingChatId] = useState<string | null>(null);
   const [alumniSearch, setAlumniSearch] = useState('');
+  const alumniSearchInputRef = useRef<HTMLInputElement>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setPendingFiles([]);
   }, [selectedConversationId]);
+
+  useEffect(() => {
+    if (!showNewChatModal) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const focusTimer = window.setTimeout(() => alumniSearchInputRef.current?.focus(), 0);
+    const handleModalKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowNewChatModal(false);
+    };
+    document.addEventListener('keydown', handleModalKeyDown);
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.removeEventListener('keydown', handleModalKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, [showNewChatModal]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -385,30 +409,32 @@ function ChatContent() {
     if (!selected.length) return;
 
     if (pendingFiles.length + selected.length > MAX_CHAT_FILES) {
-      alert('Share up to 5 files in one message.');
+      setActionFeedback('Share up to 5 files in one message. Remove a pending file before adding more.');
       return;
     }
 
     const allowedExtensions = CHAT_FILE_ACCEPT.split(',');
     const accepted: File[] = [];
+    const rejected: string[] = [];
     for (const file of selected) {
       const extension = '.' + (file.name.split('.').pop() || '').toLowerCase();
       if (!allowedExtensions.includes(extension)) {
-        alert(file.name + ': unsupported file type.');
+        rejected.push(file.name + ': unsupported file type.');
         continue;
       }
       if (file.size > MAX_CHAT_FILE_SIZE) {
-        alert(file.name + ': each file must be 10 MB or smaller.');
+        rejected.push(file.name + ': each file must be 10 MB or smaller.');
         continue;
       }
       if (file.size === 0) {
-        alert(file.name + ': empty files cannot be shared.');
+        rejected.push(file.name + ': empty files cannot be shared.');
         continue;
       }
       accepted.push(file);
     }
 
     setPendingFiles((current) => [...current, ...accepted].slice(0, MAX_CHAT_FILES));
+    setActionFeedback(rejected.length ? rejected.join(' ') : null);
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -417,6 +443,7 @@ function ChatContent() {
     if ((!content && pendingFiles.length === 0) || !selectedConversationId || sending) return;
 
     setSending(true);
+    setActionFeedback(null);
     try {
       const newMsg = pendingFiles.length > 0
         ? await chatService.sendAttachments(selectedConversationId, content, pendingFiles)
@@ -437,7 +464,7 @@ function ChatContent() {
       setTimeout(scrollToBottom, 50);
     } catch (err: any) {
       console.error('Failed to send message:', err);
-      alert(err.message || 'Failed to send message.');
+      setActionFeedback(err.message || 'Failed to send message.');
     } finally {
       setSending(false);
     }
@@ -447,21 +474,31 @@ function ChatContent() {
   // ARCHIVE / DELETE CONVERSATION
   // ============================================================
 
-  const handleArchiveConversation = async (e: React.MouseEvent, conversationId: string) => {
+  const handleArchiveConversation = (e: React.MouseEvent, conversationId: string) => {
     e.stopPropagation();
-    if (!confirm('Are you sure you want to hide this conversation?')) return;
+    setActionFeedback(null);
+    setArchiveConfirmationId(conversationId);
+  };
 
+  const confirmArchiveConversation = async () => {
+    if (!archiveConfirmationId || archiving) return;
+    const conversationId = archiveConfirmationId;
+    setArchiving(true);
+    setActionFeedback(null);
     try {
       await chatService.archiveConversation(conversationId);
       const remaining = conversations.filter((c) => c.id !== conversationId);
       setConversations(remaining);
+      setArchiveConfirmationId(null);
 
       if (selectedConversationId === conversationId) {
         setSelectedConversationId(remaining.length > 0 ? remaining[0].id : null);
       }
     } catch (err: any) {
       console.error('Failed to hide conversation:', err);
-      alert(err.message || 'Failed to hide conversation.');
+      setActionFeedback(err.message || 'Failed to hide conversation.');
+    } finally {
+      setArchiving(false);
     }
   };
 
@@ -469,27 +506,38 @@ function ChatContent() {
   // NEW CHAT MODAL
   // ============================================================
 
-  const openNewChatModal = async () => {
-    setShowNewChatModal(true);
+  const loadAlumniForNewChat = async () => {
     setLoadingAlumni(true);
+    setAlumniLoadError(null);
     try {
       const data = await alumniService.getApprovedAlumni();
       setAlumniList(data.filter((a) => a.id !== user?.id));
     } catch (err) {
       console.error('Failed to load alumni directory:', err);
+      setAlumniLoadError(err instanceof Error ? err.message : 'Unable to load alumni. Please try again.');
     } finally {
       setLoadingAlumni(false);
     }
   };
 
+  const openNewChatModal = async () => {
+    setShowNewChatModal(true);
+    await loadAlumniForNewChat();
+  };
+
   const startChatWithAlumni = async (alumniId: string) => {
+    if (startingChatId) return;
+    setStartingChatId(alumniId);
+    setActionFeedback(null);
     try {
       const conv = await chatService.createOrGetConversation(alumniId);
       setShowNewChatModal(false);
       await loadConversations(conv.id);
     } catch (err: any) {
       console.error('Failed to start chat:', err);
-      alert(err.message || 'Failed to start chat.');
+      setActionFeedback(err.message || 'Failed to start chat.');
+    } finally {
+      setStartingChatId(null);
     }
   };
 
@@ -528,6 +576,23 @@ function ChatContent() {
         <span className="font-medium text-gray-900">Chat</span>
       </div>
 
+      {actionFeedback && (
+        <div role="alert" className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800">
+          <span>{actionFeedback}</span>
+          <button type="button" onClick={() => setActionFeedback(null)} aria-label="Dismiss chat message" className="shrink-0 font-bold">Dismiss</button>
+        </div>
+      )}
+
+      {archiveConfirmationId && (
+        <div role="group" aria-label="Confirm hiding conversation" className="mb-4 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-amber-900">Hide this conversation from your inbox? Your chat history will be retained.</p>
+          <div className="flex shrink-0 gap-2">
+            <button type="button" onClick={() => setArchiveConfirmationId(null)} disabled={archiving} className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 disabled:opacity-50">Cancel</button>
+            <button type="button" onClick={confirmArchiveConversation} disabled={archiving} className="rounded-lg bg-amber-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{archiving ? 'Hiding…' : 'Hide conversation'}</button>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 flex h-[calc(100vh-12rem)] overflow-hidden">
         {/* Sidebar */}
         <div className="w-1/3 border-r border-gray-100 bg-gray-50 flex flex-col">
@@ -546,6 +611,17 @@ function ChatContent() {
           <div className="flex-1 overflow-y-auto">
             {loadingConversations ? (
               <LoadingState message="Loading messages" className="p-6" />
+            ) : error && conversations.length === 0 ? (
+              <div className="p-6 text-center">
+                <p role="alert" className="text-xs text-rose-700">{error}</p>
+                <button
+                  type="button"
+                  onClick={() => { setLoadingConversations(true); setError(null); void loadConversations(); }}
+                  className="mt-3 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white"
+                >
+                  Retry loading conversations
+                </button>
+              </div>
             ) : conversations.length === 0 ? (
               <div className="p-6 text-center text-xs text-gray-400">
                 <MessageSquare className="w-8 h-8 text-gray-300 mx-auto mb-2" />
@@ -693,7 +769,7 @@ function ChatContent() {
                         {Boolean(msg.attachments?.length) && (
                           <div className="mt-2 flex w-full max-w-sm flex-col gap-2">
                             {msg.attachments.map((attachment) => (
-                              <ChatAttachmentCard key={attachment.id} messageId={msg.id} attachment={attachment} />
+                              <ChatAttachmentCard key={attachment.id} messageId={msg.id} attachment={attachment} onError={setActionFeedback} />
                             ))}
                           </div>
                         )}
@@ -793,8 +869,8 @@ function ChatContent() {
 
       {/* New Chat Modal */}
       {showNewChatModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative border border-slate-100">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNewChatModal(false); }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="new-chat-title" tabIndex={-1} className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative border border-slate-100">
             <button
               onClick={() => setShowNewChatModal(false)}
               className="absolute top-5 right-5 text-slate-400 hover:text-slate-700"
@@ -802,12 +878,13 @@ function ChatContent() {
               <X className="w-5 h-5" />
             </button>
 
-            <h3 className="text-lg font-bold text-slate-900 mb-1">Start New Conversation</h3>
+            <h3 id="new-chat-title" className="text-lg font-bold text-slate-900 mb-1">Start New Conversation</h3>
             <p className="text-xs text-slate-500 mb-4">Select an alumni member to message.</p>
 
             <div className="relative mb-4">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
               <input
+                ref={alumniSearchInputRef}
                 type="text"
                 value={alumniSearch}
                 onChange={(e) => setAlumniSearch(e.target.value)}
@@ -816,17 +893,27 @@ function ChatContent() {
               />
             </div>
 
+            {actionFeedback && (
+              <p role="alert" className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{actionFeedback}</p>
+            )}
             <div className="max-h-64 overflow-y-auto divide-y divide-slate-100">
               {loadingAlumni ? (
                 <LoadingState message="Loading alumni profiles" className="py-8" />
+              ) : alumniLoadError ? (
+                <div className="py-6 text-center">
+                  <p role="alert" className="mb-3 text-xs text-rose-700">{alumniLoadError}</p>
+                  <button type="button" onClick={loadAlumniForNewChat} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white">Retry loading alumni</button>
+                </div>
               ) : filteredAlumni.length === 0 ? (
                 <div className="py-8 text-center text-xs text-slate-400">No alumni found.</div>
               ) : (
                 filteredAlumni.map((alum) => (
-                  <div
+                  <button
+                    type="button"
                     key={alum.id}
                     onClick={() => startChatWithAlumni(alum.id)}
-                    className="py-3 px-2 flex items-center justify-between hover:bg-slate-50 rounded-xl cursor-pointer transition"
+                    disabled={startingChatId !== null}
+                    className="w-full py-3 px-2 flex items-center justify-between text-left hover:bg-slate-50 rounded-xl transition disabled:opacity-50"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs shrink-0">
@@ -842,10 +929,10 @@ function ChatContent() {
                         </p>
                       </div>
                     </div>
-                    <button className="px-2.5 py-1 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition shrink-0">
-                      Chat
-                    </button>
-                  </div>
+                    <span className="px-2.5 py-1 text-xs font-bold text-blue-600 bg-blue-50 rounded-lg shrink-0">
+                      {startingChatId === alum.id ? 'Opening…' : 'Chat'}
+                    </span>
+                  </button>
                 ))
               )}
             </div>
