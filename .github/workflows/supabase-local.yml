@@ -56,8 +56,8 @@ jobs:
         shell: bash
         run: |
           env_output="$(supabase status -o env)"
-          api_url="$(printf '%s\\n' "$env_output" | sed -n 's/^API_URL=//p' | head -n 1 | tr -d '"')"
-          service_role_key="$(printf '%s\\n' "$env_output" | sed -n 's/^SERVICE_ROLE_KEY=//p' | head -n 1 | tr -d '"')"
+          api_url="$(printf '%s\n' "$env_output" | sed -n 's/^API_URL=//p' | head -n 1 | tr -d '"')"
+          service_role_key="$(printf '%s\n' "$env_output" | sed -n 's/^SERVICE_ROLE_KEY=//p' | head -n 1 | tr -d '"')"
 
           if [[ "$api_url" != "http://127.0.0.1:54321" ]]; then
             echo "Expected the local Supabase API at http://127.0.0.1:54321; refusing to run integration tests against any other URL."
