@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useAccessibleDialog } from '@/hooks/useAccessibleDialog';
 import {
   Briefcase,
   Building2,
@@ -48,14 +48,7 @@ export default function JobDetailsModal({
   onAction,
   actionDisabled = false,
 }: JobDetailsModalProps) {
-  useEffect(() => {
-    if (!job) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [job, onClose]);
+  const dialogRef = useAccessibleDialog<HTMLDivElement>(Boolean(job), onClose);
 
   if (!job) return null;
 
@@ -66,6 +59,8 @@ export default function JobDetailsModal({
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-5"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();

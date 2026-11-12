@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useAccessibleDialog } from '@/hooks/useAccessibleDialog';
 import { CalendarClock, Megaphone, Users, GraduationCap, X } from 'lucide-react';
 import { AnnouncementItem } from '@/lib/services/announcementService';
 import { DocumentAttachmentView } from '@/components/DocumentAttachment';
@@ -22,14 +22,7 @@ export default function AnnouncementDetailsModal({
   announcement,
   onClose,
 }: AnnouncementDetailsModalProps) {
-  useEffect(() => {
-    if (!announcement) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [announcement, onClose]);
+  const dialogRef = useAccessibleDialog<HTMLDivElement>(Boolean(announcement), onClose);
 
   if (!announcement) return null;
 
@@ -38,6 +31,8 @@ export default function AnnouncementDetailsModal({
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-5"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
