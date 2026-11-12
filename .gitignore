@@ -21,8 +21,12 @@ dist/
 build/
 *.tsbuildinfo
 
-# Supabase
+# Supabase local state and credentials
 supabase/.temp/
+supabase/.branches/
+supabase/.env
+supabase/.env.*
+!supabase/.env.example
 
 # OS / Editor
 .DS_Store
