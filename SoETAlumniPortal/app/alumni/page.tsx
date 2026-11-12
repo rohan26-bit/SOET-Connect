@@ -28,8 +28,11 @@ export default function AlumniDashboard() {
   const [aciLoading, setAciLoading] = useState(true);
   const [aciError, setAciError] = useState<string | null>(null);
   const [jobsLoading, setJobsLoading] = useState(true);
+  const [jobsError, setJobsError] = useState<string | null>(null);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const [eventsError, setEventsError] = useState<string | null>(null);
   const [announcementsLoading, setAnnouncementsLoading] = useState(true);
-  const [loading, setLoading] = useState(true);
+  const [announcementsError, setAnnouncementsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -41,15 +44,15 @@ export default function AlumniDashboard() {
       .then((jobsData) => {
         if (isMounted) {
           setMyJobs(jobsData);
+          setJobsError(null);
           setJobsLoading(false);
-          setLoading(false);
         }
       })
       .catch((err) => {
         console.error('Error loading jobs:', err);
         if (isMounted) {
+          setJobsError(err instanceof Error ? err.message : 'Unable to load your job postings.');
           setJobsLoading(false);
-          setLoading(false);
         }
       });
 
@@ -57,10 +60,18 @@ export default function AlumniDashboard() {
     eventService
       .getMyEvents(user.id)
       .then((eventsData) => {
-        if (isMounted) setMyEvents(eventsData);
+        if (isMounted) {
+          setMyEvents(eventsData);
+          setEventsError(null);
+          setEventsLoading(false);
+        }
       })
       .catch((err) => {
         console.error('Error loading events:', err);
+        if (isMounted) {
+          setEventsError(err instanceof Error ? err.message : 'Unable to load your events.');
+          setEventsLoading(false);
+        }
       });
 
     // Fetch announcements independently
@@ -69,12 +80,16 @@ export default function AlumniDashboard() {
       .then((announcementsData) => {
         if (isMounted) {
           setAnnouncements(announcementsData);
+          setAnnouncementsError(null);
           setAnnouncementsLoading(false);
         }
       })
       .catch((err) => {
         console.error('Error loading announcements:', err);
-        if (isMounted) setAnnouncementsLoading(false);
+        if (isMounted) {
+          setAnnouncementsError(err instanceof Error ? err.message : 'Unable to load announcements.');
+          setAnnouncementsLoading(false);
+        }
       });
 
     // Fetch ACI metrics dynamically and concurrently without blocking dashboard items
@@ -95,6 +110,40 @@ export default function AlumniDashboard() {
       isMounted = false;
     };
   }, [user]);
+
+  const retryJobs = async () => {
+    if (!user) return;
+    setJobsLoading(true);
+    setJobsError(null);
+    try { setMyJobs(await jobService.getMyPostedJobs(user.id)); }
+    catch (err) { setJobsError(err instanceof Error ? err.message : 'Unable to load your job postings.'); }
+    finally { setJobsLoading(false); }
+  };
+
+  const retryEvents = async () => {
+    if (!user) return;
+    setEventsLoading(true);
+    setEventsError(null);
+    try { setMyEvents(await eventService.getMyEvents(user.id)); }
+    catch (err) { setEventsError(err instanceof Error ? err.message : 'Unable to load your events.'); }
+    finally { setEventsLoading(false); }
+  };
+
+  const retryAnnouncements = async () => {
+    setAnnouncementsLoading(true);
+    setAnnouncementsError(null);
+    try { setAnnouncements(await announcementService.getAnnouncements()); }
+    catch (err) { setAnnouncementsError(err instanceof Error ? err.message : 'Unable to load announcements.'); }
+    finally { setAnnouncementsLoading(false); }
+  };
+
+  const retryAci = async () => {
+    setAciLoading(true);
+    setAciError(null);
+    try { setAciData(await alumniService.getMyAci()); }
+    catch (err) { setAciError(err instanceof Error ? err.message : 'Contribution metrics unavailable.'); }
+    finally { setAciLoading(false); }
+  };
 
   const userName = user?.full_name || 'Alumni Member';
   const company = user?.alumni_profile?.company || 'Enterprise';
@@ -192,9 +241,14 @@ export default function AlumniDashboard() {
             </div>
           ) : (
             <div className="text-xs text-[#DDD7D2] bg-[#3D2E28] px-5 py-4 rounded-2xl border border-[#6B5147] max-w-xs">
-              {verificationStatus === 'pending'
+              <p>{verificationStatus === 'pending'
                 ? 'Verification Pending — your ACI activates automatically upon administrator authorization.'
-                : (aciError || 'Contribution score unavailable.')}
+                : (aciError || 'Contribution score unavailable.')}</p>
+              {verificationStatus !== 'pending' && aciError && (
+                <button type="button" onClick={() => void retryAci()} disabled={aciLoading} className="mt-2 font-bold text-[#F6A15A] underline disabled:opacity-50">
+                  {aciLoading ? 'Retrying…' : 'Retry ACI'}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -276,7 +330,7 @@ export default function AlumniDashboard() {
             <Briefcase className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-2xl font-black text-[#4A3832]">{myJobs.length}</div>
+            <div className="text-2xl font-black text-[#4A3832]">{jobsError ? '—' : jobsLoading ? '…' : myJobs.length}</div>
             <div className="text-xs font-semibold text-[#6B6B6B] uppercase tracking-wider">Jobs Posted By You</div>
           </div>
         </div>
@@ -286,7 +340,7 @@ export default function AlumniDashboard() {
             <Calendar className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-2xl font-black text-[#4A3832]">{myEvents.length}</div>
+            <div className="text-2xl font-black text-[#4A3832]">{eventsError ? '—' : eventsLoading ? '…' : myEvents.length}</div>
             <div className="text-xs font-semibold text-[#6B6B6B] uppercase tracking-wider">Events Created</div>
           </div>
         </div>
@@ -319,6 +373,11 @@ export default function AlumniDashboard() {
 
           {jobsLoading ? (
             <LoadingState message="Loading opportunities" className="py-8" />
+          ) : jobsError ? (
+            <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-700">
+              <p>{jobsError}</p>
+              <button type="button" onClick={() => void retryJobs()} className="mt-2 font-bold underline">Retry job postings</button>
+            </div>
           ) : myJobs.length === 0 ? (
             <div className="py-8 text-center text-xs text-[#888888]">
               You haven't posted any jobs or internships yet.
@@ -364,6 +423,11 @@ export default function AlumniDashboard() {
 
           {announcementsLoading ? (
             <LoadingState message="Loading announcements" className="py-8" />
+          ) : announcementsError ? (
+            <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-700">
+              <p>{announcementsError}</p>
+              <button type="button" onClick={() => void retryAnnouncements()} className="mt-2 font-bold underline">Retry announcements</button>
+            </div>
           ) : announcements.length === 0 ? (
             <div className="py-8 text-center text-xs text-[#888888]">No active announcements.</div>
           ) : (
