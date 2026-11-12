@@ -66,6 +66,10 @@ export default function AdminEventsPage() {
   const { user } = useAuth();
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [eventToDelete, setEventToDelete] = useState<EventItem | null>(null);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'past'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewingEvent, setViewingEvent] = useState<EventItem | null>(null);
@@ -79,11 +83,12 @@ export default function AdminEventsPage() {
 
   const loadEvents = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await eventService.getAllEventsForAdmin();
       setEvents(data);
     } catch (err) {
-      console.error(err);
+      setLoadError(err instanceof Error ? err.message : 'Unable to load events. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -94,21 +99,39 @@ export default function AdminEventsPage() {
   }, []);
 
   const handleStatusChange = async (eventId: string, status: 'approved' | 'rejected' | 'cancelled') => {
+    if (actionLoadingId) return;
+    setActionLoadingId(eventId);
+    setActionError(null);
     try {
       await eventService.updateEventStatus(eventId, status);
-      loadEvents();
-    } catch (err: any) {
-      alert(err.message || 'Failed to update event status.');
+      await loadEvents();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to update event status. Please try again.');
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
-  const handleDelete = async (eventId: string) => {
-    if (!confirm('Are you sure you want to permanently delete this event?')) return;
+  const handleDelete = (event: EventItem) => {
+    if (!actionLoadingId) {
+      setActionError(null);
+      setEventToDelete(event);
+    }
+  };
+
+  const confirmDeleteEvent = async () => {
+    if (!eventToDelete || actionLoadingId) return;
+    const target = eventToDelete;
+    setActionLoadingId(target.id);
+    setActionError(null);
     try {
-      await eventService.deleteEvent(eventId);
-      loadEvents();
-    } catch (err: any) {
-      alert(err.message || 'Failed to delete event.');
+      await eventService.deleteEvent(target.id);
+      setEventToDelete(null);
+      await loadEvents();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to delete this event. Please try again.');
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
@@ -241,6 +264,13 @@ export default function AdminEventsPage() {
         </button>
       </div>
 
+      {actionError && (
+        <div role="alert" className="mb-4 flex items-start justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-800">
+          <div className="flex items-center gap-2"><AlertCircle className="h-4 w-4 shrink-0 text-rose-600" /><span>{actionError}</span></div>
+          <button type="button" onClick={() => setActionError(null)} aria-label="Dismiss error" className="rounded-lg p-1 text-rose-600 hover:bg-rose-100">✕</button>
+        </div>
+      )}
+
       <div className="mb-6 flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-950 shadow-sm">
         <AlertCircle className="h-4 w-4 shrink-0 text-amber-700" />
         <p className="leading-relaxed">
@@ -296,6 +326,13 @@ export default function AdminEventsPage() {
       {/* Events List */}
       {loading ? (
         <LoadingState message="Loading events" className="py-16" />
+      ) : loadError ? (
+        <div className="rounded-3xl border border-rose-200 bg-white p-10 text-center shadow-sm">
+          <AlertCircle className="mx-auto mb-3 h-8 w-8 text-rose-500" />
+          <p role="alert" className="text-sm font-bold text-slate-800">Unable to load event records.</p>
+          <p className="mt-1 text-xs text-slate-500">{loadError}</p>
+          <button type="button" onClick={() => void loadEvents()} className="mt-4 rounded-xl bg-[#4A3832] px-4 py-2 text-xs font-bold text-white">Retry</button>
+        </div>
       ) : filteredEvents.length === 0 ? (
         <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm">
           <Calendar className="w-12 h-12 text-slate-300 mx-auto mb-3" />
@@ -415,8 +452,10 @@ export default function AdminEventsPage() {
                     <Edit3 className="w-3.5 h-3.5" /> Edit
                   </button>
                   <button
-                    onClick={() => handleDelete(event.id)}
-                    className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 font-bold"
+                    type="button"
+                    disabled={actionLoadingId !== null}
+                    onClick={() => handleDelete(event)}
+                    className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 font-bold disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Trash2 className="w-3.5 h-3.5" /> Delete
                   </button>
@@ -425,16 +464,20 @@ export default function AdminEventsPage() {
                 <div className="flex items-center gap-2">
                   {event.status !== 'approved' && (
                     <button
-                      onClick={() => handleStatusChange(event.id, 'approved')}
-                      className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-sm"
+                      type="button"
+                      disabled={actionLoadingId !== null}
+                      onClick={() => void handleStatusChange(event.id, 'approved')}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" /> Approve
                     </button>
                   )}
                   {event.status !== 'rejected' && event.status !== 'cancelled' && (
                     <button
-                      onClick={() => handleStatusChange(event.id, 'rejected')}
-                      className="flex items-center gap-1 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl text-xs font-bold transition"
+                      type="button"
+                      disabled={actionLoadingId !== null}
+                      onClick={() => void handleStatusChange(event.id, 'rejected')}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <XCircle className="w-3.5 h-3.5" /> Reject
                     </button>
@@ -447,6 +490,23 @@ export default function AdminEventsPage() {
       )}
 
       <EventDetailsModal event={viewingEvent} onClose={() => setViewingEvent(null)} />
+
+      {eventToDelete && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"
+          onClick={(event) => { if (event.target === event.currentTarget && !actionLoadingId) setEventToDelete(null); }}
+        >
+          <section role="dialog" aria-modal="true" aria-labelledby="delete-event-title" className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <h2 id="delete-event-title" className="text-lg font-black text-slate-900">Delete this event?</h2>
+            <p className="mt-2 text-sm font-semibold text-slate-700">{eventToDelete.title}</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-500">This permanently deletes the event. Related registrations may also be removed.</p>
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" disabled={actionLoadingId !== null} onClick={() => setEventToDelete(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Cancel</button>
+              <button type="button" disabled={actionLoadingId !== null} onClick={() => void confirmDeleteEvent()} className="rounded-xl bg-rose-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50">{actionLoadingId === eventToDelete.id ? 'Deleting…' : 'Delete event'}</button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {/* Create / Edit Event Modal */}
       {showModal && (

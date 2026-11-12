@@ -17,6 +17,11 @@ export default function EventsPage() {
   const { user } = useAuth();
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [createSuccess, setCreateSuccess] = useState<string | null>(null);
+  const [attendeeError, setAttendeeError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [viewingEvent, setViewingEvent] = useState<EventItem | null>(null);
 
@@ -46,11 +51,12 @@ export default function EventsPage() {
 
   const loadEvents = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await eventService.getApprovedEvents(user?.id);
       setEvents(data);
     } catch (err) {
-      console.error(err);
+      setLoadError(err instanceof Error ? err.message : 'Unable to load events. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -61,26 +67,32 @@ export default function EventsPage() {
   }, [user]);
 
   const handleRegister = async (eventId: string) => {
-    if (!user) return;
+    if (!user || actionLoading) return;
     setActionLoading(eventId);
+    setActionError(null);
+    setActionSuccess(null);
     try {
       await eventService.registerForEvent(eventId, user.id);
-      loadEvents();
-    } catch (err: any) {
-      alert(err.message || 'Registration failed.');
+      await loadEvents();
+      setActionSuccess('Your event registration was completed successfully.');
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Registration failed. Please try again.');
     } finally {
       setActionLoading(null);
     }
   };
 
   const handleCancelRegistration = async (eventId: string) => {
-    if (!user) return;
+    if (!user || actionLoading) return;
     setActionLoading(eventId);
+    setActionError(null);
+    setActionSuccess(null);
     try {
       await eventService.cancelRegistration(eventId, user.id);
-      loadEvents();
-    } catch (err: any) {
-      alert(err.message || 'Failed to cancel registration.');
+      await loadEvents();
+      setActionSuccess('Your event registration has been cancelled.');
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to cancel registration. Please try again.');
     } finally {
       setActionLoading(null);
     }
@@ -88,9 +100,10 @@ export default function EventsPage() {
 
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || creating) return;
     setCreating(true);
     setCreateError(null);
+    setCreateSuccess(null);
 
     try {
       await eventService.createEvent({
@@ -124,7 +137,7 @@ export default function EventsPage() {
         tags: '',
         attachment: null,
       });
-      alert('Event submitted! It will be listed once reviewed by the administrator.');
+      setCreateSuccess('Event submitted successfully. It will appear after administrator review.');
     } catch (err: any) {
       setCreateError(err.message || 'Failed to create event.');
     } finally {
@@ -134,12 +147,14 @@ export default function EventsPage() {
 
   const viewAttendees = async (eventId: string) => {
     setSelectedEventId(eventId);
+    setAttendees([]);
+    setAttendeeError(null);
     setLoadingAttendees(true);
     try {
       const list = await eventService.getEventAttendees(eventId);
       setAttendees(list);
     } catch (err) {
-      console.error(err);
+      setAttendeeError(err instanceof Error ? err.message : 'Unable to load attendees. Please retry.');
     } finally {
       setLoadingAttendees(false);
     }
@@ -175,8 +190,22 @@ export default function EventsPage() {
         )}
       </div>
 
+      {(actionError || actionSuccess || createSuccess) && (
+        <div className={`mb-5 flex items-start justify-between gap-3 rounded-2xl border p-3 text-xs ${actionError ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>
+          <p role={actionError ? 'alert' : 'status'}>{actionError || actionSuccess || createSuccess}</p>
+          <button type="button" onClick={() => { setActionError(null); setActionSuccess(null); setCreateSuccess(null); }} aria-label="Dismiss message" className="shrink-0 rounded-lg p-1 hover:bg-black/5">✕</button>
+        </div>
+      )}
+
       {loading ? (
         <LoadingState message="Loading events" className="py-16" />
+      ) : loadError ? (
+        <div className="rounded-3xl border border-rose-200 bg-white p-10 text-center shadow-sm">
+          <AlertCircle className="mx-auto mb-3 h-8 w-8 text-rose-500" />
+          <p role="alert" className="text-sm font-bold text-slate-800">Unable to load events.</p>
+          <p className="mt-1 text-xs text-slate-500">{loadError}</p>
+          <button type="button" onClick={() => void loadEvents()} className="mt-4 rounded-xl bg-[#4A3832] px-4 py-2 text-xs font-bold text-white">Retry</button>
+        </div>
       ) : events.length === 0 ? (
         <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm">
           <Calendar className="w-12 h-12 text-slate-300 mx-auto mb-3" />
@@ -254,8 +283,8 @@ export default function EventsPage() {
 
                   {event.is_registered ? (
                     <button
-                      disabled={actionLoading === event.id}
-                      onClick={() => handleCancelRegistration(event.id)}
+                      disabled={actionLoading !== null}
+                      onClick={() => void handleCancelRegistration(event.id)}
                       className="px-3 py-1.5 bg-emerald-100 hover:bg-red-100 text-emerald-700 hover:text-red-700 text-xs font-bold rounded-lg transition flex items-center gap-1"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" /> Registered
@@ -269,11 +298,11 @@ export default function EventsPage() {
                     </button>
                   ) : (
                     <button
-                      disabled={actionLoading === event.id}
-                      onClick={() => handleRegister(event.id)}
+                      disabled={actionLoading !== null}
+                      onClick={() => void handleRegister(event.id)}
                       className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-md shadow-blue-600/20 transition cursor-pointer"
                     >
-                      {actionLoading === event.id ? 'Registering...' : 'Register'}
+                      {actionLoading === event.id ? 'Registering...' : actionLoading !== null ? 'Please wait…' : 'Register'}
                     </button>
                   )}
                 </div>
@@ -331,6 +360,11 @@ export default function EventsPage() {
 
             {loadingAttendees ? (
               <LoadingState message="Loading attendees" className="py-8" />
+            ) : attendeeError ? (
+              <div className="py-8 text-center">
+                <p role="alert" className="text-xs text-rose-700">{attendeeError}</p>
+                <button type="button" onClick={() => selectedEventId && void viewAttendees(selectedEventId)} className="mt-3 text-xs font-bold text-blue-700 hover:underline">Retry</button>
+              </div>
             ) : attendees.length === 0 ? (
               <div className="py-8 text-center text-xs text-slate-400">No registrations yet.</div>
             ) : (
