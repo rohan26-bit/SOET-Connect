@@ -55,6 +55,7 @@ interface EventApiRecord extends Partial<EventItem> {
 }
 
 interface EventAttendeeRecord extends Partial<EventAttendeeItem> {
+  registered_at?: string;
   id: string;
   user_id: string;
   event_id: string;
