@@ -49,7 +49,7 @@ export interface JobApplicationItem {
     | 'selected'
     | 'rejected';
   created_at: string;
-  job?: JobItem;
+  job?: Pick<JobItem, 'id'> & Partial<Omit<JobItem, 'id'>>;
   student_name?: string;
   student_email?: string;
   department?: string;
@@ -61,13 +61,166 @@ function getAuthHeaders() {
   return { 'Content-Type': 'application/json' };
 }
 
-function normalizeJob(job: any): JobItem {
-  const parsed = parseAttachmentFromText(job.description);
+type ApiRecord = Record<string, unknown>;
+
+const JOB_STATUSES = ['pending', 'approved', 'rejected', 'closed'] as const;
+const APPLICATION_STATUSES = [
+  'applied',
+  'under_review',
+  'shortlisted',
+  'interview',
+  'selected',
+  'rejected',
+] as const;
+
+function isRecord(value: unknown): value is ApiRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function asRecord(value: unknown, label: string): ApiRecord {
+  if (!isRecord(value)) throw new Error('Unexpected ' + label + ' response format.');
+  return value;
+}
+
+function requiredString(record: ApiRecord, key: string, label: string): string {
+  const value = record[key];
+  if (typeof value !== 'string') {
+    throw new Error('The ' + label + ' response is missing a valid ' + key + ' value.');
+  }
+  return value;
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function optionalBoolean(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function normalizeAttachment(value: unknown): DocumentAttachmentData | null {
+  if (!isRecord(value) || typeof value.name !== 'string') return null;
   return {
-    ...job,
-    description: parsed.cleanText,
-    attachment: job.attachment || parsed.attachment || null,
+    name: value.name,
+    type: typeof value.type === 'string' ? value.type : 'DOCUMENT',
+    size: optionalNumber(value.size) ?? 0,
+    url: optionalString(value.url),
   };
+}
+
+function normalizeJob(value: unknown): JobItem {
+  const job = asRecord(value, 'job');
+  const description = requiredString(job, 'description', 'job');
+  const parsed = parseAttachmentFromText(description);
+  const status = requiredString(job, 'status', 'job');
+
+  if (!JOB_STATUSES.includes(status as (typeof JOB_STATUSES)[number])) {
+    throw new Error('The jobs response contains an unsupported job status.');
+  }
+
+  return {
+    id: requiredString(job, 'id', 'job'),
+    posted_by: requiredString(job, 'posted_by', 'job'),
+    title: requiredString(job, 'title', 'job'),
+    company: requiredString(job, 'company', 'job'),
+    description: parsed.cleanText,
+    location: requiredString(job, 'location', 'job'),
+    employment_type: requiredString(job, 'employment_type', 'job'),
+    experience: optionalString(job.experience),
+    salary: optionalString(job.salary),
+    skills: Array.isArray(job.skills)
+      ? job.skills.filter((skill): skill is string => typeof skill === 'string')
+      : undefined,
+    application_url: optionalString(job.application_url),
+    deadline: optionalString(job.deadline),
+    application_deadline: optionalString(job.application_deadline),
+    is_expired: optionalBoolean(job.is_expired),
+    expired_at: job.expired_at === null ? null : optionalString(job.expired_at),
+    auto_delete_at: job.auto_delete_at === null ? null : optionalString(job.auto_delete_at),
+    days_until_auto_delete:
+      job.days_until_auto_delete === null ? null : optionalNumber(job.days_until_auto_delete),
+    status: status as JobItem['status'],
+    created_at: requiredString(job, 'created_at', 'job'),
+    poster_name: optionalString(job.poster_name),
+    poster_avatar: optionalString(job.poster_avatar),
+    poster_email: optionalString(job.poster_email),
+    attachment: normalizeAttachment(job.attachment) || parsed.attachment || null,
+  };
+}
+
+function normalizeRelatedJob(value: unknown): JobApplicationItem['job'] {
+  if (value === null || value === undefined) return undefined;
+  const job = asRecord(value, 'application job');
+  const id = optionalString(job.id);
+  if (!id) return undefined;
+
+  const status = optionalString(job.status);
+  return {
+    id,
+    title: optionalString(job.title),
+    company: optionalString(job.company),
+    location: optionalString(job.location),
+    employment_type: optionalString(job.employment_type),
+    status:
+      status && JOB_STATUSES.includes(status as (typeof JOB_STATUSES)[number])
+        ? (status as JobItem['status'])
+        : undefined,
+  };
+}
+
+function normalizeApplication(value: unknown): JobApplicationItem {
+  const application = asRecord(value, 'application');
+  const status = requiredString(application, 'status', 'application');
+
+  if (!APPLICATION_STATUSES.includes(status as (typeof APPLICATION_STATUSES)[number])) {
+    throw new Error('The applications response contains an unsupported application status.');
+  }
+
+  return {
+    id: requiredString(application, 'id', 'application'),
+    job_id: requiredString(application, 'job_id', 'application'),
+    student_id: requiredString(application, 'student_id', 'application'),
+    resume_url: optionalString(application.resume_url),
+    cover_letter: optionalString(application.cover_letter),
+    status: status as JobApplicationItem['status'],
+    created_at: requiredString(application, 'created_at', 'application'),
+    job: normalizeRelatedJob(application.job),
+    student_name: optionalString(application.student_name),
+    student_email: optionalString(application.student_email),
+    department: optionalString(application.department),
+  };
+}
+
+async function parseResponse(response: Response, fallbackMessage: string): Promise<unknown> {
+  let data: unknown = null;
+  try {
+    data = await response.json();
+  } catch {
+    // Keep the fallback for empty, malformed, or non-JSON responses.
+  }
+
+  if (!response.ok) {
+    const detail = isRecord(data) && typeof data.detail === 'string' ? data.detail : fallbackMessage;
+    throw new Error(detail);
+  }
+
+  return data;
+}
+
+function responseArray(data: unknown, label: string): unknown[] {
+  if (!Array.isArray(data)) {
+    throw new Error('Unexpected ' + label + ' response format. Please refresh and try again.');
+  }
+  return data;
+}
+
+function responseJob(data: unknown, label: string): JobItem {
+  const payload = asRecord(data, label);
+  return normalizeJob(payload.job);
 }
 
 function newestFirst<T extends { created_at?: string | null }>(items: T[]): T[] {
@@ -94,13 +247,9 @@ export const jobService = {
       headers: getAuthHeaders(),
     });
 
-    const data = await response.json();
+    const data = await parseResponse(response, 'Failed to load jobs.');
 
-    if (!response.ok) {
-      throw new Error(data.detail || 'Failed to load jobs.');
-    }
-
-    let result: JobItem[] = newestFirst((data || []).map(normalizeJob));
+    let result: JobItem[] = newestFirst(responseArray(data, 'jobs').map(normalizeJob));
 
     if (
       filters?.employmentType &&
@@ -151,15 +300,9 @@ export const jobService = {
       }
     );
 
-    const data = await response.json();
+    const data = await parseResponse(response, 'Failed to load jobs.');
 
-    if (!response.ok) {
-      throw new Error(
-        data.detail || 'Failed to load jobs.'
-      );
-    }
-
-    return newestFirst((data || []).map(normalizeJob));
+    return newestFirst(responseArray(data, 'jobs').map(normalizeJob));
   },
 
 
@@ -168,8 +311,10 @@ export const jobService = {
   // ============================================================
 
   async getMyPostedJobs(
-    userId: string
+    _userId: string
   ): Promise<JobItem[]> {
+    // Preserve the caller signature; the API resolves the owner from the session.
+    void _userId;
 
     const response = await fetch(
       `${API_URL}/jobs/mine`,
@@ -178,15 +323,9 @@ export const jobService = {
       }
     );
 
-    const data = await response.json();
+    const data = await parseResponse(response, 'Failed to load your jobs.');
 
-    if (!response.ok) {
-      throw new Error(
-        data.detail || 'Failed to load your jobs.'
-      );
-    }
-
-    return newestFirst((data || []).map(normalizeJob));
+    return newestFirst(responseArray(data, 'jobs').map(normalizeJob));
   },
 
 
@@ -245,15 +384,8 @@ export const jobService = {
       }
     );
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(
-        data.detail || 'Job posting failed.'
-      );
-    }
-
-    return data.job;
+    const data = await parseResponse(response, 'Job posting failed.');
+    return responseJob(data, 'job creation');
   },
 
 
@@ -271,13 +403,8 @@ export const jobService = {
       }),
     });
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.detail || 'Failed to update job deadline.');
-    }
-
-    return normalizeJob(data.job);
+    const data = await parseResponse(response, 'Failed to update job deadline.');
+    return responseJob(data, 'job deadline update');
   },
 
 
@@ -302,16 +429,8 @@ export const jobService = {
       }
     );
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(
-        data.detail ||
-          'Failed to update job status.'
-      );
-    }
-
-    return data.job;
+    const data = await parseResponse(response, 'Failed to update job status.');
+    return responseJob(data, 'job status update');
   },
 
 
@@ -329,15 +448,7 @@ export const jobService = {
       }
     );
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(
-        data.detail || 'Failed to delete job.'
-      );
-    }
-
-    return data;
+    return await parseResponse(response, 'Failed to delete job.');
   },
 
 
@@ -371,16 +482,7 @@ export const jobService = {
       }
     );
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(
-        data.detail ||
-          'Application submission failed.'
-      );
-    }
-
-    return data;
+    return await parseResponse(response, 'Application submission failed.');
   },
 
 
@@ -389,8 +491,10 @@ export const jobService = {
   // ============================================================
 
   async getMyApplications(
-    studentId: string
+    _studentId: string
   ): Promise<JobApplicationItem[]> {
+    // Preserve the caller signature; the API resolves the applicant from the session.
+    void _studentId;
 
     const response = await fetch(
       `${API_URL}/applications/mine`,
@@ -399,27 +503,9 @@ export const jobService = {
       }
     );
 
-    const data = await response.json();
+    const data = await parseResponse(response, 'Failed to load applications.');
 
-    if (!response.ok) {
-      throw new Error(
-        data.detail ||
-          'Failed to load applications.'
-      );
-    }
-
-    return newestFirst((data || []).map(
-      (app: any) => ({
-        id: app.id,
-        job_id: app.job_id,
-        student_id: app.student_id,
-        resume_url: app.resume_url,
-        cover_letter: app.cover_letter,
-        status: app.status,
-        created_at: app.created_at,
-        job: app.job,
-      })
-    ));
+    return newestFirst(responseArray(data, 'applications').map(normalizeApplication));
   },
 
 
@@ -438,29 +524,9 @@ export const jobService = {
       }
     );
 
-    const data = await response.json();
+    const data = await parseResponse(response, 'Failed to load applicants.');
 
-    if (!response.ok) {
-      throw new Error(
-        data.detail ||
-          'Failed to load applicants.'
-      );
-    }
-
-    return newestFirst((data || []).map(
-      (app: any) => ({
-        id: app.id,
-        job_id: app.job_id,
-        student_id: app.student_id,
-        resume_url: app.resume_url,
-        cover_letter: app.cover_letter,
-        status: app.status,
-        created_at: app.created_at,
-        student_name: app.student_name,
-        student_email: app.student_email,
-        department: app.department,
-      })
-    ));
+    return newestFirst(responseArray(data, 'applicants').map(normalizeApplication));
   },
 
 
@@ -491,15 +557,6 @@ export const jobService = {
       }
     );
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(
-        data.detail ||
-          'Failed to update application status.'
-      );
-    }
-
-    return data;
+    return await parseResponse(response, 'Failed to update application status.');
   },
 };
