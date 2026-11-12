@@ -35,7 +35,7 @@ The preview deployment for commit `353e425` was exercised with Chromium/Playwrig
 - A controlled synthetic `style-src-attr` violation was emitted by the browser and the preview-only `/csp-report` collector returned HTTP 204.
 - One initial preview call to `/api/placements` returned 503; this was not reproduced. Subsequent preview checks of `/api/health`, `/api/placements`, and `/api/gallery?limit=6` returned HTTP 200. The same production endpoints returned HTTP 200 on repeated checks.
 
-The public-route pass is not a substitute for authenticated role testing. The browser had no logged-in student, alumni, or administrator session, so protected dashboards, chat, and authenticated workflows still need a role-based pass before CSP enforcement. The 401 from `/api/profile/me` in these anonymous browser sessions is expected.
+A separate role-layout pass used isolated Playwright profile mocks (not real JWTs or production accounts) to exercise 25 protected views: 9 student, 3 alumni, and 13 administrator routes, including the shared Active Sessions page. Four negative role-routing checks redirected to the expected role home pages. These views returned HTTP 200 with no CSP violations, JavaScript page errors, or 5xx responses. The profile and session/security-event endpoints were stubbed for the test; other business API calls were not authenticated, so this is a rendering/CSP check, not an end-to-end authentication or data-access acceptance test. Real signed-cookie flows and representative data operations still require a test account in a non-production environment.
 
 ## Recommended CSP rollout
 
