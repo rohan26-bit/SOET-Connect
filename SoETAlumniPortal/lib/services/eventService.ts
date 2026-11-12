@@ -420,7 +420,7 @@ export const eventService = {
       id: r.id,
       user_id: r.user_id,
       event_id: r.event_id,
-      created_at: r.created_at || r.registered_at,
+      created_at: r.created_at || r.registered_at || '',
       user_name: r.user_name,
       user_email: r.user_email,
       user_role: r.user_role,
