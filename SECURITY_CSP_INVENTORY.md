@@ -1,8 +1,9 @@
 # Content Security Policy Dependency Inventory
 
-**Audited against:** `main` at commit `d22ab595565f9cc6166e236f6a4f19332c1ffc34` (2026-11-10)  
+**Production baseline:** `main` at commit `9b7dcd42c1a2bf1c889aa6c55c0d028723ab8979` (2026-11-11)  
 **Scope:** Next.js App Router frontend, browser-facing API usage, public image delivery, and production HTML/API responses.  
-**Status:** Inventory only. No Content-Security-Policy header is enabled by this change.
+**Validation branch:** `security/csp-report-only-mainline` at commit `353e42553dadf888f68d09a5743be052856523bc`  
+**Status:** A nonce-based, preview-only `Content-Security-Policy-Report-Only` canary is staged. Production does not receive a CSP header.
 
 ## Findings
 
@@ -22,6 +23,19 @@ The production homepage and `/api/health` both returned HTTP 200 after PR #95. B
 The public `/api/placements` response was inspected: the current placement image URL is a relative `/api/gallery/{id}/image` path, not an external image host.
 
 The preview route `/location-suggestions?type=city&q=Aurangabad` returned HTTP 200 with suggestions. Both `/register/student` and `/register/alumni` returned HTTP 200. The old `/api/location-suggestions` path returned the FastAPI 404 as expected after moving the handler outside the reserved backend prefix.
+
+## Preview report-only validation (2026-11-12)
+
+The preview deployment for commit `353e425` was exercised with Chromium/Playwright after the production deployment remained unchanged.
+
+- Nine public routes returned HTTP 200: `/`, `/login`, `/register`, `/register/student`, `/register/alumni`, `/register/admin`, `/forgot-password`, `/gallery`, and `/gallery/placements`.
+- No application CSP violations or JavaScript page errors were observed across those routes. Next.js inline Flight/hydration scripts carried nonces.
+- The homepage placement marquee rendered with its animation intact after moving its CSS from a runtime-injected `styled-jsx` block into `app/globals.css`.
+- The login role selector remained interactive. Student-registration city autocomplete returned HTTP 200 from the same-origin `/location-suggestions` route.
+- A controlled synthetic `style-src-attr` violation was emitted by the browser and the preview-only `/csp-report` collector returned HTTP 204.
+- One initial preview call to `/api/placements` returned 503; this was not reproduced. Subsequent preview checks of `/api/health`, `/api/placements`, and `/api/gallery?limit=6` returned HTTP 200. The same production endpoints returned HTTP 200 on repeated checks.
+
+A separate role-layout pass used isolated Playwright profile mocks (not real JWTs or production accounts) to exercise 25 protected views: 9 student, 3 alumni, and 13 administrator routes, including the shared Active Sessions page. Four negative role-routing checks redirected to the expected role home pages. These views returned HTTP 200 with no CSP violations, JavaScript page errors, or 5xx responses. The profile and session/security-event endpoints were stubbed for the test; other business API calls were not authenticated, so this is a rendering/CSP check, not an end-to-end authentication or data-access acceptance test. Real signed-cookie flows and representative data operations still require a test account in a non-production environment.
 
 ## Recommended CSP rollout
 
