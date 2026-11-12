@@ -1,0 +1,41 @@
+name: Local Supabase migrations
+
+on:
+  pull_request:
+    paths:
+      - "supabase/**"
+      - ".github/workflows/supabase-local.yml"
+  push:
+    branches: [main]
+    paths:
+      - "supabase/**"
+      - ".github/workflows/supabase-local.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  migration-replay:
+    name: Local Supabase migration replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Supabase CLI v3
+        uses: supabase/setup-cli@v3
+        with:
+          version: 3.0.0
+
+      # No login, link, remote URL, or Production secrets are provided.
+      # Supabase CLI v3 database commands target the local stack by default.
+      - name: Start isolated local Supabase stack and apply migrations
+        run: supabase start
+
+      - name: Verify local migration history
+        run: supabase migration list
+
+      - name: Stop local Supabase stack
+        if: always()
+        run: supabase stop
