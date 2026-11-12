@@ -1,0 +1,56 @@
+name: Local Supabase migrations
+
+on:
+  pull_request:
+    paths:
+      - "supabase/**"
+      - ".github/workflows/supabase-local.yml"
+  push:
+    branches: [main]
+    paths:
+      - "supabase/**"
+      - ".github/workflows/supabase-local.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: local-supabase-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  migration-replay:
+    name: Local Supabase migration replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Supabase CLI v3
+        uses: supabase/setup-cli@v3
+        with:
+          version: 3.0.0
+
+      # No login, link, remote URL, or Production secrets are provided.
+      # Supabase CLI v3 database commands target the local stack by default.
+      - name: Start isolated local Supabase stack and apply migrations
+        shell: bash
+        run: |
+          log_file="${RUNNER_TEMP}/supabase-start.log"
+          if ! supabase start >"$log_file" 2>&1; then
+            # The CLI prints local default API and Storage keys in its startup banner.
+            # Keep failure diagnostics while redacting those values from public CI logs.
+            sed -E \
+              -e 's/sb_secret_[A-Za-z0-9_-]+/[REDACTED]/g' \
+              -e 's/(Access Key[[:space:]]+│[[:space:]]+)[A-Za-z0-9]+/\1[REDACTED]/g' \
+              -e 's/(Secret Key[[:space:]]+│[[:space:]]+)[A-Za-z0-9]+/\1[REDACTED]/g' \
+              "$log_file"
+            exit 1
+          fi
+          echo "Local Supabase stack started; all repository migrations applied successfully."
+
+
+      - name: Stop local Supabase stack
+        if: always()
+        run: supabase stop

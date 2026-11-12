@@ -1,0 +1,6 @@
+# Local-only project identity. This is not the hosted Production project ref.
+project_id = "soet-connect-local"
+
+# Match the Production PostgreSQL major version for reliable local replay.
+[db]
+major_version = 17
