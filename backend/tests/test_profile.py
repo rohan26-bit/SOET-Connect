@@ -223,6 +223,51 @@ def test_update_alumni_profile():
 
 
 # ============================================================
+def test_alumni_directory_visibility_is_persisted_and_enforced():
+    """Alumni can hide and restore their own directory visibility across requests."""
+    headers = setup_test_users()
+
+    initial = test_client.get("/profile/me", headers=headers["alumni"])
+    assert initial.status_code == 200
+    assert initial.json()["is_public_profile"] is True
+
+    hidden = test_client.patch(
+        "/profile/me",
+        json={"is_public_profile": False},
+        headers=headers["alumni"],
+    )
+    assert hidden.status_code == 200
+    assert hidden.json()["is_public_profile"] is False
+
+    directory_hidden = test_client.get("/alumni/directory", headers=headers["student"])
+    assert directory_hidden.status_code == 200
+    assert all(item["id"] != "demo-alumni-id" for item in directory_hidden.json())
+
+    restored = test_client.patch(
+        "/profile/me",
+        json={"is_public_profile": True},
+        headers=headers["alumni"],
+    )
+    assert restored.status_code == 200
+    assert restored.json()["is_public_profile"] is True
+
+    directory_visible = test_client.get("/alumni/directory", headers=headers["student"])
+    assert directory_visible.status_code == 200
+    assert any(item["id"] == "demo-alumni-id" for item in directory_visible.json())
+
+
+def test_non_alumni_cannot_change_directory_visibility():
+    """Students cannot use the alumni-only directory visibility control."""
+    headers = setup_test_users()
+    response = test_client.patch(
+        "/profile/me",
+        json={"is_public_profile": False},
+        headers=headers["student"],
+    )
+    assert response.status_code == 403
+    assert "Only alumni" in response.json()["detail"]
+
+
 # 4. PATCH PARTIAL UPDATE
 # ============================================================
 
