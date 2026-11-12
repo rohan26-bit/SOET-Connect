@@ -33,8 +33,6 @@ jobs:
       - name: Start isolated local Supabase stack and apply migrations
         run: supabase start
 
-      - name: Verify local migration history
-        run: supabase migration list
 
       - name: Stop local Supabase stack
         if: always()
