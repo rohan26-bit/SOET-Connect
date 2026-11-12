@@ -262,6 +262,8 @@ class MockQueryBuilder:
         self.filters: List[tuple] = []
         self.order_by: Optional[tuple] = None
         self.limit_count: Optional[int] = None
+        self.range_start: Optional[int] = None
+        self.range_end: Optional[int] = None
         self.count_mode: Optional[str] = None
         self.select_columns: str = "*"
 
@@ -308,6 +310,12 @@ class MockQueryBuilder:
 
     def limit(self, count: int):
         self.limit_count = count
+        return self
+
+    def range(self, start: int, end: int):
+        """Apply PostgREST's inclusive offset range to the in-memory result."""
+        self.range_start = max(0, int(start))
+        self.range_end = max(self.range_start, int(end))
         return self
 
     def count(self) -> int:
@@ -357,6 +365,8 @@ class MockQueryBuilder:
         if self.order_by:
             col, desc = self.order_by
             matched.sort(key=lambda x: str(x.get(col, "") or ""), reverse=desc)
+        if self.range_start is not None:
+            matched = matched[self.range_start:self.range_end + 1]
         if self.limit_count is not None:
             matched = matched[:self.limit_count]
         return QueryResult(data=matched, count=total_count, status_code=200)
