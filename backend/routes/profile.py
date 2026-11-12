@@ -68,6 +68,7 @@ def _build_profile_response(user: dict) -> dict:
         "avatar_url": user.get("avatar_url"),
         "is_active": user.get("is_active", True),
         "is_verified": user.get("is_verified", False),
+        "is_public_profile": bool(user.get("is_public_profile", True)),
     }
 
     if user.get("role") == "student":
@@ -147,6 +148,14 @@ def update_my_profile(
         update_data["avatar_url"] = profile.avatar_url
 
     role = existing_user.get("role")
+
+    if profile.is_public_profile is not None:
+        if role != "alumni":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only alumni can change directory visibility.",
+            )
+        update_data["is_public_profile"] = profile.is_public_profile
 
     if role == "student":
         current_sub = dict(existing_user.get("student_profile", {}) or {})

@@ -10,6 +10,8 @@ class ProfileUpdateRequest(BaseModel):
     fullName: str | None = Field(default=None, max_length=100)
     name: str | None = Field(default=None, max_length=100)
     avatar_url: str | None = Field(default=None, max_length=3_000_000)
+    # Alumni-only control for inclusion in the student-facing alumni directory.
+    is_public_profile: bool | None = None
 
     # Student fields
     student_id: str | None = Field(default=None, max_length=50)
