@@ -342,6 +342,12 @@ export default function AlumniDashboard() {
           <div>
             <div className="text-2xl font-black text-[#4A3832]">{eventsError ? '—' : eventsLoading ? '…' : myEvents.length}</div>
             <div className="text-xs font-semibold text-[#6B6B6B] uppercase tracking-wider">Events Created</div>
+            {eventsError && (
+              <div className="mt-2 max-w-xs" role="alert">
+                <p className="text-[10px] leading-relaxed text-rose-700">{eventsError}</p>
+                <button type="button" onClick={() => void retryEvents()} className="mt-1 text-[10px] font-bold text-rose-700 underline">Retry events</button>
+              </div>
+            )}
           </div>
         </div>
 
