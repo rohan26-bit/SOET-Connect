@@ -12,15 +12,20 @@ export default function NotificationsPage() {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [markingAllRead, setMarkingAllRead] = useState(false);
 
   const loadNotifications = async () => {
     if (!user) return;
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await notificationService.getNotifications(user.id);
       setNotifications(data);
     } catch (err) {
       console.error(err);
+      setLoadError(err instanceof Error ? err.message : 'Unable to load notifications.');
     } finally {
       setLoading(false);
     }
@@ -31,12 +36,17 @@ export default function NotificationsPage() {
   }, [user]);
 
   const handleMarkAllRead = async () => {
-    if (!user) return;
+    if (!user || markingAllRead) return;
+    setMarkingAllRead(true);
+    setActionError(null);
     try {
       await notificationService.markAllAsRead(user.id);
-      loadNotifications();
+      await loadNotifications();
     } catch (err) {
       console.error(err);
+      setActionError(err instanceof Error ? err.message : 'Unable to mark notifications as read.');
+    } finally {
+      setMarkingAllRead(false);
     }
   };
 
@@ -74,16 +84,25 @@ export default function NotificationsPage() {
 
             {notifications.some((n) => !n.is_read) && (
               <button
+                type="button"
                 onClick={handleMarkAllRead}
-                className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
+                disabled={markingAllRead}
+                className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition disabled:opacity-50"
               >
-                <CheckCheck className="w-3.5 h-3.5" /> Mark All Read
+                <CheckCheck className="w-3.5 h-3.5" /> {markingAllRead ? 'Updating…' : 'Mark All Read'}
               </button>
             )}
           </div>
 
+          {actionError && <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700">{actionError}</p>}
           {loading ? (
             <LoadingState message="Loading notifications" className="py-12" />
+          ) : loadError ? (
+            <div role="alert" className="py-10 text-center">
+              <p className="text-sm font-semibold text-rose-700">Could not load notifications</p>
+              <p className="mt-1 text-xs text-slate-500">{loadError}</p>
+              <button type="button" onClick={() => void loadNotifications()} className="mt-4 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white">Retry</button>
+            </div>
           ) : notifications.length === 0 ? (
             <div className="text-center py-12">
               <Bell className="w-12 h-12 text-slate-300 mx-auto mb-3" />
