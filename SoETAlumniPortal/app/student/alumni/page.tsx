@@ -53,6 +53,7 @@ function safeExternalProfileUrl(value?: string): string | null {
 export default function AlumniDirectoryPage() {
   const [alumni, setAlumni] = useState<AlumniDirectoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [directoryError, setDirectoryError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [department, setDepartment] = useState('All Departments');
   const [sortBy, setSortBy] = useState('');
@@ -66,6 +67,7 @@ export default function AlumniDirectoryPage() {
 
   const fetchAlumni = async () => {
     setLoading(true);
+    setDirectoryError(null);
     try {
       const data = await alumniService.getApprovedAlumni({
         search: search || undefined,
@@ -75,6 +77,7 @@ export default function AlumniDirectoryPage() {
       setAlumni(data);
     } catch (err) {
       console.error('Failed to load alumni directory:', err);
+      setDirectoryError(err instanceof Error ? err.message : 'Unable to load the alumni directory.');
     } finally {
       setLoading(false);
     }
@@ -113,6 +116,32 @@ export default function AlumniDirectoryPage() {
       });
     return () => { active = false; };
   }, []);
+
+  const retryClassLeaderboard = async () => {
+    setLeaderboardLoading(true);
+    setLeaderboardError(null);
+    try {
+      const data = await alumniService.getClassLeaderboard();
+      setClassLeaderboard(data.leaderboard || []);
+    } catch (err) {
+      setLeaderboardError(err instanceof Error ? err.message : 'Unable to load the Hall of Fame.');
+    } finally {
+      setLeaderboardLoading(false);
+    }
+  };
+
+  const retryIndividualLeaderboard = async () => {
+    setIndividualLeaderboardLoading(true);
+    setIndividualLeaderboardError(null);
+    try {
+      const data = await alumniService.getIndividualLeaderboard(10);
+      setIndividualLeaderboard(data.leaderboard || []);
+    } catch (err) {
+      setIndividualLeaderboardError(err instanceof Error ? err.message : 'Unable to load individual contributors.');
+    } finally {
+      setIndividualLeaderboardLoading(false);
+    }
+  };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,8 +189,9 @@ export default function AlumniDirectoryPage() {
             Calculating class contributions…
           </div>
         ) : leaderboardError ? (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-700">
-            {leaderboardError}
+          <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-700">
+            <p>{leaderboardError}</p>
+            <button type="button" onClick={() => void retryClassLeaderboard()} className="mt-2 font-bold underline">Retry class rankings</button>
           </div>
         ) : classLeaderboard.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-amber-200 bg-white/70 p-6 text-center text-xs text-slate-500">
@@ -269,8 +299,9 @@ export default function AlumniDirectoryPage() {
             Ranking individual contributions…
           </div>
         ) : individualLeaderboardError ? (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-700">
-            {individualLeaderboardError}
+          <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-700">
+            <p>{individualLeaderboardError}</p>
+            <button type="button" onClick={() => void retryIndividualLeaderboard()} className="mt-2 font-bold underline">Retry individual rankings</button>
           </div>
         ) : individualLeaderboard.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-blue-200 bg-white/75 p-6 text-center text-xs text-slate-500">
@@ -411,6 +442,12 @@ export default function AlumniDirectoryPage() {
       {/* Alumni Grid */}
       {loading ? (
         <LoadingState message="Loading alumni profiles" className="py-16" />
+      ) : directoryError ? (
+        <div role="alert" className="rounded-3xl border border-rose-200 bg-rose-50 p-10 text-center">
+          <h3 className="text-base font-bold text-rose-800">Unable to load the alumni directory</h3>
+          <p className="mt-2 text-xs text-rose-700">{directoryError}</p>
+          <button type="button" onClick={() => void fetchAlumni()} className="mt-4 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white">Retry directory search</button>
+        </div>
       ) : alumni.length === 0 ? (
         <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm">
           <GraduationCap className="w-12 h-12 text-slate-300 mx-auto mb-3" />
