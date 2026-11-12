@@ -66,6 +66,10 @@ export default function AdminEventsPage() {
   const { user } = useAuth();
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [deleteConfirmationId, setDeleteConfirmationId] = useState<string | null>(null);
+  const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'past'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewingEvent, setViewingEvent] = useState<EventItem | null>(null);
@@ -79,11 +83,13 @@ export default function AdminEventsPage() {
 
   const loadEvents = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await eventService.getAllEventsForAdmin();
       setEvents(data);
     } catch (err) {
       console.error(err);
+      setLoadError(err instanceof Error ? err.message : 'Unable to load events.');
     } finally {
       setLoading(false);
     }
@@ -94,21 +100,33 @@ export default function AdminEventsPage() {
   }, []);
 
   const handleStatusChange = async (eventId: string, status: 'approved' | 'rejected' | 'cancelled') => {
+    setActionError(null);
     try {
       await eventService.updateEventStatus(eventId, status);
-      loadEvents();
+      await loadEvents();
     } catch (err: any) {
-      alert(err.message || 'Failed to update event status.');
+      setActionError(err.message || 'Failed to update event status.');
     }
   };
 
-  const handleDelete = async (eventId: string) => {
-    if (!confirm('Are you sure you want to permanently delete this event?')) return;
+  const handleDelete = (eventId: string) => {
+    setActionError(null);
+    setDeleteConfirmationId(eventId);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirmationId || deletingEventId) return;
+    const eventId = deleteConfirmationId;
+    setDeletingEventId(eventId);
+    setActionError(null);
     try {
       await eventService.deleteEvent(eventId);
-      loadEvents();
+      setDeleteConfirmationId(null);
+      await loadEvents();
     } catch (err: any) {
-      alert(err.message || 'Failed to delete event.');
+      setActionError(err.message || 'Failed to delete event.');
+    } finally {
+      setDeletingEventId(null);
     }
   };
 
@@ -294,8 +312,20 @@ export default function AdminEventsPage() {
       </div>
 
       {/* Events List */}
+      {actionError && (
+        <div role="alert" className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800">
+          <span>{actionError}</span>
+          <button type="button" onClick={() => setActionError(null)} className="shrink-0 font-bold underline">Dismiss</button>
+        </div>
+      )}
       {loading ? (
         <LoadingState message="Loading events" className="py-16" />
+      ) : loadError ? (
+        <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-8 text-center">
+          <p className="text-sm font-bold text-rose-800">Unable to load events</p>
+          <p className="mt-1 text-xs text-rose-700">{loadError}</p>
+          <button type="button" onClick={() => void loadEvents()} className="mt-4 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white">Retry</button>
+        </div>
       ) : filteredEvents.length === 0 ? (
         <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm">
           <Calendar className="w-12 h-12 text-slate-300 mx-auto mb-3" />
@@ -404,6 +434,16 @@ export default function AdminEventsPage() {
                   </div>
                 )}
               </div>
+
+              {deleteConfirmationId === event.id && (
+                <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3">
+                  <p className="text-xs font-semibold text-rose-800">Permanently delete this event and its related registrations? This cannot be undone.</p>
+                  <div className="mt-3 flex flex-wrap justify-end gap-2">
+                    <button type="button" onClick={() => setDeleteConfirmationId(null)} disabled={deletingEventId === event.id} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50">Cancel</button>
+                    <button type="button" onClick={() => void confirmDelete()} disabled={deletingEventId === event.id} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{deletingEventId === event.id ? 'Deleting…' : 'Confirm delete'}</button>
+                  </div>
+                </div>
+              )}
 
               {/* Actions */}
               <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
