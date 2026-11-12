@@ -363,6 +363,10 @@ def get_alumni_directory(
     results = []
 
     for alumni in alumni_users:
+        # Legacy accounts default to visible; opted-out alumni are excluded.
+        if alumni.get("is_public_profile", True) is False:
+            continue
+
         profile = alumni.get("alumni_profile", {}) or {}
 
         if department:
