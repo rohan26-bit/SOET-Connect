@@ -18,23 +18,27 @@ import {
   Mail,
   Phone,
   X,
+  AlertCircle,
 } from 'lucide-react';
 
 export default function AdminVerifyPage() {
   const [pendingAlumni, setPendingAlumni] = useState<PendingAlumni[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [selectedAlumni, setSelectedAlumni] =
     useState<PendingAlumni | null>(null);
 
   const loadPending = async () => {
     setLoading(true);
+    setLoadError(null);
 
     try {
       const data = await adminService.getPendingAlumni();
       setPendingAlumni(data);
     } catch (err) {
-      console.error(err);
+      setLoadError(err instanceof Error ? err.message : 'Unable to load pending alumni requests. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -48,14 +52,16 @@ export default function AdminVerifyPage() {
     userId: string,
     status: 'approved' | 'rejected'
   ) => {
+    if (actionLoading) return;
     setActionLoading(userId);
+    setActionError(null);
 
     try {
       await adminService.updateAlumniVerification(userId, status);
       setSelectedAlumni(null);
       await loadPending();
-    } catch (err: any) {
-      alert(err.message || 'Action failed');
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to update this verification request. Please try again.');
     } finally {
       setActionLoading(null);
     }
@@ -100,6 +106,13 @@ export default function AdminVerifyPage() {
 
         {loading ? (
           <LoadingState message="Loading alumni profiles" className="p-16" />
+        ) : loadError ? (
+          <div className="p-12 text-center">
+            <AlertCircle className="mx-auto mb-3 h-6 w-6 text-rose-500" />
+            <p role="alert" className="text-sm font-semibold text-slate-700">Unable to load the verification queue.</p>
+            <p className="mt-1 text-xs text-slate-500">{loadError}</p>
+            <button type="button" onClick={() => void loadPending()} className="mt-4 rounded-xl bg-[#4A3832] px-4 py-2 text-xs font-bold text-white">Retry</button>
+          </div>
         ) : pendingAlumni.length === 0 ? (
           <div className="p-12 text-center">
             <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
@@ -231,6 +244,7 @@ export default function AdminVerifyPage() {
               </div>
 
               <button
+                type="button"
                 onClick={() => setSelectedAlumni(null)}
                 className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition"
               >
@@ -480,6 +494,9 @@ export default function AdminVerifyPage() {
             </div>
 
             {/* Modal Footer */}
+            {actionError && (
+              <div role="alert" className="mx-6 mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{actionError}</div>
+            )}
             <div className="px-6 py-5 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-between gap-3">
               <button
                 onClick={() => setSelectedAlumni(null)}
@@ -490,6 +507,7 @@ export default function AdminVerifyPage() {
 
               <div className="flex flex-wrap gap-2">
                 <button
+                  type="button"
                   disabled={actionLoading === selectedAlumni.id}
                   onClick={() =>
                     handleAction(selectedAlumni.id, 'rejected')
