@@ -36,6 +36,9 @@ export default function AdminJobsPage() {
   const [jobs, setJobs] = useState<JobItem[]>([]);
   const [viewingJobDetails, setViewingJobDetails] = useState<JobItem | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmDeleteJobId, setConfirmDeleteJobId] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'expired'>('all');
 
   // Post Job modal state
@@ -76,6 +79,7 @@ export default function AdminJobsPage() {
 
   const loadJobs = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [jobsData, partData] = await Promise.all([
         jobService.getAllJobsForAdmin(),
@@ -91,6 +95,7 @@ export default function AdminJobsPage() {
       }
     } catch (err) {
       console.error(err);
+      setLoadError(err instanceof Error ? err.message : 'Unable to load job postings.');
     } finally {
       setLoading(false);
     }
@@ -178,7 +183,7 @@ export default function AdminJobsPage() {
       setNewDeadlineToSet('');
       await loadJobs();
     } catch (err: any) {
-      alert(err.message || 'Failed to update job deadline.');
+      setActionError(err.message || 'Failed to update job deadline.');
     } finally {
       setUpdatingDeadline(false);
     }
@@ -187,19 +192,20 @@ export default function AdminJobsPage() {
   const handleStatusChange = async (jobId: string, status: 'approved' | 'rejected') => {
     try {
       await jobService.updateJobStatus(jobId, status);
-      loadJobs();
+      await loadJobs();
     } catch (err: any) {
-      alert(err.message || 'Failed to update job status.');
+      setActionError(err.message || 'Failed to update job status.');
     }
   };
 
   const handleDelete = async (jobId: string) => {
-    if (!confirm('Are you sure you want to permanently remove this job posting?')) return;
+    setActionError(null);
     try {
       await jobService.deleteJob(jobId);
-      loadJobs();
+      setConfirmDeleteJobId(null);
+      await loadJobs();
     } catch (err: any) {
-      alert(err.message || 'Failed to delete job.');
+      setActionError(err.message || 'Failed to delete job.');
     }
   };
 
@@ -282,8 +288,11 @@ export default function AdminJobsPage() {
         ))}
       </div>
 
+      {actionError && <div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{actionError}</div>}
       {loading ? (
         <LoadingState message="Loading opportunities" className="py-16" />
+      ) : loadError ? (
+        <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700"><p>{loadError}</p><button type="button" onClick={loadJobs} className="mt-3 rounded-lg bg-red-700 px-4 py-2 font-semibold text-white">Retry loading jobs</button></div>
       ) : filteredJobs.length === 0 ? (
         <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm">
           <Briefcase className="w-12 h-12 text-slate-300 mx-auto mb-3" />
@@ -403,12 +412,14 @@ export default function AdminJobsPage() {
               </div>
 
               <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
-                <button
-                  onClick={() => handleDelete(job.id)}
+                {confirmDeleteJobId === job.id ? (
+                  <div className="flex items-center gap-2 text-xs"><span>Delete permanently?</span><button type="button" onClick={() => handleDelete(job.id)} className="font-bold text-red-700">Confirm</button><button type="button" onClick={() => setConfirmDeleteJobId(null)} className="font-semibold text-slate-600">Cancel</button></div>
+                ) : <button
+                  onClick={() => { setActionError(null); setConfirmDeleteJobId(job.id); }}
                   className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 font-bold"
                 >
                   <Trash2 className="w-3.5 h-3.5" /> Remove
-                </button>
+                </button>}
 
                 <div className="flex items-center gap-2 flex-wrap">
                   <button

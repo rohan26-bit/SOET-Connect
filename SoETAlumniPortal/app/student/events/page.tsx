@@ -17,6 +17,9 @@ export default function EventsPage() {
   const { user } = useAuth();
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [attendeesError, setAttendeesError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [viewingEvent, setViewingEvent] = useState<EventItem | null>(null);
 
@@ -46,11 +49,13 @@ export default function EventsPage() {
 
   const loadEvents = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await eventService.getApprovedEvents(user?.id);
       setEvents(data);
     } catch (err) {
       console.error(err);
+      setLoadError(err instanceof Error ? err.message : 'Unable to load events.');
     } finally {
       setLoading(false);
     }
@@ -67,7 +72,7 @@ export default function EventsPage() {
       await eventService.registerForEvent(eventId, user.id);
       loadEvents();
     } catch (err: any) {
-      alert(err.message || 'Registration failed.');
+      setActionError(err.message || 'Registration failed.');
     } finally {
       setActionLoading(null);
     }
@@ -80,7 +85,7 @@ export default function EventsPage() {
       await eventService.cancelRegistration(eventId, user.id);
       loadEvents();
     } catch (err: any) {
-      alert(err.message || 'Failed to cancel registration.');
+      setActionError(err.message || 'Failed to cancel registration.');
     } finally {
       setActionLoading(null);
     }
@@ -124,7 +129,7 @@ export default function EventsPage() {
         tags: '',
         attachment: null,
       });
-      alert('Event submitted! It will be listed once reviewed by the administrator.');
+      setCreateError('Event submitted successfully and is awaiting administrator review.');
     } catch (err: any) {
       setCreateError(err.message || 'Failed to create event.');
     } finally {
@@ -135,11 +140,13 @@ export default function EventsPage() {
   const viewAttendees = async (eventId: string) => {
     setSelectedEventId(eventId);
     setLoadingAttendees(true);
+    setAttendeesError(null);
     try {
       const list = await eventService.getEventAttendees(eventId);
       setAttendees(list);
     } catch (err) {
       console.error(err);
+      setAttendeesError(err instanceof Error ? err.message : 'Unable to load attendees.');
     } finally {
       setLoadingAttendees(false);
     }
@@ -175,8 +182,11 @@ export default function EventsPage() {
         )}
       </div>
 
+      {actionError && <div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{actionError}</div>}
       {loading ? (
         <LoadingState message="Loading events" className="py-16" />
+      ) : loadError ? (
+        <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700"><p>{loadError}</p><button type="button" onClick={loadEvents} className="mt-3 rounded-lg bg-red-700 px-4 py-2 font-semibold text-white">Retry loading events</button></div>
       ) : events.length === 0 ? (
         <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm">
           <Calendar className="w-12 h-12 text-slate-300 mx-auto mb-3" />
@@ -329,7 +339,7 @@ export default function EventsPage() {
             <h3 className="text-base font-bold text-slate-900 mb-1">Registered Attendees</h3>
             <p className="text-xs text-slate-500 mb-4">Total: {attendees.length} people</p>
 
-            {loadingAttendees ? (
+            {attendeesError ? <div role="alert" className="text-sm text-red-700">{attendeesError} <button type="button" onClick={() => selectedEventId && viewAttendees(selectedEventId)} className="underline font-bold">Retry</button></div> : loadingAttendees ? (
               <LoadingState message="Loading attendees" className="py-8" />
             ) : attendees.length === 0 ? (
               <div className="py-8 text-center text-xs text-slate-400">No registrations yet.</div>
