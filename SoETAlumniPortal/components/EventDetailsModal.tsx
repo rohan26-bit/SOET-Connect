@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useAccessibleDialog } from '@/hooks/useAccessibleDialog';
 import {
   CalendarDays,
   Clock3,
@@ -63,14 +63,7 @@ export default function EventDetailsModal({
   actionDisabled = false,
   actionVariant = 'primary',
 }: EventDetailsModalProps) {
-  useEffect(() => {
-    if (!event) return;
-    const handleKeyDown = (keyboardEvent: KeyboardEvent) => {
-      if (keyboardEvent.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [event, onClose]);
+  const dialogRef = useAccessibleDialog<HTMLDivElement>(Boolean(event), onClose);
 
   if (!event) return null;
 
@@ -86,6 +79,8 @@ export default function EventDetailsModal({
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-5"
       onMouseDown={(mouseEvent) => {
         if (mouseEvent.target === mouseEvent.currentTarget) onClose();
