@@ -3,6 +3,7 @@
 These tests intentionally live outside backend/tests so the mock-mode conftest
 used by the fast unit suite cannot silently replace the real PostgREST client.
 """
+import os
 import uuid
 
 from fastapi.testclient import TestClient
@@ -12,7 +13,7 @@ from main import app
 
 
 LOCAL_ORIGIN = "http://localhost:3000"
-ADMIN_SECRET = "local-ci-admin-registration-secret"
+ADMIN_SECRET = os.environ["ADMIN_REGISTRATION_SECRET"]
 
 
 def _register_admin(client: TestClient, email: str) -> None:
