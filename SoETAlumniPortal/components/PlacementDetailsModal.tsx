@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useAccessibleDialog } from '@/hooks/useAccessibleDialog';
 import { Award, CalendarDays, GraduationCap, Building2, X } from 'lucide-react';
 import { PlacementCelebration } from '@/lib/services/placementService';
 import PostedAt from '@/components/PostedAt';
@@ -27,14 +27,7 @@ export default function PlacementDetailsModal({
   onClose,
   showPublishingStatus = false,
 }: PlacementDetailsModalProps) {
-  useEffect(() => {
-    if (!placement) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [placement, onClose]);
+  const dialogRef = useAccessibleDialog<HTMLDivElement>(Boolean(placement), onClose);
 
   if (!placement) return null;
 
@@ -42,6 +35,8 @@ export default function PlacementDetailsModal({
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/65 p-3 backdrop-blur-sm sm:p-5"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
