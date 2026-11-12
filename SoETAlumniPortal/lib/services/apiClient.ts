@@ -38,18 +38,27 @@ export function getAuthHeaders(): Record<string, string> {
 /**
  * Centralized response handler for authenticated API requests.
  */
-export async function handleApiResponse<T = any>(response: Response): Promise<T> {
+export async function handleApiResponse<T = unknown>(response: Response): Promise<T> {
   if (response.status === 401) {
     redirectToLogin('expired');
     throw new Error('Your session has expired. Please log in again.');
   }
 
-  const data = await response.json().catch(() => ({}));
+  const data: unknown = await response.json().catch(() => null);
   if (!response.ok) {
-    const detail =
-      typeof data.detail === 'string'
-        ? data.detail
-        : JSON.stringify(data.detail || 'Request failed.');
+    let detail = 'Request failed.';
+    if (typeof data === 'object' && data !== null && 'detail' in data) {
+      const responseDetail = data.detail;
+      if (typeof responseDetail === 'string' && responseDetail.trim()) {
+        detail = responseDetail;
+      } else if (responseDetail != null) {
+        try {
+          detail = JSON.stringify(responseDetail) || detail;
+        } catch {
+          // Retain the safe fallback when an unusual response cannot be serialized.
+        }
+      }
+    }
     throw new Error(detail);
   }
 
