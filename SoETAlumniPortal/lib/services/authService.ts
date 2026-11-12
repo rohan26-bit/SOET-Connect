@@ -419,7 +419,9 @@ export const authService = {
       cache: 'no-store',
     });
 
-    if (response.status === 401) {
+    if ([401, 403, 404].includes(response.status)) {
+      // Unauthorized, deactivated, and deleted accounts no longer have a valid
+      // dashboard session. A 5xx/network error below remains retryable.
       localStorage.removeItem('soet_user');
       return null;
     }
