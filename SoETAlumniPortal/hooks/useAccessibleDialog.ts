@@ -19,7 +19,12 @@ export function useAccessibleDialog<T extends HTMLElement>(
 ) {
   const dialogRef = useRef<T>(null);
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+
+  // Keep the Escape handler pointed at the latest callback without mutating
+  // a ref during render. This also runs before the dialog listener effect.
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!isOpen) return;
