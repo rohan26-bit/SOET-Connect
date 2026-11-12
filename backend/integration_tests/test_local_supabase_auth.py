@@ -4,7 +4,13 @@ These tests intentionally live outside backend/tests so the mock-mode conftest
 used by the fast unit suite cannot silently replace the real PostgREST client.
 """
 import os
+import sys
 import uuid
+from pathlib import Path
+
+# Pytest's import mode adds the integration_tests directory, not always the
+# backend root; put the backend modules on the path before importing the app.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fastapi.testclient import TestClient
 
