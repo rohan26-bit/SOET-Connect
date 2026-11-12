@@ -42,6 +42,27 @@ export interface EventItem {
   } | null;
 }
 
+interface EventApiRecord extends Partial<EventItem> {
+  id: string;
+  created_by: string;
+  title: string;
+  description: string;
+  location: string;
+  status: EventItem['status'];
+  created_at: string;
+  start_date?: string;
+  virtual_link?: string;
+}
+
+interface EventAttendeeRecord extends Partial<EventAttendeeItem> {
+  id: string;
+  user_id: string;
+  event_id: string;
+  user_name: string;
+  user_email: string;
+  user_role: string;
+}
+
 export interface EventAttendeeItem {
   id: string;
   user_id: string;
@@ -59,7 +80,7 @@ function getAuthHeaders(): Record<string, string> {
   return { 'Content-Type': 'application/json' };
 }
 
-function normalizeEvent(e: any): EventItem {
+function normalizeEvent(e: EventApiRecord): EventItem {
   const parsed = parseAttachmentFromText(e.description);
   return {
     id: e.id,
@@ -94,6 +115,18 @@ function normalizeEvent(e: any): EventItem {
   };
 }
 
+function getArrayResponse<T>(data: unknown): T[] {
+  return Array.isArray(data) ? data as T[] : [];
+}
+
+function getErrorMessage(data: unknown, fallback: string): string {
+  if (typeof data === 'object' && data !== null && 'detail' in data) {
+    const detail = data.detail;
+    if (typeof detail === 'string' && detail.trim()) return detail;
+  }
+  return fallback;
+}
+
 function newestEventsFirst(events: EventItem[]): EventItem[] {
   return [...events].sort((a, b) => {
     const aTime = Date.parse(a.created_at || a.event_date || '');
@@ -114,11 +147,11 @@ export const eventService = {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.detail || 'Failed to load events.');
+      throw new Error(getErrorMessage(data, 'Failed to load events.'));
     }
 
-    return newestEventsFirst((data || [])
-      .filter((e: any) => e.status === 'approved')
+    return newestEventsFirst(getArrayResponse<EventApiRecord>(data)
+      .filter((e) => e.status === 'approved')
       .map(normalizeEvent));
   },
 
@@ -133,10 +166,10 @@ export const eventService = {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.detail || 'Failed to load events for admin.');
+      throw new Error(getErrorMessage(data, 'Failed to load events for admin.'));
     }
 
-    return newestEventsFirst((data || []).map(normalizeEvent));
+    return newestEventsFirst(getArrayResponse<EventApiRecord>(data).map(normalizeEvent));
   },
 
   // ============================================================
@@ -151,11 +184,11 @@ export const eventService = {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.detail || 'Failed to load your events.');
+      throw new Error(getErrorMessage(data, 'Failed to load your events.'));
     }
 
-    return newestEventsFirst((data || [])
-      .filter((e: any) => !userId || String(e.created_by) === String(userId))
+    return newestEventsFirst(getArrayResponse<EventApiRecord>(data)
+      .filter((e) => !userId || String(e.created_by) === String(userId))
       .map(normalizeEvent));
   },
 
@@ -230,7 +263,7 @@ export const eventService = {
     eventId: string,
     eventData: Partial<EventItem>
   ) {
-    const payload: any = { ...eventData };
+    const payload: Partial<EventItem> = { ...eventData };
     if (eventData.attachment !== undefined && eventData.description !== undefined) {
       payload.description = serializeAttachmentIntoText(
         eventData.description,
@@ -355,12 +388,12 @@ export const eventService = {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.detail || 'Failed to load your registrations.');
+      throw new Error(getErrorMessage(data, 'Failed to load your registrations.'));
     }
 
-    return (data || []).sort((a: any, b: any) => {
-      const aTime = Date.parse(a.created_at || a.registered_at || '');
-      const bTime = Date.parse(b.created_at || b.registered_at || '');
+    return getArrayResponse<Record<string, unknown>>(data).sort((a, b) => {
+      const aTime = Date.parse(String(a.created_at || a.registered_at || ''));
+      const bTime = Date.parse(String(b.created_at || b.registered_at || ''));
       return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
     });
   },
@@ -379,10 +412,10 @@ export const eventService = {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.detail || 'Failed to load event attendees.');
+      throw new Error(getErrorMessage(data, 'Failed to load event attendees.'));
     }
 
-    return (data || []).map((r: any) => ({
+    return getArrayResponse<EventAttendeeRecord>(data).map((r) => ({
       id: r.id,
       user_id: r.user_id,
       event_id: r.event_id,
