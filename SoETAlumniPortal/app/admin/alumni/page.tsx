@@ -11,6 +11,9 @@ import DeleteUserConfirmationModal from '@/components/admin/DeleteUserConfirmati
 export default function AdminAlumniPage() {
   const [alumni, setAlumni] = useState<UserManagementItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [updatingAlumniId, setUpdatingAlumniId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [exporting, setExporting] = useState<boolean>(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -21,13 +24,14 @@ export default function AdminAlumniPage() {
 
   const loadAlumni = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await adminService.getAllAlumni();
       setAlumni(data.filter((alum) =>
         (alum.verification_status || (alum.is_verified ? 'approved' : 'pending')).toLowerCase() !== 'pending'
       ));
     } catch (err) {
-      console.error(err);
+      setLoadError(err instanceof Error ? err.message : 'Unable to load alumni records. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -38,11 +42,16 @@ export default function AdminAlumniPage() {
   }, []);
 
   const handleToggleActive = async (alum: UserManagementItem) => {
+    if (updatingAlumniId) return;
+    setUpdatingAlumniId(alum.id);
+    setActionError(null);
     try {
       await adminService.toggleUserActive(alum.id, alum.is_active);
-      loadAlumni();
-    } catch (err: any) {
-      alert(err.message || 'Action failed');
+      await loadAlumni();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to update this alumni account. Please try again.');
+    } finally {
+      setUpdatingAlumniId(null);
     }
   };
 
@@ -94,6 +103,17 @@ export default function AdminAlumniPage() {
         <span className="mx-2 text-[#DDD7D2]">/</span>
         <span className="text-[#F28C38]">Alumni Management</span>
       </div>
+
+      {/* Inline action feedback */}
+      {actionError && (
+        <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-800">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+            <span>{actionError}</span>
+          </div>
+          <button type="button" onClick={() => setActionError(null)} className="rounded-lg p-1 text-rose-600 transition hover:bg-rose-100 hover:text-rose-800" aria-label="Dismiss error">✕</button>
+        </div>
+      )}
 
       {/* Export error alert */}
       {exportError && (
@@ -153,6 +173,13 @@ export default function AdminAlumniPage() {
 
         {loading ? (
           <LoadingState message="Loading alumni records" className="p-16" />
+        ) : loadError ? (
+          <div className="p-12 text-center">
+            <AlertCircle className="mx-auto mb-3 h-6 w-6 text-rose-500" />
+            <p role="alert" className="text-sm font-semibold text-slate-700">Unable to load alumni records.</p>
+            <p className="mt-1 text-xs text-slate-500">{loadError}</p>
+            <button type="button" onClick={() => void loadAlumni()} className="mt-4 rounded-xl bg-[#4A3832] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#352722]">Retry</button>
+          </div>
         ) : filtered.length === 0 ? (
           <div className="p-12 text-center text-xs text-slate-400">No alumni records found.</div>
         ) : (
@@ -208,14 +235,17 @@ export default function AdminAlumniPage() {
                           View Details
                         </button>
                         <button
-                          onClick={() => handleToggleActive(a)}
-                          className={`px-3 py-1.5 rounded-xl font-bold text-xs transition ${
+                          type="button"
+                          onClick={() => void handleToggleActive(a)}
+                          disabled={updatingAlumniId !== null}
+                          aria-busy={updatingAlumniId === a.id}
+                          className={`px-3 py-1.5 rounded-xl font-bold text-xs transition disabled:cursor-not-allowed disabled:opacity-50 ${
                             a.is_active
                               ? 'bg-red-50 text-red-700 hover:bg-red-100'
                               : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                           }`}
                         >
-                          {a.is_active ? 'Suspend' : 'Reactivate'}
+                          {updatingAlumniId === a.id ? 'Updating…' : a.is_active ? 'Suspend' : 'Reactivate'}
                         </button>
                         <button
                           type="button"
