@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useAccessibleDialog } from '@/hooks/useAccessibleDialog';
 import { AlertTriangle, Loader2, Trash2, X } from 'lucide-react';
 import { UserManagementItem } from '@/lib/services/adminService';
 
@@ -19,6 +20,7 @@ export default function DeleteUserConfirmationModal({
   onClose,
   onConfirm,
 }: DeleteUserConfirmationModalProps) {
+  const dialogRef = useAccessibleDialog<HTMLDivElement>(Boolean(user), () => { if (!isDeleting) onClose(); });
   const [confirmation, setConfirmation] = useState('');
 
   useEffect(() => {
@@ -32,8 +34,11 @@ export default function DeleteUserConfirmationModal({
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       className="fixed inset-0 z-[100] flex items-center justify-center bg-[#241A17]/60 p-4 backdrop-blur-[2px]"
       role="presentation"
+      onMouseDown={(event) => { if (event.target === event.currentTarget && !isDeleting) onClose(); }}
     >
       <section
         role="dialog"
