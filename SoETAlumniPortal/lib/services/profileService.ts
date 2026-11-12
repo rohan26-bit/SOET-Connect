@@ -124,6 +124,24 @@ export const profileService = {
   },
 
   // ============================================================
+  // ============================================================
+  // UPDATE ALUMNI DIRECTORY VISIBILITY
+  // ============================================================
+
+  async updateProfileVisibility(isPublic: boolean) {
+    const response = await fetch(`${API_URL}/profile/me`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ is_public_profile: isPublic }),
+    });
+
+    const updated = await parseResponse(response);
+    syncLocalStorageUser(updated);
+    return updated;
+  },
+
+  // ============================================================
   // UPLOAD AVATAR
   // ============================================================
 
