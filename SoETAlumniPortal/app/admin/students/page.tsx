@@ -4,13 +4,15 @@ import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import LoadingState from '@/components/LoadingState';
 import { adminService, UserManagementItem } from '@/lib/services/adminService';
-import { GraduationCap, Search, Clock, Eye, Trash2 } from 'lucide-react';
+import { GraduationCap, Search, Clock, Eye, Trash2, AlertCircle } from 'lucide-react';
 import UserDetailsModal from '@/components/admin/UserDetailsModal';
 import DeleteUserConfirmationModal from '@/components/admin/DeleteUserConfirmationModal';
 
 export default function AdminStudentsPage() {
   const [students, setStudents] = useState<UserManagementItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<UserManagementItem | null>(null);
@@ -20,11 +22,12 @@ export default function AdminStudentsPage() {
 
   const loadStudents = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await adminService.getPendingStudents();
       setStudents(data);
     } catch (err) {
-      console.error(err);
+      setLoadError(err instanceof Error ? err.message : 'Unable to load pending student requests. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -37,11 +40,12 @@ export default function AdminStudentsPage() {
   const handleVerifyStudent = async (student: UserManagementItem, status: 'approved' | 'rejected') => {
     if (processingId) return;
     setProcessingId(student.id);
+    setActionError(null);
     try {
       await adminService.updateStudentVerification(student.id, status);
       await loadStudents();
-    } catch (err: any) {
-      alert(err.message || 'Verification update failed.');
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to update this student verification. Please try again.');
     } finally {
       setProcessingId(null);
     }
@@ -93,6 +97,13 @@ export default function AdminStudentsPage() {
         <span className="text-[#F28C38]">Student Verification</span>
       </div>
 
+      {actionError && (
+        <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-800">
+          <div className="flex items-center gap-2"><AlertCircle className="h-4 w-4 shrink-0 text-rose-600" /><span>{actionError}</span></div>
+          <button type="button" onClick={() => setActionError(null)} aria-label="Dismiss error" className="rounded-lg p-1 text-rose-600 hover:bg-rose-100">✕</button>
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-black text-[#4A3832] tracking-tight">Student Verification</h1>
@@ -125,6 +136,13 @@ export default function AdminStudentsPage() {
 
         {loading ? (
           <LoadingState message="Loading student records" className="p-16" />
+        ) : loadError ? (
+          <div className="p-12 text-center">
+            <AlertCircle className="mx-auto mb-3 h-6 w-6 text-rose-500" />
+            <p role="alert" className="text-sm font-semibold text-slate-700">Unable to load student requests.</p>
+            <p className="mt-1 text-xs text-slate-500">{loadError}</p>
+            <button type="button" onClick={() => void loadStudents()} className="mt-4 rounded-xl bg-[#4A3832] px-4 py-2 text-xs font-bold text-white">Retry</button>
+          </div>
         ) : filtered.length === 0 ? (
           <div className="p-12 text-center text-xs text-slate-400">No pending student requests. New registrations will appear here.</div>
         ) : (
@@ -177,6 +195,7 @@ export default function AdminStudentsPage() {
                             View Details
                           </button>
                           <button
+                            type="button"
                             disabled={isBusy}
                             onClick={() => handleVerifyStudent(s, 'approved')}
                             className="px-3 py-1.5 rounded-xl font-bold text-xs bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition shadow-sm"
