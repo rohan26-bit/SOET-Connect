@@ -608,6 +608,8 @@ export const adminService = {
     userId: string,
     _currentActiveStatus?: boolean
   ) {
+    // Preserve the caller signature; the backend reads the current status atomically.
+    void _currentActiveStatus;
     const response = await fetch(
       `${API_URL}/admin/users/${encodeURIComponent(userId)}/active`,
       {
