@@ -457,7 +457,7 @@ export default function JobsPage() {
                 </div>
               ))}
             </div>
-          )}
+          ) : null}
         </div>
       )}
 
