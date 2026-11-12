@@ -182,19 +182,288 @@ function sortNewestFirst<T extends { created_at?: string }>(items: T[]): T[] {
 
 
 
-async function parseResponse(response: Response) {
-  const data = await response.json().catch(() => ({}));
+type ApiRecord = Record<string, unknown>;
+
+export interface AdminActionResult {
+  message?: string;
+  user_id?: string;
+  status?: string;
+  is_verified?: boolean;
+  is_active?: boolean;
+  role?: string;
+}
+
+function isRecord(value: unknown): value is ApiRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function asRecord(value: unknown, label: string): ApiRecord {
+  if (!isRecord(value)) throw new Error('Unexpected ' + label + ' response format.');
+  return value;
+}
+
+function readString(record: ApiRecord, key: string, fallback = ''): string {
+  return typeof record[key] === 'string' ? record[key] as string : fallback;
+}
+
+function readOptionalString(record: ApiRecord, key: string): string | undefined {
+  return typeof record[key] === 'string' ? record[key] as string : undefined;
+}
+
+function readBoolean(record: ApiRecord, key: string, fallback: boolean): boolean {
+  return typeof record[key] === 'boolean' ? record[key] as boolean : fallback;
+}
+
+function readOptionalBoolean(record: ApiRecord, key: string): boolean | undefined {
+  return typeof record[key] === 'boolean' ? record[key] as boolean : undefined;
+}
+
+function readNumber(record: ApiRecord, key: string, fallback = 0): number {
+  const value = record[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function readOptionalNumber(record: ApiRecord, key: string): number | undefined {
+  const value = record[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+}
+
+function readRecordArray(value: unknown, label: string): ApiRecord[] {
+  if (!Array.isArray(value)) {
+    throw new Error('Unexpected ' + label + ' response format. Please refresh and try again.');
+  }
+  return value.map((item, index) => {
+    if (!isRecord(item)) {
+      throw new Error('The ' + label + ' response contains an invalid item at position ' + (index + 1) + '.');
+    }
+    return item;
+  });
+}
+
+async function parseResponse(response: Response, fallbackMessage = 'Request failed.'): Promise<unknown> {
+  let data: unknown = null;
+  try {
+    data = await response.json();
+  } catch {
+    // Empty or malformed JSON is handled with the operation-specific fallback.
+  }
 
   if (!response.ok) {
-    const detail =
-      typeof data.detail === 'string'
-        ? data.detail
-        : JSON.stringify(data.detail || 'Request failed.');
-
+    const detail = isRecord(data) && typeof data.detail === 'string' ? data.detail : fallbackMessage;
     throw new Error(detail);
   }
 
   return data;
+}
+
+function normalizeActionResult(value: unknown, label: string): AdminActionResult {
+  const result = asRecord(value, label);
+  return {
+    message: readOptionalString(result, 'message'),
+    user_id: readOptionalString(result, 'user_id'),
+    status: readOptionalString(result, 'status'),
+    is_verified: readOptionalBoolean(result, 'is_verified'),
+    is_active: readOptionalBoolean(result, 'is_active'),
+    role: readOptionalString(result, 'role'),
+  };
+}
+
+function normalizeAdminMetrics(value: unknown): AdminMetrics {
+  const metrics = asRecord(value, 'dashboard metrics');
+  return {
+    totalStudents: readNumber(metrics, 'totalStudents'),
+    pendingStudents: readOptionalNumber(metrics, 'pendingStudents'),
+    totalAlumni: readNumber(metrics, 'totalAlumni'),
+    verifiedAlumni: readNumber(metrics, 'verifiedAlumni'),
+    pendingAlumni: readNumber(metrics, 'pendingAlumni'),
+    totalJobs: readNumber(metrics, 'totalJobs'),
+    pendingJobs: readNumber(metrics, 'pendingJobs'),
+    totalEvents: readNumber(metrics, 'totalEvents'),
+    pendingEvents: readNumber(metrics, 'pendingEvents'),
+    totalApplications: readNumber(metrics, 'totalApplications'),
+    totalRegistrations: readNumber(metrics, 'totalRegistrations'),
+  };
+}
+
+function normalizePendingAlumni(value: unknown): PendingAlumni {
+  const alumni = asRecord(value, 'pending alumni');
+  return {
+    id: readString(alumni, 'id'),
+    full_name: readString(alumni, 'full_name'),
+    email: readString(alumni, 'email'),
+    alumni_id: readOptionalString(alumni, 'alumni_id'),
+    avatar_url: readOptionalString(alumni, 'avatar_url'),
+    phone: readOptionalString(alumni, 'phone'),
+    is_phone_verified: readBoolean(alumni, 'is_phone_verified', false),
+    is_active: readBoolean(alumni, 'is_active', true),
+    verification_status: readOptionalString(alumni, 'verification_status'),
+    updated_at: readOptionalString(alumni, 'updated_at'),
+    department: readOptionalString(alumni, 'department'),
+    degree: readOptionalString(alumni, 'degree'),
+    graduation_year: readOptionalString(alumni, 'graduation_year'),
+    company: readOptionalString(alumni, 'company'),
+    designation: readOptionalString(alumni, 'designation'),
+    industry: readOptionalString(alumni, 'industry'),
+    location: readOptionalString(alumni, 'location'),
+    skills: readStringArray(alumni.skills),
+    linkedin: readOptionalString(alumni, 'linkedin'),
+    github: readOptionalString(alumni, 'github'),
+    website: readOptionalString(alumni, 'website'),
+    bio: readOptionalString(alumni, 'bio'),
+    is_verified: readBoolean(alumni, 'is_verified', false),
+    created_at: readOptionalString(alumni, 'created_at'),
+  };
+}
+
+function normalizeUserManagementItem(value: unknown, role: 'student' | 'alumni'): UserManagementItem {
+  const user = asRecord(value, role + ' user');
+  const isVerified = readBoolean(user, 'is_verified', false);
+  const course = readOptionalString(user, 'course');
+  const department = readOptionalString(user, 'department');
+  const company = readOptionalString(user, 'company');
+  const courseOrCompany =
+    readOptionalString(user, 'course_or_company') ||
+    (role === 'student' ? course || department || 'B.Tech' : company || '—');
+
+  return {
+    id: readString(user, 'id'),
+    full_name: readString(user, 'full_name') || readString(user, 'name'),
+    email: readString(user, 'email'),
+    role,
+    avatar_url: readOptionalString(user, 'avatar_url'),
+    phone: readOptionalString(user, 'phone'),
+    is_phone_verified: readBoolean(user, 'is_phone_verified', false),
+    student_id: readOptionalString(user, 'student_id'),
+    alumni_id: readOptionalString(user, 'alumni_id'),
+    department,
+    degree: readOptionalString(user, 'degree'),
+    course,
+    academic_year: readOptionalString(user, 'academic_year'),
+    graduation_year: readOptionalString(user, 'graduation_year'),
+    course_or_company: courseOrCompany,
+    company,
+    designation: readOptionalString(user, 'designation'),
+    industry: readOptionalString(user, 'industry'),
+    location: readOptionalString(user, 'location'),
+    skills: role === 'alumni' ? readStringArray(user.skills) : undefined,
+    linkedin: readOptionalString(user, 'linkedin'),
+    github: readOptionalString(user, 'github'),
+    website: readOptionalString(user, 'website'),
+    bio: readOptionalString(user, 'bio'),
+    is_verified: isVerified,
+    verification_status:
+      readOptionalString(user, 'verification_status') || (isVerified ? 'approved' : 'pending'),
+    is_active: readBoolean(user, 'is_active', true),
+    created_at: readOptionalString(user, 'created_at'),
+    updated_at: readOptionalString(user, 'updated_at'),
+  };
+}
+
+function normalizeEventParticipation(value: unknown): EventParticipationOverview {
+  const overview = asRecord(value, 'event participation');
+  return {
+    total_registrations: readNumber(overview, 'total_registrations'),
+    unique_participants: readNumber(overview, 'unique_participants'),
+    total_events: readNumber(overview, 'total_events'),
+    events: readRecordArray(overview.events, 'event participation').map((event) => ({
+      id: readString(event, 'id'),
+      title: readString(event, 'title'),
+      status: readString(event, 'status'),
+      event_date: readString(event, 'event_date'),
+      event_type: readString(event, 'event_type'),
+      location: readString(event, 'location'),
+      registration_deadline: readString(event, 'registration_deadline'),
+      registration_count: readNumber(event, 'registration_count'),
+      unique_participant_count: readNumber(event, 'unique_participant_count'),
+      created_at: readString(event, 'created_at'),
+    })),
+  };
+}
+
+function normalizeEventParticipants(value: unknown): EventParticipantsResponse {
+  const result = asRecord(value, 'event participants');
+  return {
+    event_id: readString(result, 'event_id'),
+    event_title: readString(result, 'event_title'),
+    total_count: readNumber(result, 'total_count'),
+    limit: readNumber(result, 'limit'),
+    offset: readNumber(result, 'offset'),
+    participants: readRecordArray(result.participants, 'event participants').map((participant) => ({
+      registration_id: readString(participant, 'registration_id'),
+      user_id: readString(participant, 'user_id'),
+      name: readString(participant, 'name'),
+      email: readString(participant, 'email'),
+      role: readString(participant, 'role'),
+      identifier: readString(participant, 'identifier'),
+      department: readString(participant, 'department'),
+      registration_date: readString(participant, 'registration_date'),
+      status: readString(participant, 'status'),
+    })),
+  };
+}
+
+function normalizeJobParticipation(value: unknown): JobParticipationOverview {
+  const overview = asRecord(value, 'job participation');
+  return {
+    total_jobs: readNumber(overview, 'total_jobs'),
+    total_applications: readNumber(overview, 'total_applications'),
+    unique_applicants: readNumber(overview, 'unique_applicants'),
+    jobs: readRecordArray(overview.jobs, 'job participation').map((job) => {
+      const rawStatusCounts = isRecord(job.applications_by_status) ? job.applications_by_status : {};
+      const statusCounts: Record<string, number> = {};
+      for (const [status, count] of Object.entries(rawStatusCounts)) {
+        if (typeof count === 'number' && Number.isFinite(count)) statusCounts[status] = count;
+      }
+      return {
+        id: readString(job, 'id'),
+        title: readString(job, 'title'),
+        company: readString(job, 'company'),
+        location: readString(job, 'location'),
+        job_type: readString(job, 'job_type'),
+        status: readString(job, 'status'),
+        deadline: readString(job, 'deadline'),
+        application_count: readNumber(job, 'application_count'),
+        unique_applicant_count: readNumber(job, 'unique_applicant_count'),
+        applications_by_status: statusCounts,
+        created_at: readString(job, 'created_at'),
+      };
+    }),
+  };
+}
+
+function normalizeJobApplicants(value: unknown): JobApplicantsResponse {
+  const result = asRecord(value, 'job applicants');
+  return {
+    job_id: readString(result, 'job_id'),
+    job_title: readString(result, 'job_title'),
+    company: readString(result, 'company'),
+    total_count: readNumber(result, 'total_count'),
+    limit: readNumber(result, 'limit'),
+    offset: readNumber(result, 'offset'),
+    applicants: readRecordArray(result.applicants, 'job applicants').map((applicant) => ({
+      application_id: readString(applicant, 'application_id'),
+      applicant_id: readString(applicant, 'applicant_id'),
+      name: readString(applicant, 'name'),
+      email: readString(applicant, 'email'),
+      role: readString(applicant, 'role'),
+      identifier: readString(applicant, 'identifier'),
+      prn: readOptionalString(applicant, 'prn'),
+      department: readString(applicant, 'department'),
+      course: readOptionalString(applicant, 'course'),
+      degree: readOptionalString(applicant, 'degree'),
+      status: readString(applicant, 'status'),
+      resume_url: readString(applicant, 'resume_url'),
+      has_resume: readOptionalBoolean(applicant, 'has_resume'),
+      cover_letter: readString(applicant, 'cover_letter'),
+      applied_at: readString(applicant, 'applied_at'),
+    })),
+  };
 }
 
 export const adminService = {
@@ -215,8 +484,8 @@ export const adminService = {
       }
     );
 
-    const data = await parseResponse(response);
-    return sortNewestFirst(data || []);
+    const data = await parseResponse(response, 'Failed to load pending alumni.');
+    return sortNewestFirst(readRecordArray(data, 'pending alumni').map(normalizePendingAlumni));
   },
 
   // ============================================================
@@ -238,7 +507,10 @@ export const adminService = {
       }
     );
 
-    return parseResponse(response);
+    return normalizeActionResult(
+      await parseResponse(response, 'Failed to update alumni verification.'),
+      'alumni verification'
+    );
   },
 
   // ============================================================
@@ -257,7 +529,9 @@ export const adminService = {
     }
   );
 
-  return parseResponse(response);
+  return normalizeAdminMetrics(
+    await parseResponse(response, 'Failed to load dashboard metrics.')
+  );
 },
 
   // ============================================================
@@ -273,29 +547,10 @@ export const adminService = {
       },
     });
 
-    const data = await parseResponse(response);
-    return sortNewestFirst((data || []).map((s: any) => ({
-      id: s.id,
-      full_name: s.full_name || s.name || '',
-      email: s.email || '',
-      role: s.role || ('student' as const),
-      avatar_url: s.avatar_url,
-      phone: s.phone,
-      is_phone_verified: s.is_phone_verified ?? false,
-      student_id: s.student_id,
-      alumni_id: s.alumni_id,
-      department: s.department,
-      degree: s.degree,
-      course: s.course,
-      academic_year: s.academic_year,
-      graduation_year: s.graduation_year,
-      course_or_company: s.course_or_company || s.course || s.department || 'B.Tech',
-      is_verified: typeof s.is_verified === 'boolean' ? s.is_verified : false,
-      verification_status: s.verification_status || (s.is_verified ? 'approved' : 'pending'),
-      is_active: s.is_active ?? true,
-      created_at: s.created_at,
-      updated_at: s.updated_at,
-    })));
+    const data = await parseResponse(response, 'Failed to load students.');
+    return sortNewestFirst(
+      readRecordArray(data, 'students').map((student) => normalizeUserManagementItem(student, 'student'))
+    );
   },
 
   async getPendingStudents(): Promise<UserManagementItem[]> {
@@ -307,28 +562,10 @@ export const adminService = {
       },
     });
 
-    const data = await parseResponse(response);
-    return sortNewestFirst((data || []).map((s: any) => ({
-      id: s.id,
-      full_name: s.full_name || s.name || '',
-      email: s.email || '',
-      role: 'student' as const,
-      avatar_url: s.avatar_url,
-      phone: s.phone,
-      is_phone_verified: s.is_phone_verified ?? false,
-      student_id: s.student_id,
-      department: s.department,
-      degree: s.degree,
-      course: s.course,
-      academic_year: s.academic_year,
-      graduation_year: s.graduation_year,
-      course_or_company: s.course_or_company || s.course || s.department || 'B.Tech',
-      is_verified: typeof s.is_verified === 'boolean' ? s.is_verified : false,
-      verification_status: s.verification_status || 'pending',
-      is_active: s.is_active ?? true,
-      created_at: s.created_at,
-      updated_at: s.updated_at,
-    })));
+    const data = await parseResponse(response, 'Failed to load pending students.');
+    return sortNewestFirst(
+      readRecordArray(data, 'pending students').map((student) => normalizeUserManagementItem(student, 'student'))
+    );
   },
 
   async updateStudentVerification(
@@ -346,7 +583,10 @@ export const adminService = {
       }
     );
 
-    return parseResponse(response);
+    return normalizeActionResult(
+      await parseResponse(response, 'Failed to update student verification.'),
+      'student verification'
+    );
   },
 
   async getAllAlumni(): Promise<UserManagementItem[]> {
@@ -358,35 +598,10 @@ export const adminService = {
       },
     });
 
-    const data = await parseResponse(response);
-    return sortNewestFirst((data || []).map((a: any) => ({
-      id: a.id,
-      full_name: a.full_name || a.name || '',
-      email: a.email || '',
-      role: 'alumni' as const,
-      avatar_url: a.avatar_url,
-      phone: a.phone,
-      is_phone_verified: a.is_phone_verified ?? false,
-      alumni_id: a.alumni_id,
-      department: a.department,
-      degree: a.degree,
-      graduation_year: a.graduation_year,
-      course_or_company: a.company || a.course_or_company || '—',
-      company: a.company,
-      designation: a.designation,
-      industry: a.industry,
-      location: a.location,
-      skills: a.skills || [],
-      linkedin: a.linkedin,
-      github: a.github,
-      website: a.website,
-      bio: a.bio,
-      is_verified: a.is_verified ?? false,
-      verification_status: a.verification_status || (a.is_verified ? 'approved' : 'pending'),
-      is_active: a.is_active ?? true,
-      created_at: a.created_at,
-      updated_at: a.updated_at,
-    })));
+    const data = await parseResponse(response, 'Failed to load alumni.');
+    return sortNewestFirst(
+      readRecordArray(data, 'alumni').map((alumni) => normalizeUserManagementItem(alumni, 'alumni'))
+    );
   },
 
   async toggleUserActive(
@@ -404,7 +619,10 @@ export const adminService = {
       }
     );
 
-    return parseResponse(response);
+    return normalizeActionResult(
+      await parseResponse(response, 'Failed to update account activation status.'),
+      'account activation'
+    );
   },
 
   async deleteUserAccount(userId: string) {
@@ -419,7 +637,10 @@ export const adminService = {
       }
     );
 
-    return parseResponse(response);
+    return normalizeActionResult(
+      await parseResponse(response, 'Failed to delete user account.'),
+      'account deletion'
+    );
   },
 
   // ============================================================
@@ -441,7 +662,9 @@ export const adminService = {
       },
     });
 
-    return parseResponse(response);
+    return normalizeEventParticipation(
+      await parseResponse(response, 'Failed to load event participation.')
+    );
   },
 
   async getEventParticipants(
@@ -469,7 +692,9 @@ export const adminService = {
       }
     );
 
-    return parseResponse(response);
+    return normalizeEventParticipants(
+      await parseResponse(response, 'Failed to load event participants.')
+    );
   },
 
   async getJobParticipation(filters?: {
@@ -487,7 +712,9 @@ export const adminService = {
       },
     });
 
-    return parseResponse(response);
+    return normalizeJobParticipation(
+      await parseResponse(response, 'Failed to load job participation.')
+    );
   },
 
   async getJobApplicantsDetailed(
@@ -515,7 +742,9 @@ export const adminService = {
       }
     );
 
-    return parseResponse(response);
+    return normalizeJobApplicants(
+      await parseResponse(response, 'Failed to load job applicants.')
+    );
   },
 
   // ============================================================
