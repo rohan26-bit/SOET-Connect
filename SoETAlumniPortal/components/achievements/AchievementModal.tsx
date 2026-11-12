@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAccessibleDialog } from '@/hooks/useAccessibleDialog';
 import {
   Achievement,
   AchievementCategory,
@@ -108,20 +109,7 @@ export default function AchievementModal({
     setIsSubmitting(false);
   }, [achievement, mode, isOpen]);
 
-  // Keyboard accessibility: Escape key listener
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
-    },
-    [isOpen, onClose]
-  );
-
-  useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown]);
+  const dialogRef = useAccessibleDialog<HTMLDivElement>(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -210,10 +198,13 @@ export default function AchievementModal({
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-title"
       className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+      onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}
     >
       <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl relative border border-slate-100 max-h-[90vh] overflow-y-auto my-8">
         {/* Close Button */}
