@@ -214,7 +214,7 @@ export const profileService = {
     });
 
     const updated = normalizeProfileUpdate(
-      await parseResponse(response, 'Unable to update your profile visibility.')
+      await parseResponse(response, 'Unable to update your profile.')
     );
     syncLocalStorageUser(updated.profile);
     return updated;
@@ -234,7 +234,7 @@ export const profileService = {
     });
 
     const updated = normalizeProfileUpdate(
-      await parseResponse(response, 'Unable to update your administrator profile.')
+      await parseResponse(response, 'Unable to update your profile visibility.')
     );
     syncLocalStorageUser(updated.profile);
     return updated;
@@ -296,8 +296,10 @@ export const profileService = {
       body: JSON.stringify(data),
     });
 
-    const updated = await parseResponse(response);
-    syncLocalStorageUser(updated);
+    const updated = normalizeProfileUpdate(
+      await parseResponse(response, 'Unable to update your administrator profile.')
+    );
+    syncLocalStorageUser(updated.profile);
     return updated;
   },
 };
