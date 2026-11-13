@@ -7,6 +7,33 @@ export interface SystemStatus {
 
 const API_URL = '/api';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function unavailableStatus(environment = 'unknown'): SystemStatus {
+  return {
+    api: 'unavailable',
+    database: 'disconnected',
+    environment,
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+function normalizeSystemStatus(value: unknown): SystemStatus {
+  if (!isRecord(value)) return unavailableStatus();
+
+  return {
+    api: value.api === 'healthy' ? 'healthy' : 'unavailable',
+    database: value.database === 'connected' ? 'connected' : 'disconnected',
+    environment:
+      typeof value.environment === 'string' && value.environment.trim()
+        ? value.environment.trim()
+        : 'unknown',
+    checkedAt: new Date().toISOString(),
+  };
+}
+
 export const systemStatusService = {
   /**
    * Fetch current backend and database operational status from /api/health.
@@ -22,28 +49,19 @@ export const systemStatusService = {
       });
 
       if (!response.ok) {
-        return {
-          api: 'unavailable',
-          database: 'disconnected',
-          environment: 'production',
-          checkedAt: new Date().toISOString(),
-        };
+        return unavailableStatus('production');
       }
 
-      const data = await response.json();
-      return {
-        api: data.api === 'healthy' ? 'healthy' : 'unavailable',
-        database: data.database === 'connected' ? 'connected' : 'disconnected',
-        environment: data.environment || 'production',
-        checkedAt: new Date().toISOString(),
-      };
+      let data: unknown;
+      try {
+        data = await response.json();
+      } catch {
+        return unavailableStatus();
+      }
+
+      return normalizeSystemStatus(data);
     } catch {
-      return {
-        api: 'unavailable',
-        database: 'disconnected',
-        environment: 'unknown',
-        checkedAt: new Date().toISOString(),
-      };
+      return unavailableStatus();
     }
   },
 };
