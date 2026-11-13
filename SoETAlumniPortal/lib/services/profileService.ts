@@ -4,6 +4,33 @@ const API_URL = '/api';
 
 type ApiRecord = Record<string, unknown>;
 
+export interface StudentProfileSnapshot {
+  student_id?: string;
+  department?: string;
+  course?: string;
+  academic_year?: string;
+  graduation_year?: string;
+  phone?: string;
+}
+
+export interface AlumniProfileSnapshot {
+  alumni_id?: string;
+  department?: string;
+  degree?: string;
+  graduation_year?: string;
+  company?: string;
+  designation?: string;
+  industry?: string;
+  location?: string;
+  skills?: string[];
+  linkedin?: string;
+  github?: string;
+  website?: string;
+  bio?: string;
+  phone?: string;
+  verification_status?: string;
+}
+
 export interface ProfileSnapshot {
   id: string;
   name: string;
@@ -14,8 +41,8 @@ export interface ProfileSnapshot {
   is_active?: boolean;
   is_verified?: boolean;
   is_public_profile?: boolean;
-  student_profile?: ApiRecord;
-  alumni_profile?: ApiRecord;
+  student_profile?: StudentProfileSnapshot;
+  alumni_profile?: AlumniProfileSnapshot;
 }
 
 export interface ProfileUpdateResult extends ProfileSnapshot {
@@ -42,8 +69,39 @@ function optionalBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
 
-function optionalProfile(value: unknown): ApiRecord | undefined {
-  return isRecord(value) ? value : undefined;
+function normalizeStudentProfile(value: unknown): StudentProfileSnapshot | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    student_id: optionalString(value.student_id),
+    department: optionalString(value.department),
+    course: optionalString(value.course),
+    academic_year: optionalString(value.academic_year),
+    graduation_year: optionalString(value.graduation_year),
+    phone: optionalString(value.phone),
+  };
+}
+
+function normalizeAlumniProfile(value: unknown): AlumniProfileSnapshot | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    alumni_id: optionalString(value.alumni_id),
+    department: optionalString(value.department),
+    degree: optionalString(value.degree),
+    graduation_year: optionalString(value.graduation_year),
+    company: optionalString(value.company),
+    designation: optionalString(value.designation),
+    industry: optionalString(value.industry),
+    location: optionalString(value.location),
+    skills: Array.isArray(value.skills)
+      ? value.skills.filter((skill): skill is string => typeof skill === 'string')
+      : undefined,
+    linkedin: optionalString(value.linkedin),
+    github: optionalString(value.github),
+    website: optionalString(value.website),
+    bio: optionalString(value.bio),
+    phone: optionalString(value.phone),
+    verification_status: optionalString(value.verification_status),
+  };
 }
 
 async function parseResponse(response: Response, fallbackMessage = 'Request failed.'): Promise<unknown> {
@@ -88,8 +146,8 @@ function normalizeProfile(value: unknown): ProfileSnapshot {
     is_active: optionalBoolean(profile.is_active),
     is_verified: optionalBoolean(profile.is_verified),
     is_public_profile: optionalBoolean(profile.is_public_profile),
-    student_profile: optionalProfile(profile.student_profile),
-    alumni_profile: optionalProfile(profile.alumni_profile),
+    student_profile: normalizeStudentProfile(profile.student_profile),
+    alumni_profile: normalizeAlumniProfile(profile.alumni_profile),
   };
 }
 
