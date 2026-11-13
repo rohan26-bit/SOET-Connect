@@ -11,20 +11,37 @@ function getAuthHeaders(): Record<string, string> {
   return { 'Content-Type': 'application/json' };
 }
 
-async function parseResponse<T>(response: Response): Promise<T> {
-  const data = await response.json().catch(() => ({}));
+type ApiRecord = Record<string, unknown>;
 
-  if (!response.ok) {
-    const detail =
-      typeof data.detail === 'string'
-        ? data.detail
-        : Array.isArray(data.detail)
-          ? data.detail.map((item: { msg?: string }) => item.msg || 'Invalid request').join('; ')
-          : JSON.stringify(data.detail || 'Request failed.');
-    throw new Error(detail);
+function isRecord(value: unknown): value is ApiRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function errorMessage(value: unknown): string {
+  if (!isRecord(value)) return 'Request failed.';
+  if (typeof value.detail === 'string') return value.detail;
+  if (Array.isArray(value.detail)) {
+    const messages = value.detail
+      .map((item) => (isRecord(item) && typeof item.msg === 'string' ? item.msg : null))
+      .filter((message): message is string => message !== null);
+    return messages.length ? messages.join('; ') : 'Invalid request.';
+  }
+  return 'Request failed.';
+}
+
+async function parseResponse(response: Response): Promise<unknown> {
+  let data: unknown = null;
+  try {
+    if (response.status !== 204) data = await response.json();
+  } catch {
+    // Empty or malformed JSON is handled by callers or the operation fallback.
   }
 
-  return data as T;
+  if (!response.ok) {
+    throw new Error(errorMessage(data));
+  }
+
+  return data;
 }
 
 export type AchievementCategory =
@@ -86,6 +103,79 @@ export interface UpdateAchievementInput {
   visibility?: 'public' | 'private' | 'alumni_only';
 }
 
+const VALID_ACHIEVEMENT_CATEGORIES: AchievementCategory[] = [
+  'award',
+  'certification',
+  'honor',
+  'project',
+  'publication',
+  'patent',
+  'other',
+];
+
+const VALID_ACHIEVEMENT_VISIBILITIES = ['public', 'private', 'alumni_only'] as const;
+
+function requiredString(record: ApiRecord, key: string): string {
+  const value = record[key];
+  if (typeof value !== 'string') {
+    throw new Error('The achievement response is missing a valid ' + key + ' value.');
+  }
+  return value;
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function optionalNullableString(value: unknown): string | null | undefined {
+  if (value === null) return null;
+  return typeof value === 'string' ? value : undefined;
+}
+
+function normalizeAchievement(value: unknown): Achievement {
+  if (!isRecord(value)) {
+    throw new Error('Unexpected achievement response format.');
+  }
+
+  const category = value.category;
+  const visibility = value.visibility;
+  if (
+    typeof category !== 'string' ||
+    !VALID_ACHIEVEMENT_CATEGORIES.includes(category as AchievementCategory)
+  ) {
+    throw new Error('The achievement response contains an unsupported category.');
+  }
+  if (
+    typeof visibility !== 'string' ||
+    !VALID_ACHIEVEMENT_VISIBILITIES.includes(visibility as (typeof VALID_ACHIEVEMENT_VISIBILITIES)[number])
+  ) {
+    throw new Error('The achievement response contains an unsupported visibility setting.');
+  }
+
+  return {
+    id: requiredString(value, 'id'),
+    user_id: optionalString(value.user_id),
+    title: requiredString(value, 'title'),
+    description: requiredString(value, 'description'),
+    category: category as AchievementCategory,
+    achievement_date: requiredString(value, 'achievement_date'),
+    issuing_organization: requiredString(value, 'issuing_organization'),
+    credential_name: optionalNullableString(value.credential_name),
+    credential_url: optionalNullableString(value.credential_url),
+    image_url: optionalNullableString(value.image_url),
+    visibility,
+    created_at: optionalString(value.created_at),
+    updated_at: optionalString(value.updated_at),
+  };
+}
+
+function normalizeAchievementList(value: unknown, label: string): Achievement[] {
+  if (!Array.isArray(value)) {
+    throw new Error('Unexpected ' + label + ' response format. Please refresh and try again.');
+  }
+  return value.map(normalizeAchievement);
+}
+
 export const achievementService = {
   async getMyAchievements(): Promise<Achievement[]> {
     const response = await fetch(`${API_URL}/alumni/me/achievements`, {
@@ -93,7 +183,7 @@ export const achievementService = {
       headers: getAuthHeaders(),
       cache: 'no-store',
     });
-    return parseResponse<Achievement[]>(response);
+    return normalizeAchievementList(await parseResponse(response), 'my achievements');
   },
 
   async getVisibleAchievements(alumniId: string): Promise<Achievement[]> {
@@ -105,7 +195,7 @@ export const achievementService = {
         cache: 'no-store',
       }
     );
-    return parseResponse<Achievement[]>(response);
+    return normalizeAchievementList(await parseResponse(response), 'visible alumni achievements');
   },
 
   async createAchievement(input: CreateAchievementInput): Promise<Achievement> {
@@ -114,7 +204,7 @@ export const achievementService = {
       headers: getAuthHeaders(),
       body: JSON.stringify(input),
     });
-    return parseResponse<Achievement>(response);
+    return normalizeAchievement(await parseResponse(response));
   },
 
   async updateAchievement(id: string, input: UpdateAchievementInput): Promise<Achievement> {
@@ -126,7 +216,7 @@ export const achievementService = {
         body: JSON.stringify(input),
       }
     );
-    return parseResponse<Achievement>(response);
+    return normalizeAchievement(await parseResponse(response));
   },
 
   async deleteAchievement(id: string): Promise<void> {
@@ -137,6 +227,6 @@ export const achievementService = {
         headers: getAuthHeaders(),
       }
     );
-    await parseResponse<unknown>(response);
+    await parseResponse(response);
   },
 };
