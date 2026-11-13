@@ -349,7 +349,16 @@ export const notificationService = {
 
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(prefs),
+      body: JSON.stringify({
+        email_enabled: prefs.email_enabled,
+        sms_enabled: prefs.sms_enabled,
+        in_app_enabled: prefs.in_app_enabled,
+        notify_jobs: prefs.notify_jobs,
+        notify_events: prefs.notify_events,
+        notify_announcements: prefs.notify_announcements,
+        notify_applications: prefs.notify_applications,
+        notify_gallery: prefs.notify_gallery,
+      }),
     });
 
     return normalizePreferences(
