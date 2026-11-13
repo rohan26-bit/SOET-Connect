@@ -265,6 +265,8 @@ export const notificationService = {
   // ============================================================
 
   async getNotifications(_userId?: string): Promise<NotificationItem[]> {
+    // Preserve the legacy argument; the API scopes results to the authenticated session.
+    void _userId;
     const response = await fetch(`${API_URL}/notifications`, {
       method: 'GET',
       headers: {
@@ -303,6 +305,8 @@ export const notificationService = {
   // ============================================================
 
   async markAllAsRead(_userId?: string): Promise<NotificationCountResult> {
+    // Preserve the legacy argument; the API scopes updates to the authenticated session.
+    void _userId;
     const response = await fetch(`${API_URL}/notifications/read-all`, {
       method: 'PATCH',
       headers: {
