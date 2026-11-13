@@ -178,7 +178,7 @@ function normalizeClassLeaderboard(value: unknown): AciClassLeaderboardResponse 
   }
 
   return {
-    leaderboard: result.leaderboard.map((entry, index) => {
+    leaderboard: result.leaderboard.map((entry) => {
       const item = asRecord(entry, 'class leaderboard item');
       let topContributor: AciClassLeaderboardItem['top_contributor'] = null;
       if (item.top_contributor !== null && item.top_contributor !== undefined) {
