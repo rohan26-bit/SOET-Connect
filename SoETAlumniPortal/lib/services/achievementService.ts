@@ -113,8 +113,6 @@ const VALID_ACHIEVEMENT_CATEGORIES: AchievementCategory[] = [
   'other',
 ];
 
-const VALID_ACHIEVEMENT_VISIBILITIES = ['public', 'private', 'alumni_only'] as const;
-
 function requiredString(record: ApiRecord, key: string): string {
   const value = record[key];
   if (typeof value !== 'string') {
@@ -146,8 +144,9 @@ function normalizeAchievement(value: unknown): Achievement {
     throw new Error('The achievement response contains an unsupported category.');
   }
   if (
-    typeof visibility !== 'string' ||
-    !VALID_ACHIEVEMENT_VISIBILITIES.includes(visibility as (typeof VALID_ACHIEVEMENT_VISIBILITIES)[number])
+    visibility !== 'public' &&
+    visibility !== 'private' &&
+    visibility !== 'alumni_only'
   ) {
     throw new Error('The achievement response contains an unsupported visibility setting.');
   }
